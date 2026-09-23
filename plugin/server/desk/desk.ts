@@ -258,6 +258,7 @@ export class Desk {
           return ok("Receipt acknowledged. This does not mark the work accepted or compliant.");
         }
         if (can(caller.role, "supervise")) {
+          if (request.tool === "activity") return ok(JSON.stringify(await this.supervision.activity(caller.id, String(args.project), String(args.agent), args.limit === undefined ? 20 : Number(args.limit))));
           const binding = this.supervision.store.read();
           if (!binding.active || binding.supervisor?.agent !== caller.id) return no("This agent is not the active overall Supervisor.");
           if (request.tool === "status" && !args.project) {

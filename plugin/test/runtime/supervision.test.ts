@@ -33,7 +33,7 @@ test("native project reassignment revokes a queued correction even when its path
   assert.equal(f.sent.length, 0);
 });
 
-function fixture() {
+function fixture(activity = async (_id: string, _limit: number): Promise<unknown> => ({ entries: [{ text: "NATIVE_TRANSCRIPT" }] })) {
   const root = tempDir();
   const store = new Supervision(root);
   const paths = ["a", "b", "c"].map((name) => join(root, name));
@@ -47,7 +47,7 @@ function fixture() {
     async send(to, text) { sent.push({ to, text }); }, async respond() { throw new Error("Corrections must not answer permissions."); }, async archive() {}, watch() { throw new Error("unused"); } };
   const outbox = new Outbox(join(root, "outbox.json"), (_to, items) => items.map((i) => i.text).join("\n"), seats, undefined, undefined,
     (letter, seat) => letter.guard ? store.validate(letter.guard, seat) : undefined);
-  const control = new SupervisionControl({ store, seats, outbox, kit: loadKit(fileURLToPath(new URL("../../", import.meta.url))),
+  const control = new SupervisionControl({ store, seats, outbox, activity, kit: loadKit(fileURLToPath(new URL("../../", import.meta.url))),
     workspaces: { async named() { return undefined; }, async owned() { return []; }, async make() { throw new Error("No workspaces are created on adoption."); }, async seat() { throw new Error("No agents are created on adoption."); }, async archive() {} },
     inventory: async () => ({ projects: paths.map((root, i) => ({ id: `p${i}`, root, name: "same-name" })), workspaces: paths.map((path, i) => ({ id: `w${i}`, project: `p${i}`, path })) }),
     source: { record() {} } as never,
@@ -162,4 +162,37 @@ test("the supervision RPC remains valid after a real delivery without a failure 
   const view = await f.control.view();
   assert.ok(view.deliveries.some((d) => d.state === "delivered"));
   assert.deepEqual(supervisionRpc.output.parse(view), view);
+});
+
+
+test("Supervisor activity reads a native existing Lead only inside its current observe scope", async () => {
+  const reads: string[] = [];
+  const f = fixture(async (id, limit) => { reads.push(id); assert.equal(limit, 10); return { entries: [{ text: "NATIVE_TRANSCRIPT" }] }; });
+  await f.bind();
+  f.store.change(f.store.read().revision, (b) => { b.projects.forEach((p) => { p.grants = ["observe"]; }); });
+  const kit = loadKit(fileURLToPath(new URL("../../", import.meta.url)));
+  const desk = new Desk({ kit, supervision: f.control, outbox: f.outbox, seats: f.seats, workspaces: {} as never, log() {}, teamFor: () => resolveTeam(kit) });
+  const call = (project: string, agent: string, limit = 10) => desk.handle({ id: "activity", at: Date.now(), agent: "sup", role: "supervisor", cwd: f.root, tool: "activity", args: { project, agent, limit } });
+  const allowed = await call("p0", "lead0");
+  assert.equal(allowed.ok, true, allowed.text);
+  assert.match(allowed.text, /NATIVE_TRANSCRIPT/);
+  assert.equal((await call("p1", "lead0")).ok, false);
+  assert.equal((await call("p2", "lead2")).ok, false);
+  assert.equal((await call("p0", "lead0", 1000)).ok, false);
+  assert.deepEqual(reads, ["lead0"]);
+  f.agents.get("lead0")!.archivedAt = "now";
+  assert.equal((await call("p0", "lead0")).ok, false);
+  assert.deepEqual(reads, ["lead0"]);
+});
+
+test("activity withholds a transcript when scope or native placement changes during the read", async () => {
+  for (const change of ["scope", "placement"] as const) {
+    const f = fixture(async () => {
+      if (change === "scope") f.store.change(f.store.read().revision, (b) => { b.active = false; });
+      else f.agents.get("lead0")!.cwd = f.paths[1]!;
+      return { entries: [{ text: "MUST_NOT_ESCAPE" }] };
+    });
+    await f.bind();
+    await assert.rejects(f.control.activity("sup", "p0", "lead0", 10));
+  }
 });

@@ -30,7 +30,7 @@ project-scoped lanes, Lead/Peer lifecycle, worktrees, durable records and mail, 
 Watcher/Jev observation. A desk caller's project comes from its session working directory;
 the upstream Supervisor tools do not select another project.
 
-The fork's 2.1.0 source candidate adds a durable overall Supervisor binding, native project
+The fork's 2.1.1 installation adds a durable overall Supervisor binding, native project
 and workspace verification, per-project operation grants, existing Lead association,
 project-qualified commands and reports, recoverable delivery receipts, and cross-project
 dependencies that require the consumer's confirmation. The panel supports scope management,
@@ -47,7 +47,7 @@ not qualified by offline examples; notification promotion requires a labeled eva
 The manifest targets Paseo `>=0.9.0 <0.10.0`. On 2026-09-23 the Human authorized
 installation and live qualification. The plugin is installed from this checkout and running on
 the standalone Paseo **0.9.1** daemon at `127.0.0.1:6767`, using the existing Paseo home and
-WebUI. Both TypeScript configurations and 439 tests pass. The desktop client is not used. Supervisor and Lead machine defaults use the host's
+WebUI. Both TypeScript configurations and 441 tests pass. The desktop client is not used. Supervisor and Lead machine defaults use the host's
 available Codex GPT-6-Astra model.
 
 The live pilot created two disposable Git repositories and two Lead sessions before creating
@@ -60,9 +60,16 @@ The two pilot projects are paused after qualification, with sessions retained fo
 Paseo request preapproval validation, integer revision validation and a non-JSON receipt field
 that broke the live panel.
 
-This is a bounded live pilot, not complete product qualification. The Supervisor's Codex session
-did not expose native `get_agent_activity`; transcript inspection through that tool remains
-unqualified. Existing Leads without Seatworks tools, multiple worktrees per project, managed
+The missing transcript capability is resolved in 2.1.1 with `activity(project, agent, limit)`.
+It reads Paseo's native timeline through the public SDK, checks the selected observe grant and
+native placement before and after reading, and returns bounded entries with sequence provenance
+and explicit truncation. Global native MCP injection remains off. The unrestricted native
+`get_agent_activity` tool is excluded from the Supervisor preset in favor of this scoped path.
+A fresh Supervisor read an undisclosed random marker from an existing Lead's actual transcript;
+wrong-project, out-of-scope and excessive-limit probes were denied. The read also passed after
+plugin reload. Evidence is under `~/.local/share/seatworks-e2e/20260923-transcripts/`.
+
+This is bounded live qualification. Existing Leads without Seatworks tools, multiple worktrees per project, managed
 lane creation/landing, crash recovery during an actual provider send, and Jev service quality
 still need separate live coverage. The earlier fixture UI checks and simulated outbox crash test
 are offline evidence only. Live evidence is retained outside the repository under

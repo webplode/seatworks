@@ -107,6 +107,19 @@ export function seatsOn(bound: Bound): Seats {
   };
 }
 
+export async function activityOn(bound: Bound, id: string, limit: number) {
+  const page = await reach(bound).agents.ref(id).timeline.refetch({ direction: "tail", projection: "canonical", limit });
+  if (page.error || page.staleCursor || page.gap) throw new Error(page.error || "Native timeline coverage is incomplete. Retry the read.");
+  const entries = page.entries.slice(-limit);
+  const chars = Math.min(4000, Math.floor(48000 / Math.max(entries.length, 1)));
+  return { agent: id, observedAt: new Date().toISOString(), epoch: page.epoch, hasOlder: page.hasOlder,
+    entries: entries.map((entry) => {
+      const text = JSON.stringify(entry.item);
+      return { seqStart: entry.seqStart, seqEnd: entry.seqEnd, turnId: entry.turnId ?? null,
+        content: text.slice(0, chars), truncated: text.length > chars };
+    }) };
+}
+
 export async function inventoryOn(bound: Bound): Promise<HostInventory> {
   const api = reach(bound);
   const listed = await api.projects.list();

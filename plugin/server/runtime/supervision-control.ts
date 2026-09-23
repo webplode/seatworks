@@ -16,6 +16,7 @@ import { Dependencies } from "./dependencies.ts";
 type Deps = {
   store: Supervision; kit: Kit; seats: Seats; workspaces: Workspaces; outbox: Outbox;
   inventory(): Promise<HostInventory>; source: TeamSource;
+  activity(id: string, limit: number): Promise<unknown>;
   prepareProviders?(): Promise<void>;
   communication?(): SupervisionView["communication"];
 };
@@ -150,6 +151,24 @@ export class SupervisionControl {
       catch { throw new Error(`Agent ${agent.id} was created, but supervision changed during creation. Select that existing agent; do not create a duplicate.`); }
       return { agent: agent.id };
     } finally { this.creating = false; }
+  }
+
+  async activity(actor: string, project: string, agent: string, limit = 20): Promise<unknown> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("Activity limit must be an integer from 1 to 50.");
+    const scope = await this.verifyTarget(actor, project, "observe");
+    const verify = async () => {
+      const current = await this.verifyTarget(actor, project, "observe");
+      const seat = await this.deps.seats.look(agent);
+      if (current.revision !== scope.revision || this.store.read().revision !== scope.revision) throw new Error("Scope changed during the activity read.");
+      if (seat.projectId !== project || !seat.workspaceId || seat.archivedAt || !seat.cwd || canonicalRoot(seat.cwd) !== scope.scope.root) throw new Error("The agent does not belong to this observed project.");
+      const lead = scope.scope.leads.find((l) => l.agent === agent);
+      if (lead && lead.workspace !== seat.workspaceId) throw new Error("The Lead's workspace changed. Reassociate it explicitly.");
+      return seat.workspaceId;
+    };
+    const workspace = await verify();
+    const activity = await this.deps.activity(agent, limit);
+    if (await verify() !== workspace) throw new Error("The agent changed workspace during the activity read.");
+    return activity;
   }
 
   async message(actor: string, project: string, to: string, text: string, key: string): Promise<string> {

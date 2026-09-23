@@ -24,7 +24,6 @@
       "skills": "supervisor",
       "paseoTools": {
         "allow": [
-          "get_agent_activity",
           "list_pending_permissions",
           "create_heartbeat",
           "delete_heartbeat",

@@ -13,7 +13,7 @@ import { stampKit } from "../upkeep/migrate.ts";
 import { type StateReport, upgradeState } from "../upkeep/state.ts";
 import { type IndexedProxy, type Team, indexedProxies, jevOn, watchOn } from "../catalog/team.ts";
 import { guidesDir, home, nodeBin, outboxPath, spoolDir, stateRoot } from "../core/paths.ts";
-import { connectLocal, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
+import { activityOn, connectLocal, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
 import type { PaseoApi } from "../core/paseo.ts";
 import type { SeatView, Seats, Workspaces } from "../core/ports.ts";
 import type { CodeIndex } from "../desk/context.ts";
@@ -110,6 +110,7 @@ export class Runtime {
     );
     this.supervision = new SupervisionControl({ store: supervision, kit, seats: this.seats, workspaces: this.workspaces,
       outbox: this.outbox, inventory: () => inventoryOn(() => this.api), source: this.source,
+      activity: (id, limit) => activityOn(() => this.api, id, limit),
       communication: () => Object.fromEntries(this.communication?.coverage ?? []),
       prepareProviders: async () => { const changed = applyReconcile(this.kit, this.source.teamFor()); if (changed.length && !await this.reload()) throw new Error("Provider configuration was saved but daemon reload failed. Resolve that before creating a Supervisor."); } });
     const log = (project: Project, line: string) => this.log(project, line);

@@ -77,3 +77,16 @@ test("reconcile removes providers the kit no longer defines and keeps a user's o
   assert.equal("models" in peer, false);
   assert.deepEqual(peer.additionalModels, [{ id: "swe", label: "SWE", isDefault: true }]);
 });
+
+test("disabling a launch profile preserves provider config, role routing and unmanaged profiles", () => {
+  const config = reconcile({ daemon: { agentProfiles: [{ id: "my-own", provider: "claude", model: "custom" }] } }, kit, team).config;
+  const hidden = resolveTeam(kit, { profiles: { disabled: ["sw2-lead-claude"] } });
+  assert.deepEqual(hidden.roles, team.roles);
+  const after = reconcile(config, kit, hidden);
+  assert.deepEqual(after.config.agents.providers, config.agents.providers);
+  assert.equal(after.config.daemon.agentProfiles.some((p: { id: string }) => p.id === "sw2-lead-claude"), false);
+  assert.deepEqual(after.config.daemon.agentProfiles.find((p: { id: string }) => p.id === "my-own"), config.daemon.agentProfiles[0]);
+  assert.deepEqual(reconcile(after.config, kit, hidden).changed, []);
+  const restored = reconcile(after.config, kit, team);
+  assert.deepEqual(restored.config.daemon.agentProfiles.find((p: { id: string }) => p.id === "sw2-lead-claude"), desiredProfile(kit, team, role("lead"), kit.harnesses.claude!));
+});

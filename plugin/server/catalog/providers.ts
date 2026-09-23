@@ -111,6 +111,10 @@ export function reconcile(config: Json, kit: Kit, team: Team): { config: Json; c
     const profile = desiredProfile(kit, team, role, harness);
     const profiles: Json[] = next.daemon.agentProfiles;
     const index = profiles.findIndex((entry) => entry.id === profile.id);
+    if (team.profiles?.disabled.includes(profile.id)) {
+      if (index >= 0) { profiles.splice(index, 1); changed.push(`profile ${profile.id} disabled`); }
+      continue;
+    }
     const current = index >= 0 ? profiles[index] : undefined;
     const mergedProfile: Json = { ...(current ?? {}), ...profile };
     for (const key of ["model", "modeId", "thinkingOptionId"]) if (!(key in profile)) delete mergedProfile[key];

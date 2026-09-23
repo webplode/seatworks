@@ -20,7 +20,7 @@ export type SeatSpec = {
   config: Record<string, unknown>;
   parent?: string;
   title: string;
-  prompt: string;
+  prompt?: string;
   labels: Record<string, string>;
 };
 

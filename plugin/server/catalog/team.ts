@@ -35,6 +35,7 @@ export type McpState = {
 };
 export type RoleSeat = { role: RoleSpec; harness: HarnessSpec; model?: ModelSpec; thinking?: string; rules: string; mcp: string[] };
 export type Team = {
+  profiles?: { disabled: string[] };
   roles: Record<string, RoleSeat>;
   mcp: Record<string, McpState>;
   attention: Attention;
@@ -221,6 +222,7 @@ export function resolveTeam(kit: Kit, machine: Layer = {}, project: Layer = {}, 
   return {
     roles,
     mcp,
+    profiles: machine.profiles,
     ...(spec && machine.sensor?.key ? { sensor: { spec, key: machine.sensor.key } } : {}),
     attention: { ...kit.attention, ...stripUndefined(machine.attention), ...stripUndefined(project.attention) },
     rules: [machine.rules, project.rules].filter((text) => text && text.trim()).join("\n\n"),

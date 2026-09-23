@@ -46,6 +46,8 @@ import { Supervision } from "./supervision.ts";
 import { SupervisionControl } from "./supervision-control.ts";
 import { supervisionRpc, bindingRpc, adoptRpc, createSupervisorRpc } from "../../shared/rpc.ts";
 import { CommunicationWatch } from "./watch/jev/communication.ts";
+import { briefRpc } from "../../shared/brief.ts";
+import { teamBrief } from "./brief.ts";
 import { outputText } from "./timeline.ts";
 
 type EventName = keyof PluginLifecycleEvents;
@@ -78,6 +80,9 @@ export class Runtime {
   private readonly offline = new Set<string>();
   private readonly makeIndex: (proxy: IndexedProxy) => CodeIndex;
   private readonly reload: () => Promise<boolean>;
+  private pluginApi: PaseoApi | undefined;
+  private briefBusy = false;
+  private briefSent = new Map<string, string>();
   private api: PaseoApi | undefined;
   private connection: Awaited<ReturnType<typeof connectLocal>> | undefined;
   private disposed = false;
@@ -479,7 +484,34 @@ export class Runtime {
     for (const project of this.supervision.store.read().projects) this.remember(projectOf(project.root));
   }
 
+  private async brief() {
+    const binding = this.supervision.store.read();
+    const seats = await this.seats.open();
+    if (this.supervision.store.read().revision !== binding.revision) throw new Error("Scope changed. Refresh team status.");
+    return teamBrief(binding, seats, (root) => {
+      const scope = binding.projects.find(p => p.root === root)!;
+      const { project } = this.supervision.store.authorize(binding.supervisor!.agent, scope.id, "observe");
+      return loadLedger(project.state);
+    }, this.outbox.letters());
+  }
+
+  private async publishBrief() {
+    if (this.disposed || !this.pluginApi || this.briefBusy) return;
+    this.briefBusy = true;
+    try {
+      const data = await this.brief();
+      if (!data.supervisor) return;
+      const key = JSON.stringify(data);
+      if (this.briefSent.get(data.supervisor) === key) return;
+      await this.pluginApi.agents.ref(data.supervisor).timeline.append({ type: "plugin", id: "team-status", kind: "team-status", version: 1, data });
+      this.briefSent.set(data.supervisor, key);
+    } catch (error) { console.error("Seatworks team status could not update:", errorText(error)); }
+    finally { this.briefBusy = false; }
+  }
+
   register(server: PluginServerContext): void {
+    server.handle(briefRpc, async (_input, context) => { this.pluginApi = context.paseo; const data = await this.brief(); void this.publishBrief(); return data; });
+    this.timers.push(setInterval(() => void this.publishBrief(), 5000));
     server.handle(supervisionRpc, async () => await this.supervision.view() as never);
     server.handle(bindingRpc, async (input) => await this.supervision.bind(input) as never);
     server.handle(adoptRpc, async (input) => await this.supervision.adopt(input) as never);
@@ -488,10 +520,12 @@ export class Runtime {
       if (!this.connection) this.api = paseo;
     });
     server.before("agent.create", ({ request }, context) => {
+      this.pluginApi = context.paseo;
       if (!this.connection) this.api = context.paseo;
       return { ...request, config: this.launchConfig(request.config) };
     });
     server.before("agent.session_open", ({ request }, context) => {
+      this.pluginApi = context.paseo;
       if (!this.connection) this.api = context.paseo;
       return this.openSession(request);
     });
@@ -675,6 +709,7 @@ export class Runtime {
 
   private on<N extends EventName>(server: PluginServerContext, name: N, handler: (event: PluginLifecycleEvents[N], context: PluginHookContext) => Promise<void>): void {
     server.on(name, async (event, context) => {
+      this.pluginApi = context.paseo;
       if (!this.connection) this.api = context.paseo;
       try {
         await handler(event, context);

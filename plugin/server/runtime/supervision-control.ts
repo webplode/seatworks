@@ -46,6 +46,7 @@ export class SupervisionControl {
       if (!workspace || !project) return [];
       try { if (canonicalRoot(seat.cwd) !== project.root) return []; } catch { return []; }
       return [{ id: seat.id, title: seat.title ?? seat.id, workspace: workspace.id, project: project.id,
+        provider: seat.provider, model: seat.model ?? null, thinking: seat.thinkingOptionId ?? null,
         capable: can(seatOf(this.deps.kit, seat.provider)?.role, "lead"), status: seat.status,
         updatedAt: seat.updatedAt, waiting: Boolean(seat.pendingPermissions?.length) }];
     });
@@ -64,7 +65,7 @@ export class SupervisionControl {
     return {
       binding, candidates, agents, problems,
       supervisors: seats.filter((s) => s.workspaceId && can(seatOf(this.deps.kit, s.provider)?.role, "supervise"))
-        .map((s) => ({ id: s.id, title: s.title ?? s.id, workspace: s.workspaceId! })),
+        .map((s) => ({ id: s.id, title: s.title ?? s.id, workspace: s.workspaceId!, provider: s.provider, model: s.model ?? null, thinking: s.thinkingOptionId ?? null })),
       deliveries: this.deps.outbox.records().filter((l) => l.guard).slice(-100).reverse()
         .map(({ id, to, state, detail, at, text, guard }) => ({ id, to, state, ...(detail === undefined ? {} : { detail }), at, text, project: guard!.project })),
       dependencies: this.dependencies.read(),
@@ -144,7 +145,7 @@ export class SupervisionControl {
         idempotencyKey: `seatworks-supervisor-${revision}`,
         config: { provider: `${providerId(this.deps.kit, role.role, choice.harness.id)}${choice.model ? `/${choice.model.id}` : ""}`,
           ...(choice.thinking ? { thinkingOptionId: choice.thinking } : {}) },
-        title: "Overall Supervisor", prompt: "Read status to learn your selected projects. Await the Human's objective; do not create work until they give one.",
+        title: "Overall Supervisor",
         labels: { "seatworks.role": role.role, "seatworks.supervision": "overall" },
       });
       try { this.store.change(revision, (binding) => { binding.supervisor = { agent: agent.id, workspace: workspace.id }; }); }

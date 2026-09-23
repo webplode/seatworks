@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Source } from "./data.ts";
 
-export const CONTROL = { radius: 6, height: 32, padding: 12, gap: 8, font: 14, pressed: 0.85, faded: 0.5 };
+export const CONTROL = { radius: 6, height: 40, padding: 12, gap: 8, font: 14, pressed: 0.85, faded: 0.5 };
 
 /** `follows` is the label of the role a role follows while nothing is set for it. */
 export function sourceLabel(source: Source, layer: "machine" | "project", follows?: string): string {

@@ -3,18 +3,19 @@ import { ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { SettingsAction, SettingsCard, SettingsRow, SettingsSection } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { Empty } from "./bits.tsx";
 import type { Check } from "./data.ts";
 import { setAttention, setFlow, useFlow, useSeatworks } from "./data.ts";
 import { type DetailTab, Detail } from "./detail.tsx";
 import { FlowSection } from "./flow.tsx";
 import { HealthSection } from "./health.tsx";
-import { MACHINE, ProjectList } from "./projects.tsx";
 import { ServersSection } from "./servers.tsx";
 import { SetupDialog } from "./setup-dialog.tsx";
+import { ProfilesSection } from "./profiles.tsx";
 import { TeamSection } from "./team.tsx";
 import { UpkeepSection } from "./upkeep.tsx";
 import { SupervisionPanel } from "./supervision.tsx";
+
+const MACHINE = "machine";
 
 export function SeatworksSurface({ theme, layout, navigation }: PluginSurfaceProps) {
   const [open, setOpen] = useState<string | null>(null);
@@ -99,10 +100,7 @@ export function SeatworksSurface({ theme, layout, navigation }: PluginSurfacePro
       onOpenChange={setDialog}
       attach={attach}
       listFolders={listFolders}
-      onAttached={(slug) => {
-        setOpen(slug);
-        setTab("team");
-      }}
+      onAttached={() => { setOpen(null); reload(); }}
     />
   );
 
@@ -110,26 +108,9 @@ export function SeatworksSurface({ theme, layout, navigation }: PluginSurfacePro
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
         {trouble}
-        <SupervisionPanel theme={theme} onFlow={(slug) => { setOpen(slug); setTab("flow"); }} onAgent={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined} />
-        <ProjectList
-          projects={data.projects}
-          nameOf={nameOf}
-          catalog={data.catalog}
-          team={data.team}
-          waiting={data.candidates.length}
-          theme={theme}
-          disabled={saving}
-          onOpen={(target) => {
-            setOpen(target);
-            setTab("team");
-          }}
-          onSetup={() => setDialog(true)}
-        />
-        {data.projects.length === 0 ? (
-          <SettingsCard>
-            <Empty theme={theme} title="No project uses Seatworks yet" body="Machine defaults hold until a project sets its own. Use Add project to add one." />
-          </SettingsCard>
-        ) : null}
+        <SupervisionPanel theme={theme} compact={layout.compact} catalog={data.catalog} machine={data.values} projects={data.projects}
+          onAdd={() => setDialog(true)} onSettings={(slug) => { setOpen(slug); setTab("team"); setChip(data.catalog.roles.find((r) => r.can.includes(slug === MACHINE ? "supervise" : "lead"))?.id ?? null); }}
+          onFlow={(slug) => { setOpen(slug); setTab("flow"); }} onAgent={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined} />
         {dialogNode}
       </ScrollView>
     );
@@ -150,11 +131,13 @@ export function SeatworksSurface({ theme, layout, navigation }: PluginSurfacePro
         {trouble}
         {tab === "team" ? (
           <>
+            {!project ? <ProfilesSection catalog={data.catalog} values={data.values} theme={theme} disabled={locked} save={save} /> : null}
             <TeamSection catalog={data.catalog} team={data.team} values={data.values} machine={data.machine} layer={layer} theme={theme} disabled={locked} active={chip} onActive={setChip} save={save} reload={reload} />
           </>
         ) : null}
         {tab === "flow" ? (
           <FlowSection
+            onAgent={navigation ? id => navigation.openAgent({ agentId: id }) : undefined}
             following={Boolean(project)}
             flow={flow}
             error={flowError}

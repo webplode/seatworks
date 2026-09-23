@@ -42,8 +42,8 @@ export type HostInventory = {
 export type SupervisionView = {
   problems: Record<string, string>;
   binding: Binding; candidates: { id: string; root: string; name: string }[];
-  supervisors: { id: string; title: string; workspace: string }[];
-  agents: { id: string; title: string; workspace: string; project: string; capable: boolean; status: string; updatedAt: string; waiting: boolean }[];
+  supervisors: { id: string; title: string; workspace: string; provider: string; model: string | null; thinking: string | null }[];
+  agents: { id: string; title: string; workspace: string; project: string; capable: boolean; provider: string; model: string | null; thinking: string | null; status: string; updatedAt: string; waiting: boolean }[];
   deliveries: { id: string; to: string; state: string; detail?: string; at: number; text: string; project: string }[];
   dependencies: Dependency[];
   communication: Record<string, { status: string; detail: string; at: number; callsToday: number }>;

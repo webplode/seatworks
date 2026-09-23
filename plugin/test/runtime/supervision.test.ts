@@ -196,3 +196,23 @@ test("activity withholds a transcript when scope or native placement changes dur
     await assert.rejects(f.control.activity("sup", "p0", "lead0", 10));
   }
 });
+
+
+test("a new Supervisor stays idle until its binding can authorize an activation", async () => {
+  const f = fixture();
+  const kit = loadKit(fileURLToPath(new URL("../../", import.meta.url)));
+  const control = new SupervisionControl({ store: f.store, kit, seats: f.seats, outbox: f.outbox,
+    inventory: async () => ({ projects: [], workspaces: [] }), activity: async () => [],
+    source: { teamFor: () => resolveTeam(kit) } as never,
+    workspaces: { async named() { return { id: "home", project: "home" }; }, async owned() { return []; },
+      async make() { throw new Error("unexpected"); }, async archive() {},
+      async seat(_workspace, spec) {
+        assert.equal(f.store.read().supervisor, null);
+        assert.equal(spec.prompt, undefined, "do not start a turn before binding the Supervisor");
+        return { ...f.agents.get("sup")!, projectId: "home" };
+      } },
+  });
+  await control.create(f.store.read().revision);
+  assert.equal(f.store.read().supervisor?.agent, "sup");
+  assert.equal(f.store.read().active, false);
+});

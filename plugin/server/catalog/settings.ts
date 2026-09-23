@@ -89,7 +89,7 @@ const SensorChoice = z.strictObject({
 });
 
 export const ProjectLayerSchema = z.strictObject({ ...shared, attention: AttentionChoice.optional() });
-export const MachineLayerSchema = z.strictObject({ ...shared, attention: AttentionChoice.optional(), sensor: SensorChoice.optional() });
+export const MachineLayerSchema = z.strictObject({ ...shared, attention: AttentionChoice.optional(), sensor: SensorChoice.optional(), profiles: z.strictObject({ disabled: z.array(z.string().min(1)) }).optional() });
 
 export type Layer = z.infer<typeof MachineLayerSchema>;
 export type SensorChoice = z.infer<typeof SensorChoice>;

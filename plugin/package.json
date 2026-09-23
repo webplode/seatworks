@@ -1,7 +1,7 @@
 {
   "name": "seatworks-v2-paseo-plugin",
   "private": true,
-  "version": "2.1.1",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json",
@@ -11,12 +11,12 @@
     "eval:sensor": "node test/sensor/run-cases.ts"
   },
   "dependencies": {
-    "@getpaseo/client": "0.9.0",
+    "@getpaseo/client": "0.9.1",
     "smol-toml": "^1.8.0",
     "zod": "^4.6.4"
   },
   "devDependencies": {
-    "@getpaseo/plugin": "0.9.0",
+    "@getpaseo/plugin": "0.9.1",
     "@types/node": "^24.13.4",
     "@types/react": "~19.2.0",
     "react": "^19.1.0",

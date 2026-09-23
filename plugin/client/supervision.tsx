@@ -1,167 +1,137 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
+import { Modal } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { adoptRpc, bindingRpc, createSupervisorRpc, supervisionRpc, settingsReadRpc, settingsWriteRpc, pathsRpc } from "../shared/rpc.ts";
-import type { Layer, Folders } from "./data.ts";
-import { Operation, type Binding, type SupervisionView } from "../shared/supervision.ts";
+import { Text, TextInput, View } from "react-native";
+import { bindingRpc, createSupervisorRpc, supervisionRpc, teamRpc } from "../shared/rpc.ts";
+import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
+import type { Catalog, Layer, ProjectRow, TeamView } from "./data.ts";
+import { message } from "./data.ts";
+import { roleChoice } from "./role-choice.tsx";
+import { bindingInput } from "./project-setup.ts";
+import { SupervisionSettings } from "./supervision-settings.tsx";
 
-export function SupervisionPanel({ theme, onFlow, onAgent }: {
-  theme: PluginTheme; onFlow(slug: string): void; onAgent?: (id: string) => void;
+export function SupervisionPanel({ theme, compact, catalog, machine, projects, onAdd, onSettings, onFlow, onAgent }: {
+  theme: PluginTheme; compact: boolean; catalog: Catalog; machine: Layer; projects: ProjectRow[];
+  onAdd(): void; onSettings(slug: string): void; onFlow(slug: string): void; onAgent?: (id: string) => void;
 }) {
-  const read = useRpc(supervisionRpc);
-  const bind = useRpc(bindingRpc);
-  const adopt = useRpc(adoptRpc);
-  const create = useRpc(createSupervisorRpc);
-  const readSettings = useRpc(settingsReadRpc);
-  const writeSettings = useRpc(settingsWriteRpc);
-  const paths = useRpc(pathsRpc);
+  const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), create = useRpc(createSupervisorRpc);
+  const readTeam = useRpc(teamRpc);
+  const [team, setTeam] = useState<TeamView | null>(null);
   const paseo = usePaseo();
-  const [scanRoot, setScanRoot] = useState("~/Projects");
-  const [folders, setFolders] = useState<Folders | null>(null);
   const [view, setView] = useState<SupervisionView | null>(null);
-  const [draft, setDraft] = useState<Binding | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [picking, setPicking] = useState<{ project: string; agent: string } | null>(null);
+  const [advanced, setAdvanced] = useState(false);
+  const [target, setTarget] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [objective, setObjective] = useState("");
-  const [ownership, setOwnership] = useState("");
-  const latest = useRef(read);
-  latest.current = read;
-  const refresh = async () => {
-    try { setView(await latest.current({}) as unknown as SupervisionView); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-  };
+  const [uncertain, setUncertain] = useState<string | null>(null);
+  const latest = useRef(read); latest.current = read;
+  const refresh = async () => { try { setView(await latest.current({}) as unknown as SupervisionView); setError(null); } catch (e) { setError(message(e)); } };
   useEffect(() => {
     let alive = true;
-    const load = async () => {
-      try { const next = await latest.current({}) as unknown as SupervisionView; if (alive) { setView(next); setError(null); } }
-      catch (e) { if (alive) setError(e instanceof Error ? e.message : String(e)); }
-    };
-    void load();
-    const timer = setInterval(() => { if (!draft && !busy && !picking) void load(); }, 10_000);
+    const load = async () => { try { const next = await latest.current({}) as unknown as SupervisionView; if (alive) setView(next); } catch (e) { if (alive) setError(message(e)); } };
+    void load(); const timer = setInterval(() => { if (!busy && !advanced) void load(); }, 10000);
     return () => { alive = false; clearInterval(timer); };
-  }, [Boolean(draft), busy, Boolean(picking)]);
-  const run = async (action: () => Promise<unknown>) => {
+  }, [busy, advanced, projects]);
+  const teamReader = useRef(readTeam); teamReader.current = readTeam;
+  const targetSlug = view?.binding.projects.find((p) => p.id === target)?.slug;
+  useEffect(() => {
+    setTeam(null); if (!targetSlug) return;
+    let alive = true;
+    void teamReader.current({ project: targetSlug }).then((result) => { if (alive) setTeam(result as unknown as TeamView); }).catch((e) => { if (alive) setError(message(e)); });
+    return () => { alive = false; };
+  }, [targetSlug]);
+  const start = async () => {
     setBusy(true); setError(null);
-    try { await action(); setDraft(null); setPicking(null); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    try {
+      let next = await read({}) as unknown as SupervisionView;
+      if (target !== "supervisor") {
+        const project = next.binding.projects.find((p) => p.id === target);
+        if (!project || !["observe", "message", "open_lane"].every((op) => project.grants.includes(op as never))) throw new Error("Enable Coordinate work for this project in Advanced controls before starting work.");
+      }
+      if (!next.binding.supervisor) { await create({ revision: next.binding.revision }); next = await read({}) as unknown as SupervisionView; }
+      const supervisor = next.binding.supervisor?.agent;
+      if (!supervisor) throw new Error("Supervisor was not available. Refresh and try again.");
+      if (!next.binding.active && next.binding.projects.length) { await bind(bindingInput(next.binding, true)); }
+      if (target !== "supervisor") {
+        const project = next.binding.projects.find((p) => p.id === target)!;
+        try { await paseo.agents.ref(supervisor).send(`Human objective for project ${project.id} (${project.root}):\n${objective.trim()}\n\nInspect current activity. Reuse a suitable existing Lead, or open a new isolated work lane with the project's configured team. Coordinate the work and report progress here.`); }
+        catch (e) { setUncertain(supervisor); throw new Error(`Delivery could not be confirmed. Open the Supervisor conversation before sending again. ${message(e)}`); }
+      }
+      setTarget(null); setObjective(""); await refresh(); onAgent?.(supervisor);
+    } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
-  const text = { color: theme.colors.foreground, fontSize: 14 };
-  const muted = { color: theme.colors.foregroundMuted, fontSize: 12 };
-  const row = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 8 };
-  const input = { color: theme.colors.foreground, backgroundColor: theme.colors.surface0, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 10, minHeight: 44 };
-  const choice = (label: string, selected: boolean, change: () => void) => (
-    <Pressable key={label} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: busy }} accessibilityLabel={label}
-      disabled={busy} onPress={change} style={{ ...row, paddingVertical: 9, paddingHorizontal: 4 }}>
-      <Text style={text}>{selected ? "☑" : "☐"} {label}</Text>
-    </Pressable>
-  );
-  return <View style={{ gap: 14, padding: 16, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 8 }}>
+  const c = theme.colors;
+  const text = { color: c.foreground, fontSize: 14, lineHeight: 21 };
+  const muted = { ...text, color: c.foregroundMuted };
+  const row = { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: 10 };
+  const card = { padding: compact ? 16 : 22, gap: 16, borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.surface1 };
+  const role = catalog.roles.find((r) => r.can.includes("supervise"));
+  const choice = role ? roleChoice(catalog, role, machine, {}) : null;
+  const supervisor = view?.binding.supervisor;
+  const liveSupervisor = view?.supervisors.find((s) => s.id === supervisor?.agent);
+  const runtimeLabel = (agent: { provider: string; model: string | null; thinking: string | null }) => `${catalog.harnesses.find((h) => agent.provider === h.id || agent.provider.endsWith(`-${h.id}`))?.label ?? agent.provider} · ${agent.model ?? "Provider default"}${agent.thinking ? ` · ${agent.thinking}` : ""}`;
+  const launch = (id: string) => { setTarget(id); setObjective(""); setError(null); setUncertain(null); };
+  return <View style={{ gap: 28, width: "100%", maxWidth: 1120, alignSelf: "center", paddingVertical: 12 }}>
     <View style={row}>
-      <Text style={{ ...text, fontSize: 20, fontWeight: "600", flex: 1 }}>Overall supervision</Text>
-      <Button label="Refresh" theme={theme} disabled={busy} onPress={() => void refresh()} />
-      {view && !draft ? <Button label="Manage scope" theme={theme} disabled={busy} onPress={() => setDraft({ ...view.binding })} /> : null}
+      <View style={{ flex: 1, minWidth: 200, gap: 6 }}><Text style={{ ...text, fontSize: 28, lineHeight: 34, fontWeight: "600" }}>Seatworks</Text><Text style={muted}>One supervisor. All your projects.</Text></View>
+      <Button label="Team defaults" theme={theme} onPress={() => onSettings("machine")} />
+      {projects.length ? <Button label="Add project" theme={theme} tone="accent" onPress={onAdd} /> : null}
     </View>
-    {error ? <Text accessibilityRole="alert" style={{ color: theme.colors.statusDanger }}>{error}</Text> : null}
-    {!view ? <Text style={muted}>{error ? "Coverage unavailable. Retry after the host connection recovers." : "Reading projects and agents…"}</Text> : <>
-      <Text style={muted}>{view.binding.active ? "Active" : "Paused"} · {view.binding.projects.length} selected projects · revision {view.binding.revision}</Text>
-      <Text style={text}>{view.supervisors.find((s) => s.id === view.binding.supervisor?.agent)?.title ?? (view.binding.supervisor ? "Selected Supervisor is unavailable" : "No Supervisor selected")}</Text>
-      {draft ? <View style={{ gap: 12 }}>
-        <Text style={text}>Select one Supervisor</Text>
-        {choice("No Supervisor selected", !draft.supervisor, () => setDraft({ ...draft, supervisor: null, active: false }))}
-        {view.supervisors.map((s) => choice(`${s.title} · ${s.id}`, draft.supervisor?.agent === s.id,
-          () => setDraft({ ...draft, supervisor: { agent: s.id, workspace: s.workspace } })))}
-        {!view.binding.supervisor ? <Button label="Create Supervisor in its own workspace" theme={theme} disabled={busy}
-          onPress={() => void run(async () => {
-            const saved = await bind({ revision: draft.revision, active: false, supervisor: null, projects: draft.projects.map(({ id, grants }) => ({ id, grants })) }) as unknown as Binding;
-            await create({ revision: saved.revision });
-          })} /> : null}
-        <Text style={text}>Projects and granted operations</Text>
-        {[...view.candidates, ...draft.projects.filter((p) => !view.candidates.some((c) => c.id === p.id))].map((p) => {
-          const scope = draft.projects.find((s) => s.id === p.id);
-          const available = view.candidates.some((c) => c.id === p.id);
-          return <View key={p.id} style={{ borderTopColor: theme.colors.border, borderTopWidth: 1, paddingTop: 8, gap: 4 }}>
-            {choice(`${p.name} · ${p.id}${available ? "" : " · unavailable; remove to reconcile"}`, Boolean(scope), () => setDraft({ ...draft, projects: scope ? draft.projects.filter((s) => s.id !== p.id)
-              : [...draft.projects, { ...p, slug: "", grants: ["observe"], leads: [] }] }))}
-            <Text style={muted}>{p.root}</Text>
-            {scope ? <View style={row}>{Operation.options.map((op) => choice(op.replaceAll("_", " "), scope.grants.includes(op),
-              () => setDraft({ ...draft, projects: draft.projects.map((s) => s.id !== p.id ? s : { ...s, grants: s.grants.includes(op) ? s.grants.filter((g) => g !== op) : [...s.grants, op] }) })))}</View> : null}
+    {error && !target ? <View style={{ gap: 8 }}><Text accessibilityRole="alert" style={{ ...text, color: c.statusDanger }}>{error}</Text><Button label="Try again" theme={theme} onPress={() => void refresh()} /></View> : null}
+    {!view ? <Text style={muted}>Loading your workspace…</Text> : <>
+      <View style={card}>
+        <View style={row}><View style={{ flex: 1, minWidth: 200, gap: 6 }}>
+          <Text style={{ ...text, fontWeight: "600", fontSize: 17 }}>Overall Supervisor</Text>
+          <Text style={muted}>{supervisor ? view.binding.active ? "Active · coordinating your selected projects" : "Paused · open the conversation or start work to continue" : "Ready when you are · starts with your first objective"}</Text>
+          {liveSupervisor ? <Text style={muted}>{runtimeLabel(liveSupervisor)}</Text> : null}
+          {!supervisor ? <Text style={muted}>Launch model: {choice?.harness?.label ?? "Not configured"} · {choice?.model || "Provider default"}{choice?.thinking ? ` · ${choice.thinking}` : ""}</Text> : null}
+        </View>
+        {supervisor ? <Button label="Open Supervisor" theme={theme} disabled={!onAgent} onPress={() => onAgent?.(supervisor.agent)} /> : projects.length ? <Button label="Start Supervisor" theme={theme} onPress={() => launch("supervisor")} /> : null}</View>
+      </View>
+      {!projects.length ? <View style={{ ...card, paddingVertical: 38, gap: 22 }}>
+        <View style={{ gap: 8 }}><Text style={{ ...text, fontSize: 23, lineHeight: 30, fontWeight: "600" }}>Bring your first project</Text><Text style={{ ...muted, maxWidth: 580 }}>Choose a local folder and its team. Give your Supervisor an objective; it coordinates Leads across your projects.</Text></View>
+        <View style={{ ...row, gap: 24 }}>{["01  Choose folder", "02  Choose models", "03  Start work"].map((label) => <Text key={label} style={muted}>{label}</Text>)}</View>
+        <View style={row}><Button label="Add first project" theme={theme} tone="accent" onPress={onAdd} /></View>
+      </View> : <View style={{ gap: 12 }}>
+        <Text style={{ ...text, fontSize: 18, fontWeight: "600" }}>Projects · {projects.length}</Text>
+        <TextInput accessibilityLabel="Find a project" placeholder="Find a project by name or folder…" placeholderTextColor={c.foregroundMuted} value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} style={{ ...text, padding: 12, minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: c.border }} />
+        {projects.filter((p) => `${p.root} ${view.binding.projects.find((s) => s.slug === p.slug)?.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())).map((project) => {
+          const scope = view.binding.projects.find((p) => p.slug === project.slug);
+          const leads = scope?.leads ?? [];
+          const writable = scope && ["observe", "message", "open_lane"].every((op) => scope.grants.includes(op as never));
+          return <View key={project.slug} style={card}>
+            <View style={row}><View style={{ flex: 1, minWidth: 160, gap: 4, ...(compact ? { flexBasis: "100%" as const } : {}) }}><Text style={{ ...text, fontWeight: "600", fontSize: 18 }}>{scope?.name ?? project.root.split("/").pop()}</Text><Text selectable style={{ ...muted, fontSize: 12 }}>{project.root}</Text></View>
+              <Button label={writable ? "Start work" : "Configure access"} tone={writable ? "accent" : "plain"} theme={theme} onPress={() => writable ? launch(scope.id) : setAdvanced(true)} />
+            </View>
+            {scope && view.problems[scope.id] ? <Text style={{ ...text, color: c.statusDanger }}>{view.problems[scope.id]}</Text> : null}
+            {!leads.length ? <Text style={muted}>{writable ? "No work started yet. Your Supervisor will open a Lead when needed." : scope ? "Observation only" : "Not connected to supervision"}</Text> : leads.map((lead) => {
+              const agent = view.agents.find((a) => a.id === lead.agent);
+              return <View key={lead.agent} style={{ ...row, ...(compact ? { flexDirection: "column" as const, alignItems: "stretch" as const } : {}) }}><View style={{ flex: 1, minWidth: 180 }}><Text style={text}>{agent?.title ?? "Lead"} · {agent?.waiting ? "Needs permission" : agent?.status ?? "Unavailable"}</Text><Text numberOfLines={2} style={muted}>{lead.objective}</Text>{agent ? <Text style={{ ...muted, fontSize: 12 }}>{runtimeLabel(agent)}</Text> : null}</View><Button label="Open Lead" theme={theme} disabled={!onAgent} onPress={() => onAgent?.(lead.agent)} /></View>;
+            })}
+            <View style={row}><Button label="Team & models" theme={theme} onPress={() => onSettings(project.slug)} /><Button label="Activity" theme={theme} onPress={() => onFlow(project.slug)} /></View>
           </View>;
         })}
-        {!view.candidates.length ? <Text style={muted}>No registered projects. Open a project workspace in Paseo, then refresh; discovering it does not grant supervision.</Text> : null}
-        {choice("Supervision active", draft.active, () => setDraft({ ...draft, active: !draft.active }))}
-        <View style={row}>
-          <Button label="Save scope" theme={theme} tone="accent" disabled={busy} onPress={() => void run(() => bind({ revision: draft.revision, active: draft.active, supervisor: draft.supervisor?.agent ?? null, projects: draft.projects.map(({ id, grants }) => ({ id, grants })) }))} />
-          <Button label="Cancel" theme={theme} disabled={busy} onPress={() => setDraft(null)} />
-        </View>
-      </View> : null}
-      <View style={{ gap: 8 }}>
-        <Text style={text}>Discover local projects</Text>
-        <TextInput accessibilityLabel="Project discovery root" style={input} value={scanRoot} onChangeText={setScanRoot} editable={!busy} />
-        <Button label="List child folders" theme={theme} disabled={busy || Boolean(draft)} onPress={() => void run(async () => {
-          const found = await paths({ path: scanRoot }) as unknown as Folders | { error: string };
-          if ("error" in found) throw new Error(found.error);
-          setFolders(found);
-        })} />
-        {folders ? <><Text style={muted}>Immediate children of {folders.path}; up to 300 folders. Register a workspace, then choose it in Manage scope.</Text>
-          <View style={row}>{folders.folders.filter((f) => !view.candidates.some((p) => p.root === f.path)).map((f) => <Button key={f.path}
-            label={`Register ${f.name}${f.repository ? " (repository)" : ""}`} theme={theme} disabled={busy || Boolean(draft)}
-            onPress={() => void run(() => paseo.workspaces.create({ title: f.name, source: { kind: "directory", path: f.path } }))} />)}</View></> : null}
-      </View>
-      {!view.binding.projects.length && !draft ? <Text style={muted}>Choose a Supervisor and enroll the projects it should coordinate. Other projects stay outside its scope.</Text> : null}
-      {view.binding.projects.map((p) => {
-        const candidates = view.agents.filter((a) => a.project === p.id);
-        return <View key={p.id} style={{ gap: 10, paddingTop: 12, borderTopWidth: 1, borderColor: theme.colors.border }}>
-          <View style={row}><Text style={{ ...text, fontWeight: "600", flex: 1 }}>{p.name}</Text><Button label="Project Flow" theme={theme} onPress={() => onFlow(p.slug)} /></View>
-          <Text style={muted}>{p.root}</Text>
-          {view.problems[p.id] ? <Text style={{ color: theme.colors.statusDanger }}>{view.problems[p.id]}</Text> : null}
-          <Text style={muted}>Communication watch: {view.communication[p.id]?.status ?? "off"} · {view.communication[p.id]?.detail ?? "Shadow assessment is off; Supervisor control works independently."}</Text>
-          <Button label={view.communication[p.id]?.status === "off" || !view.communication[p.id] ? "Enable Jev communication shadow" : "Turn off communication shadow"}
-            theme={theme} disabled={busy || Boolean(draft) || Boolean(picking)} onPress={() => void run(async () => {
-              const settings = await readSettings({ project: p.slug }) as unknown as { status: string; revision: string; values: Layer; error?: string };
-              if (settings.status !== "ready") throw new Error(settings.error ?? "Settings unavailable.");
-              const communication = settings.values.attention?.communication === "shadow" ? "off" : "shadow";
-              const saved = await writeSettings({ project: p.slug, revision: settings.revision, values: { ...settings.values, attention: { ...settings.values.attention, communication } } as never }) as { status: string; error?: string };
-              if (saved.status !== "saved") throw new Error(saved.error ?? "Settings changed. Refresh before retrying.");
-            })} />
-          <Text style={muted}>Shadow uses the configured Jev service and key to assess communication evidence, up to 100 calls per machine per day. Results are recorded; no notifications are sent.</Text>
-          {!p.leads.length ? <Text style={muted}>No existing Lead associated. Select an agent below or open work through the Supervisor.</Text> : null}
-          {p.leads.map((lead) => {
-            const live = candidates.find((a) => a.id === lead.agent);
-            const waiting = view.deliveries.filter((d) => d.to === lead.agent && ["queued", "unknown"].includes(d.state));
-            const blockers = view.dependencies.filter((d) => d.consumer.agent === lead.agent && !["confirmed", "canceled"].includes(d.state));
-            return <View key={lead.agent} style={{ gap: 4 }}>
-              <Text style={text}>{live?.title ?? lead.agent} · {live?.status ?? "unavailable"}{live?.waiting ? " · awaiting permission" : ""}</Text>
-              <Text style={text}>{lead.objective}</Text>
-              <Text style={muted}>{lead.origin === "external" ? "Limited: native observation and messages; desk participation unverified" : "Seatworks managed"} · {lead.ownership.join(", ")}</Text>
-              <Text style={muted}>Evidence: {live?.updatedAt ?? "unknown"} · {waiting.length} pending/uncertain commands · {blockers.length} dependencies</Text>
-              {onAgent ? <Button label="Open conversation" theme={theme} onPress={() => onAgent(lead.agent)} /> : null}
-              {lead.origin === "external" ? <Button label="Remove association" theme={theme} disabled={busy || Boolean(draft)} onPress={() => void run(() => adopt({ revision: view.binding.revision, project: p.id, agent: lead.agent, objective: lead.objective, ownership: lead.ownership, remove: true }))} /> : null}
-            </View>;
-          })}
-          <View style={row}>{candidates.filter((a) => !p.leads.some((l) => l.agent === a.id)).map((a) => <Button key={a.id}
-            label={`Associate ${a.capable ? "Lead" : "existing agent"}: ${a.title}`} theme={theme} disabled={busy || Boolean(draft)}
-            onPress={() => { setPicking({ project: p.id, agent: a.id }); setObjective(""); setOwnership(""); }} />)}</View>
-          {picking?.project === p.id ? <View style={{ gap: 8 }}>
-            <Text style={text}>Associate {picking.agent}; its session and configuration stay in place.</Text>
-            <TextInput accessibilityLabel="Lead objective" placeholder="Current objective" placeholderTextColor={theme.colors.foregroundMuted} style={input} value={objective} onChangeText={setObjective} editable={!busy} />
-            <TextInput accessibilityLabel="Lead ownership" placeholder="Owned paths or globs, separated by commas" placeholderTextColor={theme.colors.foregroundMuted} style={input} value={ownership} onChangeText={setOwnership} editable={!busy} />
-            <View style={row}><Button label="Associate Lead" theme={theme} disabled={busy || !objective.trim() || !ownership.trim()} onPress={() => void run(() => adopt({ revision: view.binding.revision, ...picking, objective, ownership: ownership.split(",").map((s) => s.trim()).filter(Boolean) }))} />
-              <Button label="Cancel association" theme={theme} disabled={busy} onPress={() => setPicking(null)} /></View>
-          </View> : null}
-        </View>;
-      })}
-      {view.dependencies.length ? <View style={{ gap: 8 }}><Text style={{ ...text, fontWeight: "600" }}>Cross-project dependencies</Text>
-        {view.dependencies.map((d) => <View key={d.id} style={{ gap: 3 }}><Text style={text}>{d.producer.project} → {d.consumer.project} · {d.state}</Text>
-          <Text style={text}>{d.request}</Text><Text style={muted}>Artifact: {d.artifact ?? "awaiting producer"} · Next: {d.checkpoint}</Text></View>)}
-      </View> : null}
-      {view.deliveries.length ? <View style={{ gap: 8 }}><Text style={{ ...text, fontWeight: "600" }}>Recent deliveries</Text>
-        {view.deliveries.slice(0, 12).map((d) => <View key={d.id}><Text selectable style={text}>{d.state} · {d.to} · {d.id}</Text>
-          <Text style={muted} numberOfLines={3}>{d.detail ?? d.text}</Text></View>)}
-      </View> : null}
+        {query.trim() && !projects.some((p) => `${p.root} ${view.binding.projects.find((s) => s.slug === p.slug)?.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())) ? <Text style={muted}>No matching projects. Try another name or folder.</Text> : null}
+      </View>}
+      <View style={{ ...row, justifyContent: "space-between" }}><Text style={{ ...muted, flex: 1, minWidth: 200 }}>Manage permissions, existing Leads, communication and delivery history.</Text><Button label="Advanced controls" theme={theme} onPress={() => setAdvanced(true)} /></View>
     </>}
+    <Modal title="Advanced controls" open={advanced} onOpenChange={setAdvanced}><Modal.Content><SupervisionSettings theme={theme} onFlow={(slug) => { setAdvanced(false); onFlow(slug); }} onAgent={onAgent} /></Modal.Content></Modal>
+    <Modal title={target === "supervisor" ? "Start your Supervisor" : "What should we work on?"} open={target !== null} onOpenChange={(open) => { if (!open && !busy) setTarget(null); }}><Modal.Content contentContainerStyle={{ padding: 0, gap: 0 }}>
+      <View style={{ padding: 24, gap: 18 }}>
+        <Text style={muted}>{target === "supervisor" ? "Open the shared conversation for planning across your projects." : `Project: ${view?.binding.projects.find((p) => p.id === target)?.name ?? ""}. Your Supervisor will use this project's configured team and models.`}</Text>
+        <Text style={text}>{supervisor ? "Uses your existing Supervisor session." : `Supervisor launch: ${choice?.harness?.label ?? "Not configured"} · ${choice?.model || "Provider default"}${choice?.thinking ? ` · ${choice.thinking}` : ""}`}</Text>
+        {!supervisor ? <Button label="Change Supervisor model" theme={theme} onPress={() => { setTarget(null); onSettings("machine"); }} /> : null}
+        {targetSlug ? <View style={{ gap: 6 }}>{team ? catalog.roles.filter((r) => r.can.includes("lead") || r.can.includes("write") || r.can.includes("review")).map((r) => { const selected = team.roles[r.id]; return selected ? <Text key={r.id} style={muted}>{r.label}: {runtimeLabel(selected)}</Text> : null; }) : <Text style={muted}>Reading project models…</Text>}<Button label="Change project models" theme={theme} disabled={busy} onPress={() => { setTarget(null); onSettings(targetSlug); }} /></View> : null}
+        {target !== "supervisor" ? <TextInput accessibilityLabel="Work objective" placeholder="Describe the outcome you want…" placeholderTextColor={c.foregroundMuted} multiline value={objective} onChangeText={setObjective} editable={!busy && !uncertain} style={{ ...text, minHeight: 140, padding: 14, borderRadius: 8, borderWidth: 1, borderColor: c.border, textAlignVertical: "top" }} /> : null}
+        <Text style={muted}>Starting resumes supervision for the selected projects. You will continue in the Supervisor conversation.</Text>
+        {team?.errors.map((problem) => <Text key={problem} style={{ ...text, color: c.statusDanger }}>{problem}</Text>)}
+        {error ? <Text accessibilityRole="alert" style={{ ...text, color: c.statusDanger }}>{error}</Text> : null}
+      </View>
+        <View style={{ ...row, justifyContent: "flex-end", padding: 16, borderTopWidth: 1, borderColor: c.border }}><Button label="Cancel" theme={theme} disabled={busy} onPress={() => setTarget(null)} />{uncertain ? <Button label="Open Supervisor" theme={theme} disabled={!onAgent} onPress={() => onAgent?.(uncertain)} /> : <Button label={busy ? "Starting…" : target === "supervisor" ? "Start Supervisor" : "Send to Supervisor"} theme={theme} tone="accent" disabled={busy || (target !== "supervisor" && (!objective.trim() || !team || team.errors.length > 0))} onPress={() => void start()} />}</View>
+    </Modal.Content></Modal>
   </View>;
 }

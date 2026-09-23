@@ -1,0 +1,1 @@
+State format 3 adds machine-owned launch-profile visibility. Disabled profiles do not remove providers or change project roles. This fixture is immutable once committed.

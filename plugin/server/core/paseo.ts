@@ -7,6 +7,8 @@ export type SeatView = {
   workspaceId?: string | null;
   title?: string | null;
   provider: string;
+  model?: string | null;
+  thinkingOptionId?: string | null;
   cwd: string;
   status: string;
   updatedAt: string;

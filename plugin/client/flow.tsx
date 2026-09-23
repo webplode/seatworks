@@ -2,7 +2,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { SettingsCard, SettingsRow, SettingsSection, SettingsSwitch } from "@getpaseo/plugin/client/ui";
 import { memo, useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { Empty } from "./bits.tsx";
+import { Button, Empty } from "./bits.tsx";
 import { type FlowLane, type FlowSeat, type FlowView, countsInstead, watcherState } from "./data.ts";
 import { IncidentsCard, WatchCard } from "./watching.tsx";
 
@@ -15,6 +15,7 @@ type Props = {
   disabled: boolean;
   onLive(live: boolean): void;
   onOpen(lane: string): void;
+  onAgent?: (id: string) => void;
   onAddKey(): void;
   onWatchBySeat(): void;
 };
@@ -30,7 +31,7 @@ const ago = (minutes: number): string => (minutes < 1 ? "just now" : `${minutes}
 const since = (minutes: number): string => (minutes < 1 ? "just now" : `${minutes} min ago`);
 
 const seatText = (seat: FlowSeat | null): string => {
-  if (!seat) return "no seat";
+  if (!seat) return "no active agent";
   if (seat.waiting.length > 0) return `waiting on you · ${seat.waiting[0]}`;
   if (seat.status === "gone") return seat.minutes > 0 ? `gone · last heard ${seat.minutes} min ago` : "gone";
   return `${seat.status} · ${ago(seat.minutes)}`;
@@ -90,10 +91,11 @@ const Node = memo(function Node({ title, hint, state, alive, caret, reads, theme
   );
 });
 
-const Lane = memo(function Lane({ lane, theme, onOpen }: { lane: FlowLane; theme: PluginTheme; onOpen(id: string): void }) {
+const Lane = memo(function Lane({ lane, theme, onOpen, onAgent }: { lane: FlowLane; theme: PluginTheme; onOpen(id: string): void; onAgent?: (id: string) => void }) {
   const styles = useStyles(theme);
   return (
     <View style={styles.lane}>
+      <View style={{ gap: 8 }}>
       <Node
         theme={theme}
         title={`Lead · ${lane.id} ${lane.title}`}
@@ -103,6 +105,8 @@ const Lane = memo(function Lane({ lane, theme, onOpen }: { lane: FlowLane; theme
         caret={lane.taskCount === 0 ? undefined : lane.open ? "▾" : "▸"}
         onPress={lane.taskCount === 0 ? undefined : () => onOpen(lane.id)}
       />
+      {onAgent && lane.lead && lane.lead.status !== "gone" ? <Button label="Open Lead" theme={theme} onPress={() => onAgent(lane.lead!.id)} /> : null}
+      </View>
       {lane.open && lane.tasks.length > 0 ? (
         <>
           <View style={styles.spine} />
@@ -117,6 +121,7 @@ const Lane = memo(function Lane({ lane, theme, onOpen }: { lane: FlowLane; theme
                   hint={task.title}
                   state={task.handback !== null ? `${task.status} · handed back ${since(task.handback)}` : `${task.status} · ${seatText(task.peer)}`}
                   alive={task.status === "running" || task.status === "rework"}
+                  onPress={onAgent && task.peer && task.peer.status !== "gone" ? () => onAgent(task.peer!.id) : undefined}
                 />
               </View>
             ))}
@@ -127,14 +132,14 @@ const Lane = memo(function Lane({ lane, theme, onOpen }: { lane: FlowLane; theme
   );
 });
 
-export function FlowSection({ following, flow, error, live, theme, disabled, onLive, onOpen, onAddKey, onWatchBySeat }: Props) {
+export function FlowSection({ following, flow, error, live, theme, disabled, onLive, onOpen, onAgent, onAddKey, onWatchBySeat }: Props) {
   const styles = useStyles(theme);
   const empty = flow !== null && flow.lanes.length === 0 && flow.supervisors.length === 0;
   // By a seat the Watcher is a seat like the others, beside the Supervisor, once a lane has put it there.
   const watcher = flow && flow.watch.by === "seat" && (flow.watch.watcher || flow.lanes.length > 0) ? watcherState(flow.watch.watcher) : null;
 
   return (
-    <SettingsSection title="Flow" info="Only what the team is holding right now. Open a lane to see its Peers.">
+    <SettingsSection title="Team activity" info="Expand a line of work to see its tasks. Open an agent to continue its conversation.">
       <SettingsCard>
         <SettingsSwitch
           label="Follow the team live"
@@ -155,7 +160,7 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
         </SettingsCard>
       ) : empty ? (
         <SettingsCard>
-          <Empty theme={theme} title="Nothing is running" body="Open a lane and its Lead, Peers and asks appear here." />
+          <Empty theme={theme} title="Nothing is running" body="Start work and its Lead, tasks and questions appear here." />
         </SettingsCard>
       ) : (
         <View style={styles.canvas}>
@@ -173,7 +178,7 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
                 </View>
               ))}
               {flow.lanes.map((lane) => (
-                <Lane key={lane.id} lane={lane} theme={theme} onOpen={onOpen} />
+                <Lane key={lane.id} lane={lane} theme={theme} onOpen={onOpen} onAgent={onAgent} />
               ))}
             </View>
           </ScrollView>

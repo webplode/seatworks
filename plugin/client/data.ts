@@ -12,6 +12,7 @@ export type SettingSpec = { type: "number" | "string" | "boolean"; label: string
 export type ModelView = { id: string; label: string; isDefault?: boolean; thinkingOptions?: { id: string; label: string; isDefault?: boolean }[] };
 
 export type Catalog = {
+  profiles: { id: string; role: string; harness: string; label: string }[];
   roles: { id: string; label: string; description: string; can: string[]; concern: string | null; defaults: { harness: string; model?: string; thinking?: string }; follows: string | null; harnesses: string[] }[];
   harnesses: { id: string; label: string; models: ModelView[]; thinking: boolean; transports: string[] }[];
   mcp: { id: string; label: string; description: string; kind: string; transport: string; settings: Record<string, SettingSpec>; defaults: { enabled: boolean }; roles: string[] }[];
@@ -37,7 +38,7 @@ export type AttentionChoice = {
 export type RoleChoice = { harness?: string; model?: string; thinking?: string; rules?: string };
 export type McpChoice = { enabled?: boolean; removed?: boolean; label?: string; connect?: Connect; roles?: string[]; tools?: Record<string, string[]>; rule?: string; settings?: Record<string, Scalar> };
 export type SensorChoice = { key?: string };
-export type Layer = { roles?: Record<string, RoleChoice>; mcp?: Record<string, McpChoice>; rules?: string; attention?: AttentionChoice; flow?: { live?: boolean; everySeconds?: number }; sensor?: SensorChoice };
+export type Layer = { profiles?: { disabled: string[] }; roles?: Record<string, RoleChoice>; mcp?: Record<string, McpChoice>; rules?: string; attention?: AttentionChoice; flow?: { live?: boolean; everySeconds?: number }; sensor?: SensorChoice };
 
 export type ProjectRow = { slug: string; root: string };
 export type PaseoProject = { name: string; root: string };
@@ -85,6 +86,22 @@ type Calls = {
 };
 
 export const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+export async function attachProject(root: string, values: Layer, roles: Catalog["roles"], calls: Pick<Calls, "add" | "settings" | "write">): Promise<string> {
+  const added = await calls.add({ root });
+  if ("error" in added) throw new Error(added.error);
+  if (Object.keys(values).length) {
+    const read = await calls.settings({ project: added.slug });
+    if (read.status !== "ready") throw new Error(read.error);
+    const merged = foldRoles(read.values, values, (id) => {
+      const spec = roles.find((r) => r.id === id);
+      return spec ? harnessInForce(spec, read.values, read.machine) : undefined;
+    });
+    const written = await calls.write({ project: added.slug, revision: read.revision, values: merged });
+    if (written.status !== "saved") throw new Error(written.error);
+  }
+  return added.slug;
+}
 
 export function useSeatworks(project?: string) {
   const bound = {
@@ -235,35 +252,9 @@ export function useSeatworks(project?: string) {
   const attach = useCallback(
     async (root: string, values: Layer): Promise<string | null> => {
       return writing(async () => {
-        const added = await latest.current.add({ root });
-        if ("error" in added) {
-          setSaveError(added.error);
-          setSaved(false);
-          return null;
-        }
-        if (Object.keys(values).length > 0) {
-          const read = await latest.current.settings({ project: added.slug });
-          if (read.status !== "ready") {
-            // Filed under the project the dialog is about to open, which is where it has to be read.
-            setRefusal({ of: added.slug, text: read.error });
-            setSaved(false);
-            return added.slug;
-          }
-          // A write is the whole layer, so the draft is folded into what the project holds; alone it erased rules, servers and tuning.
-          const catalogue = data.status === "ready" ? data.catalog.roles : [];
-          const merged = foldRoles(read.values, values, (role) => {
-            const spec = catalogue.find((entry) => entry.id === role);
-            return spec ? harnessInForce(spec, read.values, read.machine) : undefined;
-          });
-          const written = await latest.current.write({ project: added.slug, revision: read.revision, values: merged });
-          if (written.status !== "saved") {
-            setRefusal({ of: added.slug, text: written.error });
-            setSaved(false);
-            return added.slug;
-          }
-        }
+        const slug = await attachProject(root, values, data.status === "ready" ? data.catalog.roles : [], latest.current);
         setSaved(true);
-        return added.slug;
+        return slug;
       }, null);
     },
     // `data` for the catalog's default harness; without it the callback keeps the first render's empty catalog.
@@ -419,7 +410,7 @@ export function keptRoles(narrowed: string[] | undefined, reachable: string[]): 
   return narrowed ? narrowed.filter((role) => reachable.includes(role)) : reachable;
 }
 
-type InForce = { id: string; follows?: string | null; defaults: { harness: string; model?: string } };
+type InForce = { id: string; follows?: string | null; defaults: { harness: string; model?: string; thinking?: string } };
 
 /** Nearest layer first: draft, project, machine, kit default; skipping the middle two offered the wrong agent's models. */
 export function harnessInForce(role: InForce, ...layers: (Layer | undefined)[]): string {
@@ -448,6 +439,23 @@ export function modelInForce(role: InForce, ...nearestFirst: (Layer | undefined)
     if (choice.model) model = choice.model;
   }
   return model;
+}
+
+export function thinkingInForce(role: InForce, ...nearestFirst: (Layer | undefined)[]): string | undefined {
+  const followed = role.follows ? { id: role.follows, defaults: role.defaults } : undefined;
+  const origin = followed ? { harness: harnessInForce(followed, ...nearestFirst), thinking: thinkingInForce(followed, ...nearestFirst) } : role.defaults;
+  let harness = origin.harness;
+  let thinking = origin.thinking;
+  for (const layer of [...nearestFirst].reverse()) {
+    const choice = layer?.roles?.[role.id];
+    if (!choice) continue;
+    if (choice.harness && choice.harness !== harness) {
+      harness = choice.harness;
+      thinking = choice.harness === origin.harness ? origin.thinking : undefined;
+    }
+    if (choice.thinking) thinking = choice.thinking;
+  }
+  return thinking;
 }
 
 /** The resolver does not fence models against the catalogue, so show the one in force and flag it when the agent does not list it. */

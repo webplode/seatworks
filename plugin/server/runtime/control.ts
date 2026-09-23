@@ -23,6 +23,7 @@ import { type Check, doctor } from "./doctor.ts";
 import type { Control } from "./rpc.ts";
 import type { Seating } from "./seating.ts";
 import type { TeamSource } from "./team-source.ts";
+import { seatPairs, labelFor } from "../catalog/providers.ts";
 import { errorText } from "../core/errors.ts";
 
 type Target = { file: string; schema: typeof MachineLayerSchema | typeof ProjectLayerSchema; project?: Project };
@@ -85,6 +86,7 @@ function connectFrom(value: unknown): Connect | string {
 
 export function describeCatalog(kit: Kit): unknown {
   return {
+    profiles: seatPairs(kit).map(({ role, harness }) => ({ id: providerId(kit, role.role, harness.id), role: role.role, harness: harness.id, label: labelFor(kit, role, harness) })),
     roles: kit.roles.map((role) => ({
       id: role.role,
       label: role.label,

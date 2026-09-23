@@ -93,7 +93,7 @@ function Trouble({ watch, theme }: { watch: WatchView; theme: PluginTheme }) {
               <Dot color={theme.colors.statusWarning} />
             </View>
             <View style={styles.labels}>
-              <Text style={styles.title}>{entry.kind === "call.malformed" ? "A call never reached the desk" : entry.kind}</Text>
+              <Text style={styles.title}>{entry.kind === "call.malformed" ? "An agent request could not be processed" : entry.kind}</Text>
               <Text style={styles.hint}>{entry.detail}</Text>
             </View>
             <Text style={styles.hint}>{ago(entry.minutes)}</Text>
@@ -157,7 +157,7 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
           </Section>
 
           {watch.seats.some((seat) => seat.running) || watch.failing ? (
-            <Section title="Leaning, below its bar · not raised" theme={theme}>
+            <Section title="Observations below the alert threshold" theme={theme}>
               {watch.failing ? (
                 <Text style={[styles.hint, { padding: 18 }]}>Nothing to show until Jev answers again: what it leans towards is its own reading.</Text>
               ) : (

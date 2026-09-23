@@ -14,6 +14,12 @@ export const STEPS: StateStep[] = [{ to: 2, machine(root) {
     if (!Array.isArray(old) || old.some((l) => typeof l?.id !== "string" || typeof l?.to !== "string" || typeof l?.key !== "string" || typeof l?.text !== "string" || typeof l?.at !== "number")) throw new Error("Invalid version 1 outbox; nothing was migrated.");
     writeJson(file, old.map((l) => ({ ...l, state: "queued" })));
   }
+} }, { to: 3, machine(root) {
+  const file = join(root, "settings.json");
+  if (!existsSync(file)) return;
+  const old = JSON.parse(readFileSync(file, "utf8"));
+  if (!old || typeof old !== "object" || Array.isArray(old)) throw new Error("Invalid version 2 settings; nothing was migrated.");
+  writeJson(file, { ...old, profiles: old.profiles ?? { disabled: [] } });
 } }];
 
 const MACHINE_FILES = ["state.json", "settings.json", "outbox.json", "content.json", "supervision.json", "dependencies.json", "jev-budget.json"];

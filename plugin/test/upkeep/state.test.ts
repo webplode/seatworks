@@ -91,3 +91,13 @@ test("state a newer version made is refused, not read", () => {
   assert.match(upgradeState(root, undefined, undefined, NOW).failed[0]!.error, /made by a newer Seatworks/);
   assert.match(ledgerFault(shop) ?? "", /made by a newer Seatworks/);
 });
+
+test("profile visibility migration preserves existing model choices and defaults to all profiles enabled", () => {
+  const { root } = machineAt("v2");
+  const before = readJson<Record<string, unknown>>(join(root, "settings.json"), {});
+  assert.deepEqual(upgradeState(root, undefined, undefined, NOW).failed, []);
+  const after = readJson<Record<string, unknown>>(join(root, "settings.json"), {});
+  assert.deepEqual(after, { ...before, profiles: { disabled: [] } });
+  assert.deepEqual(readJson(join(root, "backup-state-2-20260922-071230", "settings.json"), {}), before);
+  assert.equal(ProjectLayerSchema.safeParse({ profiles: { disabled: [] } }).success, false, "a project cannot control machine-wide launch profiles");
+});

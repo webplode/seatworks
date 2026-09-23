@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Layer, countsInstead, dropMcp, foldRoles, harnessInForce, incidentLines, jevHeader, keptRoles, leaning, modelInForce, modelRow, setAttention, setFlow, setMcp, setRole, setSensorKey, spent, trackRecord, watcherState } from "../../client/data.ts";
+import { type Layer, thinkingInForce, countsInstead, dropMcp, foldRoles, harnessInForce, incidentLines, jevHeader, keptRoles, leaning, modelInForce, modelRow, setAttention, setFlow, setMcp, setRole, setSensorKey, spent, trackRecord, watcherState } from "../../client/data.ts";
 import type { WatchIncident, WatchSeat, WatchView } from "../../shared/views.ts";
 import { KEPT } from "../../shared/rpc.ts";
 
@@ -248,4 +248,12 @@ test("money is shown in dollars, with enough places that a few cents do not read
   assert.equal(spent(0.412), "$0.412");
   assert.equal(spent(12.5), "$12.50");
   assert.doesNotMatch(spent(0.004), /\u00a2/);
+});
+
+test("a provider change clears inherited thinking until that provider supplies a default", () => {
+  const role = { id: "lead", defaults: { harness: "claude", thinking: "medium" } };
+  const machine = { roles: { lead: { harness: "claude", thinking: "high" } } };
+  assert.equal(thinkingInForce(role, { roles: { lead: { harness: "codex" } } }, machine), undefined);
+  assert.equal(thinkingInForce(role, { roles: { lead: { harness: "codex", thinking: "low" } } }, machine), "low");
+  assert.equal(thinkingInForce(role, { roles: { lead: { harness: "claude" } } }, { roles: { lead: { harness: "codex", thinking: "low" } } }), "medium");
 });

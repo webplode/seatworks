@@ -49,3 +49,17 @@ test("uncommitted team instructions are offered for commit, naming only those fi
   const item = view.items.find(i => i.kind === "commit")!;
   assert.deepEqual(item.files, ["AGENTS.md"]); assert.equal(item.scope, "p");
 });
+test("a Supervisor that cannot sign in comes first, with a reload, and counts as needing the Human", () => {
+  const b = binding(); b.projects[0]!.leads = [{ agent: "sup", workspace: "home", objective: "t", ownership: [], origin: "external" }];
+  const view = teamBrief(b, [{ id: "sup", provider: "t", cwd: "/project", workspaceId: "home", status: "idle", updatedAt: "now", pendingPermissions: [{ id: "1", title: "Approval" }] }], () => emptyLedger(), [], undefined, "Not logged in · Please run /login");
+  assert.equal(view.signIn, "Not logged in · Please run /login");
+  assert.equal(view.items[0]!.action, "reload"); assert.equal(view.needsYou, 2);
+});
+test("each open work stream reads as one line: its title and how far it got", () => {
+  const ledger = emptyLedger();
+  ledger.lanes.L1 = { id: "L1", title: "Checkout", status: "open", branch: "b", base: "main", lead: "lead-1" } as never;
+  ledger.tasks.T1 = { id: "T1", lane: "L1", status: "merged" } as never;
+  ledger.tasks.T2 = { id: "T2", lane: "L1", status: "running" } as never;
+  const view = teamBrief(binding(), [], () => ledger, []);
+  assert.deepEqual(view.projects[0]!.streams, [{ id: "L1", title: "Checkout", state: "1 of 2 tasks done", agent: "lead-1" }]);
+});

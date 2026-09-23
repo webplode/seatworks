@@ -28,6 +28,16 @@ export const realProbes: Probes = {
   post: postJsonRpc,
 };
 
+/** Peers commit their tasks, and a commit needs a name and email git can find for this project. */
+export function gitIdentityCheck(root: string): Check {
+  try {
+    execFileSync("git", ["-C", root, "var", "GIT_AUTHOR_IDENT"], { stdio: "ignore", timeout: 5000 });
+    return { id: "git:identity", ok: true, detail: "Git can sign commits in this project." };
+  } catch {
+    return { id: "git:identity", ok: false, detail: `Git doesn't know who you are in ${root}, so Peers can't commit their work. Run git config user.name and git config user.email there (or --global).` };
+  }
+}
+
 export async function doctor(kit: Kit, team: Team, probes: Probes = realProbes): Promise<Check[]> {
   const checks: Check[] = [];
   checks.push({ id: "settings", ok: team.errors.length === 0, detail: team.errors.length === 0 ? "The settings resolve to a complete team." : team.errors.join("\n") });

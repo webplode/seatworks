@@ -159,20 +159,32 @@ export async function connectLocal() {
 }
 
 export type FolderSearch = (query: string) => Promise<string[]>;
+export type AgentReload = (agent: string) => Promise<void>;
 
-/** The same fuzzy directory search as Paseo's own Add project; the public SDK has no call for it, so this reaches the daemon client under it. */
-export function folderSearch(): FolderSearch {
+/** One daemon client under the public SDK, for the calls the SDK does not have. */
+function underSdk(clientId: string): () => Promise<DaemonClient> {
   let client: Promise<DaemonClient> | undefined;
   const connect = async () => {
-    const found = new DaemonClient({ ...(await localDaemon()), clientId: "seatworks-folders", clientType: "cli", connectTimeoutMs: 10_000, reconnect: { enabled: true } });
+    const found = new DaemonClient({ ...(await localDaemon()), clientId, clientType: "cli", connectTimeoutMs: 10_000, reconnect: { enabled: true } });
     try { await found.connect(); return found; }
     catch (error) { await found.close(); throw error; }
   };
+  return () => (client ??= connect().catch((error) => { client = undefined; throw error; }));
+}
+
+/** The same fuzzy directory search as Paseo's own Add project. */
+export function folderSearch(): FolderSearch {
+  const client = underSdk("seatworks-folders");
   return async (query) => {
-    client ??= connect().catch((error) => { client = undefined; throw error; });
-    const found = await (await client).getDirectorySuggestions({ query, includeDirectories: true, includeFiles: false, limit: 30 });
+    const found = await (await client()).getDirectorySuggestions({ query, includeDirectories: true, includeFiles: false, limit: 30 });
     return found.entries?.filter((entry) => entry.kind === "directory").map((entry) => entry.path) ?? found.directories ?? [];
   };
+}
+
+/** Paseo's Reload on an agent: restarts its process, so a fixed sign-in or launcher takes effect. */
+export function agentReload(): AgentReload {
+  const client = underSdk("seatworks-reload");
+  return async (agent) => { await (await client()).refreshAgent(agent); };
 }
 
 export function workspacesOn(bound: Bound): Workspaces {

@@ -306,3 +306,30 @@ test("a changed skill reaches the seat as a new copy, the one read before stays 
   assert.equal(existsSync(before), false);
   assert.equal(existsSync(after), true, "the copy a seat started on lately stays");
 });
+
+test("a seat that commits may write the repository's git directory, where a lane's working copy keeps its index", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const kit = withAgent({
+    "harness.json": agent(offering),
+    "settings.toml": '[sandbox_workspace_write]\nnetwork_access = true\n',
+    "settings/lead.settings.toml": "",
+    "settings/peer.settings.toml": "",
+    "rules/all.rules": "",
+    "rules/lead.rules": "",
+    "rules/peer.rules": "",
+  });
+  const root = tempDir("sw2-repo-");
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  const here = { ...project, root };
+  const home = tempDir("sw2-cx-home-");
+  const base = resolveTeam(kit);
+  const roots = (role: string) => {
+    const team = withHarness(base, role, kit.harnesses.cx!);
+    materialize(kit, team, role, home, here, serversFor(kit, team, role, context));
+    const config = parse(readFileSync(join(seatDir(kit, team.roles[role]!.role, kit.harnesses.cx!, home, here), "config.toml"), "utf-8")) as Record<string, any>;
+    return (config.sandbox_workspace_write.writable_roots ?? []) as string[];
+  };
+  const git = execFileSync("git", ["-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
+  assert.ok(roots("peer").includes(git), `the Peer commits its task: ${roots("peer")} vs ${git}`);
+  assert.equal(roots("lead").includes(git), false, "the Lead does not commit");
+});

@@ -257,3 +257,9 @@ test("a provider change clears inherited thinking until that provider supplies a
   assert.equal(thinkingInForce(role, { roles: { lead: { harness: "codex", thinking: "low" } } }, machine), "low");
   assert.equal(thinkingInForce(role, { roles: { lead: { harness: "claude" } } }, { roles: { lead: { harness: "codex", thinking: "low" } } }), "medium");
 });
+
+test("a Seatworks error reads in its own words, without Paseo's request wrapper", async () => {
+  const { message } = await import("../../client/data.ts");
+  assert.equal(message(new Error("Request failed: Git refused it. requestType=plugin.rpc.invoke.request code=handler_error")), "Git refused it.");
+  assert.equal(message(new Error("plain")), "plain");
+});

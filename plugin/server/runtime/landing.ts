@@ -57,7 +57,18 @@ function readText(file: string): string { try { return readFileSync(file, "utf8"
 export function commitTeamFiles(root: string): { committed: string[] } {
   const files = uncommittedTeamFiles(root);
   if (!files.length) return { committed: [] };
+  try { git(root, ["var", "GIT_AUTHOR_IDENT"]); }
+  catch { throw new Error("Git doesn't know who you are in this repository yet, so it can't sign the commit. Set user.name and user.email (git config), then press Commit again."); }
+  const tracked = files.filter((name) => { try { git(root, ["ls-files", "--error-unmatch", "--", name]); return true; } catch { return false; } });
   git(root, ["add", "--", ...files]);
-  execFileSync("git", ["commit", "--only", "-m", "chore: add Seatworks team instructions", "--", ...files], { cwd: root, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    execFileSync("git", ["commit", "--only", "-m", "chore: add Seatworks team instructions", "--", ...files], { cwd: root, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    // Leave the index as it was: new files unstaged again, tracked ones back to HEAD.
+    const added = files.filter((name) => !tracked.includes(name));
+    try { if (added.length) git(root, ["rm", "--cached", "-q", "--", ...added]); if (tracked.length) git(root, ["reset", "-q", "--", ...tracked]); } catch { /* best effort */ }
+    const detail = (error as { stderr?: string }).stderr?.trim().split("\n").slice(-3).join(" ") ?? String(error);
+    throw new Error(`Git refused the commit: ${detail.slice(0, 300)}`);
+  }
   return { committed: files };
 }

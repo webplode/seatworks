@@ -13,7 +13,7 @@ import { stampKit } from "../upkeep/migrate.ts";
 import { type StateReport, upgradeState } from "../upkeep/state.ts";
 import { type IndexedProxy, type Team, indexedProxies, jevOn, watchOn } from "../catalog/team.ts";
 import { guidesDir, home, nodeBin, outboxPath, spoolDir, stateRoot } from "../core/paths.ts";
-import { type FolderSearch, activityOn, connectLocal, folderSearch, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
+import { type AgentReload, type FolderSearch, activityOn, agentReload, connectLocal, folderSearch, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
 import type { PaseoApi } from "../core/paseo.ts";
 import type { SeatView, Seats, Workspaces } from "../core/ports.ts";
 import type { CodeIndex } from "../desk/context.ts";
@@ -46,7 +46,9 @@ import { Supervision } from "./supervision.ts";
 import { SupervisionControl } from "./supervision-control.ts";
 import { supervisionRpc, bindingRpc, adoptRpc, createSupervisorRpc } from "../../shared/rpc.ts";
 import { CommunicationWatch } from "./watch/jev/communication.ts";
-import { briefRpc, commitTeamFilesRpc } from "../../shared/brief.ts";
+import { briefRpc, commitTeamFilesRpc, reloadSupervisorRpc } from "../../shared/brief.ts";
+
+const SIGN_IN_TROUBLE = /not logged in|please run \/login|invalid api key|authentication_error|oauth token has expired|credit balance is too low/i;
 import { teamBrief } from "./brief.ts";
 import { commitTeamFiles, diffStat, laneReports, uncommittedTeamFiles } from "./landing.ts";
 import { outputText } from "./timeline.ts";
@@ -57,7 +59,7 @@ const TROUBLES = 10;
 
 const INCIDENTS_SHOWN = 200;
 
-export type RuntimeOptions = { outboxFile?: string; paseo?: PaseoApi; codeIndex?: (proxy: IndexedProxy) => CodeIndex; reloadDaemon?: () => Promise<boolean>; folders?: FolderSearch };
+export type RuntimeOptions = { outboxFile?: string; paseo?: PaseoApi; codeIndex?: (proxy: IndexedProxy) => CodeIndex; reloadDaemon?: () => Promise<boolean>; folders?: FolderSearch; reloadAgent?: AgentReload };
 
 export class Runtime {
   readonly kit: Kit;
@@ -81,6 +83,9 @@ export class Runtime {
   private readonly offline = new Set<string>();
   private readonly makeIndex: (proxy: IndexedProxy) => CodeIndex;
   private readonly reload: () => Promise<boolean>;
+  private readonly reloadAgent: AgentReload;
+  /** The last timeline entry when the Human reloaded an agent: a sign-in failure from before it is history. */
+  private readonly reloadedAt = new Map<string, number>();
   private pluginApi: PaseoApi | undefined;
   private briefBusy = false;
   private briefSent = new Map<string, string>();
@@ -96,6 +101,7 @@ export class Runtime {
     this.api = options.paseo;
     this.makeIndex = options.codeIndex ?? codeIndex;
     this.reload = options.reloadDaemon ?? reloadDaemon;
+    this.reloadAgent = options.reloadAgent ?? agentReload();
     this.seats = seatsOn(() => this.api);
     this.workspaces = workspacesOn(() => this.api);
     this.source = new TeamSource(kit);
@@ -486,9 +492,25 @@ export class Runtime {
     for (const project of this.supervision.store.read().projects) this.remember(projectOf(project.root));
   }
 
+  /** The Supervisor's last reply, when it says the agent cannot sign in: sending it work would only repeat that. */
+  private async signInTrouble(agent: string): Promise<string | undefined> {
+    try {
+      const { entries } = await activityOn(() => this.api, agent, 4);
+      const since = this.reloadedAt.get(agent) ?? -1;
+      for (const entry of [...entries].reverse()) {
+        if (entry.seqEnd <= since) return undefined;
+        const item = JSON.parse(entry.content) as { type?: string; text?: string };
+        if (item.type !== "assistant_message") continue;
+        return SIGN_IN_TROUBLE.test(item.text ?? "") ? item.text!.slice(0, 200) : undefined;
+      }
+    } catch { /* an unreadable timeline says nothing about sign-in */ }
+    return undefined;
+  }
+
   private async brief() {
     const binding = this.supervision.store.read();
     const seats = await this.seats.open();
+    const signIn = binding.supervisor ? await this.signInTrouble(binding.supervisor.agent) : undefined;
     if (this.supervision.store.read().revision !== binding.revision) throw new Error("Scope changed. Refresh team status.");
     return teamBrief(binding, seats, (root) => {
       const scope = binding.projects.find(p => p.root === root)!;
@@ -498,7 +520,7 @@ export class Runtime {
       reports: (root) => laneReports(projectOf(root).state),
       diff: (root, lane) => diffStat(lane.worktree ?? root, lane.base, lane.branch),
       teamFiles: (root) => uncommittedTeamFiles(root),
-    });
+    }, signIn);
   }
 
   private async publishBrief() {
@@ -516,6 +538,16 @@ export class Runtime {
   }
 
   register(server: PluginServerContext): void {
+    server.handle(reloadSupervisorRpc, async () => {
+      const agent = this.supervision.store.read().supervisor?.agent;
+      if (!agent) throw new Error("There is no Supervisor to reload yet.");
+      const last = await activityOn(() => this.api, agent, 1).then((a) => a.entries.at(-1)?.seqEnd ?? -1, () => -1);
+      await this.reloadAgent(agent);
+      this.reloadedAt.set(agent, last);
+      this.briefSent.delete(agent);
+      void this.publishBrief();
+      return { agent };
+    });
     server.handle(commitTeamFilesRpc, async (input) => {
       const scope = this.supervision.store.read().projects.find(p => p.id === input.scope);
       if (!scope) throw new Error("That project is no longer supervised. Refresh and try again.");

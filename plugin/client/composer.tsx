@@ -16,12 +16,20 @@ import { addSupervisedProject, bindingInput, workGrants, writeRoles } from "./pr
 
 const WORKS = ["observe", "message", "open_lane"] as const;
 const nameOf = (root: string) => root.split("/").filter(Boolean).pop() ?? root;
+const LAST = "seatworks.composer.project";
+/** The project the last objective went to, kept by the browser; none on native or with storage blocked. */
+type Kept = { getItem(key: string): string | null; setItem(key: string, value: string): void };
+const store = (): Kept | undefined => { try { return (globalThis as { localStorage?: Kept }).localStorage; } catch { return undefined; } };
+const remembered = () => { try { return store()?.getItem(LAST) ?? undefined; } catch { return undefined; } };
+const remember = (root: string) => { try { store()?.setItem(LAST, root); } catch { /* not kept */ } };
 
 /** Seatworks' front door, as coding agents have it: say what you want, pick the project and the team, and go to the chat. */
-export function Composer({ theme, compact, catalog, machine, view, projects, available, listFolders, attach, onChanged, onSettings, onAgent, onAccess, supervisorLine, aim }: {
+export function Composer({ theme, compact, catalog, machine, view, projects, available, listFolders, attach, onChanged, onSettings, onAgent, onAccess, supervisorLine, aim, signIn, onReload }: {
   theme: PluginTheme; compact: boolean; catalog: Catalog; machine: Layer; view: SupervisionView; projects: ProjectRow[]; available: PaseoProject[];
   listFolders(path?: string): Promise<Folders | { error: string }>; attach(root: string, values: Layer): Promise<string | null>;
   onChanged(): void; onSettings(slug: string): void; onAgent?: (id: string) => void; onAccess(id: string): void; supervisorLine: string; aim?: { root: string; at: number } | null;
+  /** What the Supervisor said when it could not sign in; sending it work now would only repeat that. */
+  signIn?: string | null; onReload?: () => Promise<void>;
 }) {
   const paseo = usePaseo();
   const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), create = useRpc(createSupervisorRpc);
@@ -50,7 +58,9 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
   useEffect(() => {
     if (first.current || !projects.length) return;
     first.current = true;
-    const busiest = view.binding.projects.find((p) => p.leads.length && WORKS.every((op) => p.grants.includes(op))) ?? view.binding.projects.find((p) => WORKS.every((op) => p.grants.includes(op)));
+    const writable = view.binding.projects.filter((p) => WORKS.every((op) => p.grants.includes(op)));
+    const last = remembered();
+    const busiest = writable.find((p) => p.root === last) ?? writable.find((p) => p.leads.length) ?? writable[0];
     const root = busiest?.root ?? projects[0]!.root;
     setTarget({ path: root, label: busiest?.name || nameOf(root), repository: true, connected: true });
   }, [projects, view]);
@@ -116,7 +126,7 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
       if (!next.binding.active) await bind(bindingInput(next.binding, true));
       try { await paseo.agents.ref(supervisor).send(`Human objective for project ${project.id} (${project.root}):\n${objective.trim()}\n\nInspect current activity. Reuse a suitable existing Lead, or open a new isolated work lane with the project's configured team. Coordinate the work and report progress here. End your turn with a question when you need the Human.`); }
       catch (e) { setUncertain(supervisor); throw new Error(`Seatworks could not confirm the message arrived. Open your Supervisor before sending it again. ${message(e)}`); }
-      setObjective(""); setHeld(preset); onChanged(); onAgent?.(supervisor);
+      remember(project.root); setObjective(""); setHeld(preset); onChanged(); onAgent?.(supervisor);
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
 
@@ -128,7 +138,8 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
       <Icon name="ChevronDown" size={14} color={c.foregroundMuted} />
     </Pressable>;
   const presetLabel = PRESETS.find((p) => p.id === preset)?.label ?? "Custom team";
-  const ready = Boolean(target && objective.trim()) && !busy && !uncertain;
+  const ready = Boolean(target && objective.trim()) && !busy && !uncertain && !signIn;
+  const reloadNow = async () => { if (!onReload) return; setBusy(true); setError(null); try { await onReload(); } catch (e) { setError(message(e)); } finally { setBusy(false); } };
 
   return <View style={{ gap: 10 }}>
     <Text style={{ ...text, fontSize: compact ? 22 : 28, lineHeight: compact ? 28 : 36, fontWeight: "600", textAlign: "center" }}>What should the team work on?</Text>
@@ -154,7 +165,10 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
       {observeOnly ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}><Text style={{ ...muted, color: c.statusWarning }}>{scope!.name} is set to observe only.</Text><Button label="Allow coordination" theme={theme} onPress={() => onAccess(scope!.id)} /></View> : null}
       {target && failing === null ? <Text style={muted}>Checking setup…</Text> : null}
       {failing?.length ? failing.map((row) => <Text key={row.id} selectable style={{ ...muted, color: c.statusWarning }}>⚠ {row.detail}</Text>) : null}
-      {failing && !failing.length ? <Text style={muted}>✓ Setup checked · {supervisorLine}</Text> : null}
+      {signIn ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <Text selectable style={{ ...muted, color: c.statusWarning, flexShrink: 1 }}>⚠ Your Supervisor can't sign in (“{signIn}”). Reload it before you start.</Text>
+        {onReload ? <Button label={busy ? "Reloading…" : "Reload Supervisor"} tone="accent" theme={theme} disabled={busy} onPress={() => void reloadNow()} /> : null}
+      </View> : failing && !failing.length ? <Text style={muted}>✓ Setup checked · {supervisorLine}</Text> : null}
       {error ? <Text accessibilityRole="alert" selectable style={{ ...muted, color: c.statusDanger }}>{error}</Text> : null}
       {uncertain ? <Button label="Open Supervisor" theme={theme} disabled={!onAgent} onPress={() => onAgent?.(uncertain)} /> : null}
     </View>

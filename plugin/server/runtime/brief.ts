@@ -1,4 +1,4 @@
-import type { TeamBrief } from "../../shared/brief.ts";
+import { type TeamBrief, count } from "../../shared/brief.ts";
 import type { Binding } from "../../shared/supervision.ts";
 import type { SeatView } from "../core/ports.ts";
 import type { Ledger } from "../desk/ledger.ts";
@@ -8,8 +8,8 @@ import type { LaneReport } from "./landing.ts";
 export type Look = { reports(root: string): Map<string, LaneReport>; diff(root: string, lane: Ledger["lanes"][string]): string | null; teamFiles(root: string): string[] };
 const blind: Look = { reports: () => new Map(), diff: () => null, teamFiles: () => [] };
 
-export function teamBrief(binding: Binding, seats: SeatView[], read: (root: string) => Ledger, held: { to: string }[], look: Look = blind): TeamBrief {
-  const result: TeamBrief = { supervisor: binding.supervisor?.agent ?? null, workspace: binding.supervisor?.workspace ?? null, active: binding.active,
+export function teamBrief(binding: Binding, seats: SeatView[], read: (root: string) => Ledger, held: { to: string }[], look: Look = blind, signIn?: string): TeamBrief {
+  const result: TeamBrief = { supervisor: binding.supervisor?.agent ?? null, workspace: binding.supervisor?.workspace ?? null, active: binding.active, signIn: null,
     lines: 0, needsYou: 0, questions: 0, held: 0, projects: [], items: [], omitted: 0 };
   if (!binding.active || !binding.supervisor) return result;
   const byId = new Map(seats.filter(s => !s.archivedAt).map(s => [s.id, s]));
@@ -23,6 +23,11 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       result.items.push({ id: `permission:${id}:${i}`, project: name, kind: "permission", agent: id, title: "Waiting on you", detail: (p.title ?? p.description ?? p.name ?? "Open this agent to answer its permission request.").slice(0, 600) });
     }
   };
+  if (signIn) {
+    result.signIn = signIn;
+    result.needsYou++;
+    result.items.push({ id: "supervisor:sign-in", project: "Overall Supervisor", kind: "error", agent: binding.supervisor.agent, action: "reload", title: "Your Supervisor can't sign in", detail: `It answered "${signIn}". Reload it so it starts again with your saved sign-in; nothing you asked is lost, send it again after.` });
+  }
   permissions(binding.supervisor.agent, "Overall Supervisor");
   for (const scope of binding.projects.filter(p => p.grants.includes("observe"))) {
     const start = result.items.length;
@@ -55,14 +60,23 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       const running = [...ids].filter(id => ["running","starting"].includes(byId.get(id)?.status ?? "")).length;
       const human = result.items.slice(start).filter(i => i.kind === "permission").length;
       const landing = result.items.slice(start).filter(i => i.kind === "land").length;
-      result.projects.push({ id: scope.id, name: scope.name, status: human ? `Waiting on you: ${human} requests` : landing ? `${landing} ready to land` : questions.length ? `${questions.length} team questions` : queued ? `${queued} messages waiting for agents` : running ? `${running} agents working` : lanes.length ? "Team idle · open work remains" : "No active work" });
+      const streams = lanes.slice(0, 6).map((lane) => {
+        const tasks = Object.values(ledger.tasks).filter(t => t.lane === lane.id && t.status !== "cut");
+        const merged = tasks.filter(t => t.status === "merged").length;
+        const report = reports.get(lane.id);
+        const lead = lane.lead ? byId.get(lane.lead) : undefined;
+        const state = report?.ready ? (report.gate === false ? "tests failed" : "ready to land")
+          : tasks.length ? `${merged} of ${count(tasks.length, "task")} done` : lead && ["running", "starting"].includes(lead.status ?? "") ? "planning" : "waiting";
+        return { id: lane.id, title: lane.title.slice(0, 120), state, agent: lane.lead ?? null };
+      });
+      result.projects.push({ id: scope.id, name: scope.name, streams, status: human ? `Waiting on you: ${count(human, "request")}` : landing ? `${landing} ready to land` : questions.length ? count(questions.length, "team question") : queued ? `${count(queued, "message")} waiting for agents` : running ? `${count(running, "agent")} working` : lanes.length ? "Team idle · open work remains" : "No active work" });
     } catch {
       result.projects.push({ id: scope.id, name: scope.name, status: "Status unavailable" });
       result.items.push({ id: `${scope.id}:error`, project: scope.name, kind: "error", agent: null, title: "Could not read project status", detail: "Open project settings to inspect its ledger and setup. No empty or successful state was inferred." });
     }
   }
-  const rank = (kind: string) => ["permission", "land", "tests", "question"].indexOf(kind) >>> 0;
-  result.items.sort((a,b) => rank(a.kind) - rank(b.kind));
+  const rank = (item: TeamBrief["items"][number]) => item.action ? -1 : ["permission", "land", "tests", "question"].indexOf(item.kind) >>> 0;
+  result.items.sort((a,b) => rank(a) - rank(b));
   result.omitted = Math.max(0, result.items.length - 24);
   result.items = result.items.slice(0,24);
   result.projects = result.projects.slice(0,100);

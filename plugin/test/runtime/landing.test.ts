@@ -44,3 +44,15 @@ test("only the team files with the Seatworks block are committed, nothing else s
   assert.match(git(dir, "status", "--porcelain"), /^M  a\.txt/m);
   assert.deepEqual(uncommittedTeamFiles(dir), []);
 });
+
+test("without a git identity nothing is staged and the Human is told what to set", () => {
+  const dir = repo();
+  writeFileSync(join(dir, "AGENTS.md"), "<!-- seatworks:begin -->\nteam\n<!-- seatworks:end -->\n");
+  const env = { ...process.env };
+  for (const key of ["GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL", "EMAIL"]) delete process.env[key];
+  process.env.GIT_CONFIG_GLOBAL = "/dev/null"; process.env.GIT_CONFIG_NOSYSTEM = "1";
+  try {
+    assert.throws(() => commitTeamFiles(dir), /user\.name and user\.email/);
+    assert.match(git(dir, "status", "--porcelain"), /^\?\? AGENTS\.md/m);
+  } finally { process.env = env; }
+});

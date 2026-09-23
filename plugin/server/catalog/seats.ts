@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type PromptPaths, renderPrompt, renderText, skillProblems, skillSources } from "./content.ts";
-import { type HarnessSpec, type Kit, type McpServers, type RoleSpec, harnessFileSources, roleSettingsFile } from "./kit.ts";
+import { type HarnessSpec, type Kit, type McpServers, type RoleSpec, can, harnessFileSources, roleSettingsFile } from "./kit.ts";
+import { gitCommonDir } from "../core/git.ts";
 import { stateWrites } from "./launch.ts";
 import { contentRoot, expandHome, guidesDir, home } from "../core/paths.ts";
 import { configFault, formatConfig, readConfig, writeConfigAtomic } from "../core/config-file.ts";
@@ -13,7 +14,7 @@ import { errorText } from "../core/errors.ts";
 
 type Json = Record<string, unknown>;
 
-export type SeatProject = { slug: string; state: string };
+export type SeatProject = { slug: string; state: string; root?: string };
 
 export function seatDir(kit: Kit, role: RoleSpec, harness: HarnessSpec, homeDir = home(), project?: SeatProject): string {
   const name = `${kit.prefix}${role.role}-${harness.id}${project ? `-${project.slug}` : ""}`;
@@ -262,7 +263,9 @@ function stateWritesSetting(kit: Kit, team: Team, roleName: string, project?: Se
   const { role, harness } = team.roles[roleName]!;
   if (harness.stateWrites?.delivery !== "file" || !project) return {};
   const setting: Json = {};
-  setPath(setting, harness.stateWrites.path.split("."), stateWrites(kit, team, role, project.state));
+  // A role that commits needs the repository's own git directory: a lane's working copy keeps its index and refs there.
+  const git = (can(role, "work") || can(role, "write")) && project.root ? gitCommonDir(project.root) : undefined;
+  setPath(setting, harness.stateWrites.path.split("."), [...stateWrites(kit, team, role, project.state), ...(git ? [git] : [])]);
   return setting;
 }
 

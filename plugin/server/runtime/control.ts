@@ -19,7 +19,7 @@ import type { StateReport } from "../upkeep/state.ts";
 import { loadLedger, readLedger } from "../desk/ledger.ts";
 import { type Project, gitRoot, loadConfig, projectOf } from "../desk/project.ts";
 import { statusText } from "../desk/status.ts";
-import { type Check, doctor } from "./doctor.ts";
+import { type Check, doctor, gitIdentityCheck } from "./doctor.ts";
 import type { Control } from "./rpc.ts";
 import type { Seating } from "./seating.ts";
 import type { TeamSource } from "./team-source.ts";
@@ -318,7 +318,9 @@ export class SettingsControl implements Control {
   async doctor(slug?: string): Promise<Check[]> {
     const project = slug ? this.deps.source.named(slug) : undefined;
     if (slug && !project) return [{ id: "project", ok: false, detail: unknownProject(slug) }];
-    return doctor(this.deps.kit, this.deps.source.teamFor(project));
+    const checks = await doctor(this.deps.kit, this.deps.source.teamFor(project));
+    if (project) checks.push(gitIdentityCheck(project.root));
+    return checks;
   }
 
   async status(slug: string): Promise<unknown> {

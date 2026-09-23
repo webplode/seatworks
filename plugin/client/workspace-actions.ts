@@ -11,7 +11,7 @@ export function workspaceActions(client: PluginClientContext): () => void {
       { kind: "item" as const, id: "activity", title: "Team activity", icon: "Activity", behavior: { kind: "action" as const, onPress: () => client.openPanel("activity", { workspaceId, location: "explorer" }) } },
       { kind: "item" as const, id: "team-models", title: "Team & models", icon: "SlidersHorizontal", behavior: { kind: "action" as const, onPress: () => client.openPanel("team", { workspaceId, location: "explorer" }) } },
       { kind: "item" as const, id: "overall-supervisor", title: "Overall Supervisor", icon: "Network", behavior: { kind: "action" as const, onPress: () => client.openPanel("supervisor", { workspaceId }) } },
-      { kind: "item" as const, id: "start-work", title: "Start supervised work", icon: "Play", behavior: { kind: "action" as const, onPress: () => client.openPanel("work", { workspaceId }) } },
+      { kind: "item" as const, id: "start-work", title: "New work", icon: "Play", behavior: { kind: "action" as const, onPress: () => client.openPanel("work", { workspaceId }) } },
       { kind: "separator" as const, id: "settings-divider" },
       { kind: "item" as const, id: "profiles", title: "Agent launch profiles", icon: "Settings", behavior: { kind: "action" as const, onPress: () => client.openSettings("seatworks") } },
     ],

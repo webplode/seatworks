@@ -85,7 +85,11 @@ type Calls = {
   paths: Call<{ path?: string }, Folders | { error: string }>;
 };
 
-export const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+/** The error's own words: Paseo wraps a handler's error as "Request failed: <words>. requestType=… code=…". */
+export const message = (error: unknown): string => {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.replace(/^Request failed:\s*/, "").replace(/\s*requestType=\S+(\s+code=\S+)?\s*$/, "").trim() || text;
+};
 
 export async function attachProject(root: string, values: Layer, roles: Catalog["roles"], calls: Pick<Calls, "add" | "settings" | "write">): Promise<string> {
   const added = await calls.add({ root });

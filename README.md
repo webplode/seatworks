@@ -115,6 +115,9 @@ what you pick.
 3. Press **Start**. A new folder joins Seatworks, the Overall Supervisor starts if it is not running,
    and your words become its first objective. Its chat is home from then on.
 
+The setup check warns before you start if the Supervisor can't sign in (with a **Reload Supervisor**
+button) or if git has no name and email for the project, since Peers commit their own work.
+
 Choosing each model yourself, observe-only access and the other settings sit under **More options**
 in **Add project** and in **Team & models**.
 

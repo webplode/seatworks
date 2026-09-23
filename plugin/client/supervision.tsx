@@ -3,8 +3,8 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { Modal } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { briefLabel } from "../shared/brief.ts";
 import { bindingRpc, createSupervisorRpc, supervisionRpc } from "../shared/rpc.ts";
+import { briefLabel, reloadSupervisorRpc } from "../shared/brief.ts";
 import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
 import { useBrief } from "./brief.tsx";
@@ -20,7 +20,7 @@ export function SupervisionPanel({ theme, compact, catalog, machine, projects, a
   listFolders?: (path?: string) => Promise<Folders | { error: string }>; attach?: (root: string, values: Layer) => Promise<string | null>; onChanged?: () => void;
   onAdd(): void; onSettings(slug: string): void; onFlow(slug: string): void; onAgent?: (id: string) => void;
 }) {
-  const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), create = useRpc(createSupervisorRpc);
+  const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), create = useRpc(createSupervisorRpc), reloadSupervisor = useRpc(reloadSupervisorRpc);
   const { data: brief } = useBrief();
   const [view, setView] = useState<SupervisionView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +78,8 @@ export function SupervisionPanel({ theme, compact, catalog, machine, projects, a
     {error ? <View style={{ gap: 8 }}><Text accessibilityRole="alert" selectable style={{ ...text, color: c.statusDanger }}>{error}</Text><Button label="Try again" theme={theme} onPress={() => void refresh()} /></View> : null}
     {!view ? <Text style={muted}>Loading your workspace…</Text> : <>
       {canCompose ? <Composer theme={theme} compact={compact} catalog={catalog} machine={machine} view={view} projects={projects} available={available} listFolders={listFolders!} attach={attach!}
-        onChanged={() => { onChanged?.(); void refresh(); }} onSettings={onSettings} onAgent={onAgent} onAccess={(id) => void giveAccess(id)} supervisorLine={supervisorLine} aim={aim} /> : null}
+        onChanged={() => { onChanged?.(); void refresh(); }} onSettings={onSettings} onAgent={onAgent} onAccess={(id) => void giveAccess(id)} supervisorLine={supervisorLine} aim={aim}
+          signIn={brief?.signIn ?? null} onReload={async () => { await reloadSupervisor({}); }} /> : null}
       <View style={{ ...card, flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
         <View style={{ flex: 1, minWidth: 200, gap: 2 }}>
           <Text style={{ ...text, fontWeight: "600" }}>Overall Supervisor <Text style={{ ...muted, fontWeight: "400" }}>· {supervisor ? view.binding.active ? brief ? briefLabel(brief) : "active" : "paused" : "starts with your first objective"}</Text></Text>

@@ -3,8 +3,8 @@ import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
-import { briefRpc, briefLabel, commitTeamFilesRpc, type TeamBrief } from "../shared/brief.ts";
+import { Pressable, Text, View } from "react-native";
+import { briefRpc, briefLabel, commitTeamFilesRpc, reloadSupervisorRpc, type TeamBrief } from "../shared/brief.ts";
 import { bindingRpc, supervisionRpc } from "../shared/rpc.ts";
 import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
@@ -16,8 +16,9 @@ type Item = TeamBrief["items"][number];
 /** The Human's own calls from a card: landing a line of work, and committing the team instructions. */
 function useCardActions(supervisor: string | null) {
   const paseo = usePaseo();
-  const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), commit = useRpc(commitTeamFilesRpc);
+  const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), commit = useRpc(commitTeamFilesRpc), reload = useRpc(reloadSupervisorRpc);
   return {
+    reload: async () => { await reload({}); },
     /** The click is the approval: the project gains landing, and the Supervisor is told to land this one line now. */
     land: async (item: Item) => {
       if (!supervisor || !item.scope || !item.lane) throw new Error("Open your Supervisor to land this work.");
@@ -41,7 +42,7 @@ function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: Plu
   const run = async (work: () => Promise<string>) => { setBusy(true); setTrouble(null); try { setDone(await work()); setConfirming(false); } catch (e) { setTrouble(message(e)); } finally { setBusy(false); } };
   const tone = item.kind === "permission" ? c.statusWarning : item.kind === "land" ? c.statusSuccess : item.kind === "tests" || item.kind === "error" ? c.statusDanger : c.foreground;
   const mark = item.kind === "land" ? "✓ " : item.kind === "tests" ? "✗ " : item.kind === "question" ? "? " : "";
-  const open = onAgent && item.agent ? <Button theme={theme} label={item.kind === "permission" ? "Open agent to answer" : item.kind === "question" ? "Answer" : item.kind === "land" || item.kind === "tests" ? "Open Lead" : "Open conversation"} onPress={() => onAgent(item.agent!)} /> : null;
+  const open = onAgent && item.agent && !item.action ? <Button theme={theme} label={item.kind === "permission" ? "Open agent to answer" : item.kind === "question" ? "Answer" : item.kind === "land" || item.kind === "tests" ? "Open Lead" : "Open conversation"} onPress={() => onAgent(item.agent!)} /> : null;
   return <View style={{ gap: 8, padding: 12, borderWidth: 1, borderRadius: 8, borderColor: item.kind === "land" ? c.statusSuccess : item.kind === "tests" ? c.statusDanger : c.border, backgroundColor: c.surface1 }}>
     <Text style={{ color: tone, fontWeight: "600" }}>{mark}{item.title} <Text style={{ color: c.foregroundMuted, fontWeight: "400" }}>· {item.project}</Text></Text>
     {item.diff ? <Text selectable style={{ color: c.foreground, fontFamily: "monospace", fontSize: 12 }}>{item.diff}</Text> : null}
@@ -54,6 +55,7 @@ function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: Plu
         <Button theme={theme} label="Cancel" disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     </View> : <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {item.action === "reload" ? <Button theme={theme} tone="accent" label={busy ? "Reloading…" : "Reload Supervisor"} disabled={busy} onPress={() => void run(async () => { await actions.reload(); return "Reloaded. Send your last message again."; })} /> : null}
       {item.kind === "land" && supervisor ? <Button theme={theme} tone="accent" label="Land…" onPress={() => setConfirming(true)} /> : null}
       {item.kind === "commit" ? <Button theme={theme} tone="accent" label={busy ? "Committing…" : `Commit ${item.files?.join(" & ") ?? "files"}`} disabled={busy} onPress={() => void run(async () => { const r = await actions.commit(item); return r.committed.length ? `Committed ${r.committed.join(" and ")}.` : "Nothing left to commit."; })} /> : null}
       {open}
@@ -79,10 +81,18 @@ function BriefContent({ data, error, theme, onAgent }: { data: TeamBrief | null;
   return <View style={{ gap: 14 }}>
     <Text style={{ color: c.foreground, fontSize: 18, fontWeight: "600" }}>{briefLabel(data)}</Text>
     {!data.active ? <Text style={{ color: c.foregroundMuted }}>Supervision is paused. Open Overall Supervisor to resume your selected projects.</Text> : <>
-      {data.projects.map(p => <View key={p.id} style={{ gap: 3 }}><Text style={{ color: c.foreground, fontWeight: "600" }}>{p.name}</Text><Text style={{ color: c.foregroundMuted }}>{p.status}</Text></View>)}
+      {data.projects.map(p => <View key={p.id} style={{ gap: 3 }}>
+        <Text style={{ color: c.foreground, fontWeight: "600" }}>{p.name} <Text style={{ color: c.foregroundMuted, fontWeight: "400" }}>· {p.status}</Text></Text>
+        {(p.streams ?? []).map(s => <Pressable key={s.id} accessibilityRole="button" accessibilityLabel={`Open the Lead of ${s.title}`} disabled={!onAgent || !s.agent} onPress={() => s.agent && onAgent?.(s.agent)}
+          style={{ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 2 }}>
+          <Text style={{ color: s.state === "ready to land" ? c.statusSuccess : s.state === "tests failed" ? c.statusDanger : c.accent }}>●</Text>
+          <Text numberOfLines={1} style={{ color: c.foreground, flexShrink: 1 }}>{s.title}</Text>
+          <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{s.state}</Text>
+        </Pressable>)}
+      </View>)}
       {data.items.map(item => <ItemCard key={item.id} item={item} theme={theme} supervisor={data.supervisor} onAgent={onAgent} />)}
       {data.omitted ? <Text style={{ color: c.foregroundMuted }}>{data.omitted} more updates. Open the project's Activity view for details.</Text> : null}
-      {!data.items.length ? <Text style={{ color: c.foregroundMuted }}>No requests need attention. Give your Supervisor an objective in chat.</Text> : null}
+      {!data.items.length ? <Text style={{ color: c.foregroundMuted }}>{data.lines ? "Nothing needs you right now. The team keeps going and asks here when it does." : "Nothing is running. Tell your Supervisor what to work on next."}</Text> : null}
       {data.held ? <Text style={{ color: c.foregroundMuted }}>{data.held} messages are waiting for their recipients. Delivery is not an answer or completion.</Text> : null}
     </>}
   </View>;

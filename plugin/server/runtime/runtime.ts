@@ -639,16 +639,18 @@ export class Runtime {
     const seat = seatOf(this.kit, request.provider);
     if (!seat) return request;
     if (can(seat.role, "supervise")) {
+      const state = join(stateRoot(), "supervisor-home");
+      // The records are the Supervisor's: one notebook across the projects it supervises.
+      try {
+        seedRecords(this.kit, state);
+      } catch (error) {
+        console.error("seatworks-v2: could not seed the Supervisor's records:", error);
+      }
       this.seating.ensure(seat.role.role, seat.harness);
-      return seatEnv(this.kit, request, seatDir(this.kit, seat.role, seat.harness, home()), { root: request.cwd, state: join(stateRoot(), "supervisor-home") });
+      return seatEnv(this.kit, request, seatDir(this.kit, seat.role, seat.harness, home()), { root: request.cwd, state });
     }
     const project = projectOf(request.cwd);
     this.remember(project);
-    try {
-      seedRecords(this.kit, project.state);
-    } catch (error) {
-      console.error("seatworks-v2: could not seed project records:", error);
-    }
     try {
       if (this.kit.team) placeProjectFiles(project.root, this.kit.team);
     } catch (error) {

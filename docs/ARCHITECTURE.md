@@ -92,9 +92,9 @@ All paths are under `plugin/`.
    rules, the sandbox, MCP servers, skills linked to copies outside any repository, and the working
    rules. `applyRole` then sets the model, thinking level, mode, prompt and MCP servers.
 3. **Before `agent.session_open`.** The plugin points the agent's config directory at the seat
-   directory and sets `SEATWORKS_ROLE`, `SEATWORKS_PROJECT` and `SEATWORKS_STATE`. It also seeds the
-   project's records, such as `notebook.md`, and writes the
-   [team block](#the-concept-and-the-team-block) into the project.
+   directory and sets `SEATWORKS_ROLE`, `SEATWORKS_PROJECT` and `SEATWORKS_STATE`. For a Lead or Peer it
+   writes the [team block](#the-concept-and-the-team-block) into the project; for the Supervisor it
+   seeds its records, such as `notebook.md`, in `supervisor-home/`.
 4. **`bin/seat-room`** checks the launch and then `exec`s Claude. Codex and Pi seats start
    through Paseo's own providers.
 

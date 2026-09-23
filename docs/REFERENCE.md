@@ -340,12 +340,13 @@ project keeps its ledger and logs, and is refused while a lane is open or a work
   content/<name>-<hash>/                  copies of the guides and skills seats read; safe to delete
   guides -> content/guides-<hash>
   worktrees/<slug>/S<n>/                  isolated working copies
+  supervisor-home/notebook.md             the Supervisor's patterns across its projects
   projects/<slug>/                        slug = repo folder name + 6 hex chars of sha1(root)
     meta.json  settings.json  project.json
     ledger.json  incidents.json
     assessments/                          what Jev was shown and said
     events.log  attention.log  status.md
-    handbacks/  gates/  notebook.md  CONTEXT.md
+    handbacks/  gates/  CONTEXT.md
     backup-state-<from>-<time>/           the files as they were before their format was upgraded
 <profileRoot>/sw2-<role>-<agent>-<slug>/  one seat directory per role, agent and project
 ```

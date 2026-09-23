@@ -35,6 +35,22 @@ function served(paseo?: unknown) {
   return { kit, runtime, names, call, bound };
 }
 
+test("explicit model discovery registers and reloads role providers before querying a fresh daemon", async () => {
+  mkdirSync(join(HOME, ".paseo"), { recursive: true });
+  writeFileSync(join(HOME, ".paseo", "config.json"), "{}");
+  let loaded = false;
+  const runtime = new Runtime(makeKit(), { reloadDaemon: async () => {
+    const config = JSON.parse(readFileSync(join(HOME, ".paseo", "config.json"), "utf8"));
+    assert.ok(config.agents.providers["sw2-supervisor-claude"]);
+    await Promise.resolve(); loaded = true; return true;
+  }, paseo: { providers: {
+    async refresh() { assert.equal(loaded, true, "provider discovery must wait for configuration reload"); },
+    async listModels() { return { models: [{ id: "opus", label: "Opus" }] }; },
+  } } as never });
+  try { assert.ok((await runtime.refreshModels()).claude!.models.length); }
+  finally { runtime.dispose(); }
+});
+
 test("the plugin serves the catalog, settings, projects, team and status over RPC", async () => {
   const { names, call } = served();
   assert.deepEqual(names.sort(), [

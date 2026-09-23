@@ -65,7 +65,7 @@ export class SupervisionControl {
       supervisors: seats.filter((s) => s.workspaceId && can(seatOf(this.deps.kit, s.provider)?.role, "supervise"))
         .map((s) => ({ id: s.id, title: s.title ?? s.id, workspace: s.workspaceId! })),
       deliveries: this.deps.outbox.records().filter((l) => l.guard).slice(-100).reverse()
-        .map(({ id, to, state, detail, at, text, guard }) => ({ id, to, state, detail, at, text, project: guard!.project })),
+        .map(({ id, to, state, detail, at, text, guard }) => ({ id, to, state, ...(detail === undefined ? {} : { detail }), at, text, project: guard!.project })),
       dependencies: this.dependencies.read(),
       communication: this.deps.communication?.() ?? {},
     };

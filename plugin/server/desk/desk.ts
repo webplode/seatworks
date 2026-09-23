@@ -287,10 +287,10 @@ export class Desk {
     }
     let reply: ToolReply;
     try {
-      reply = !tool
-        ? no(`Unknown tool ${request.tool}.`)
-        : problems.length > 0
-          ? no(`${request.tool} was not carried out: it ${problems.join("; ")}. ${shapeOf(schema!)}`)
+      reply = problems.length > 0
+        ? no(`${request.tool} was not carried out: it ${problems.join("; ")}. ${shapeOf(schema!)}`)
+        : !tool
+          ? no(`Unknown tool ${request.tool}.`)
           : await tool(this.services, caller, args);
     } catch (error) {
       ctx.log(caller.project, `${caller.role.role} ${caller.id} ${request.tool} crashed: ${errorText(error)}`);

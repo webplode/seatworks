@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { supervisionRpc } from "../../shared/rpc.ts";
 import { test } from "node:test";
 import { join } from "node:path";
 import { mkdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadKit } from "../../server/catalog/kit.ts";
+import { Desk } from "../../server/desk/desk.ts";
+import { resolveTeam } from "../../server/catalog/team.ts";
 import { Supervision, canonicalRoot } from "../../server/runtime/supervision.ts";
 import { SupervisionControl } from "../../server/runtime/supervision-control.ts";
 import { Outbox } from "../../server/runtime/outbox.ts";
@@ -130,4 +133,33 @@ test("dependency delivery cannot unblock its consumer until that exact consumer 
   item = await deps.change("lead1", { id: item.id, revision: 2, state: "confirmed", checkpoint: "Mobile implementation resumes" });
   assert.equal(item.state, "confirmed");
   assert.equal(f.store.read().projects[0]!.root, canonicalRoot(f.paths[0]!));
+});
+
+
+test("the live desk accepts integer dependency revisions from existing Leads", async () => {
+  const f = fixture(); await f.bind(); await f.adopt("p0", "lead0"); await f.adopt("p1", "lead1");
+  for (const id of ["lead0", "lead1"]) f.agents.get(id)!.provider = "sw2-lead-codex";
+  const kit = loadKit(fileURLToPath(new URL("../../", import.meta.url)));
+  const desk = new Desk({ kit, supervision: f.control, outbox: f.outbox, seats: f.seats,
+    workspaces: {} as never, log() {}, teamFor: () => resolveTeam(kit) });
+  const request = await f.control.dependencies.request("sup", { producer: { project: "p0", agent: "lead0" }, consumer: { project: "p1", agent: "lead1" }, request: "contract", checkpoint: "accept" });
+  const call = (agent: string, revision: number, state: string) => desk.handle({ id: `${agent}-${revision}`, at: Date.now(), agent, role: "lead", cwd: f.paths[0]!, tool: "coordinate", args: { id: request.id, revision, state, checkpoint: "verify", ...(state === "delivered" ? { artifact: "contract@v1" } : {}) } });
+  const bad = await call("lead0", 0.5, "accepted");
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /revision must be an integer/);
+  for (const [agent, revision, state] of [["lead0", 0, "accepted"], ["lead0", 1, "delivered"], ["lead1", 2, "confirmed"]] as const) {
+    const reply = await call(agent, revision, state);
+    assert.equal(reply.ok, true, reply.text);
+    assert.equal(JSON.parse(reply.text).state, state);
+  }
+  assert.equal(f.control.dependencies.read()[0]!.by, "lead1");
+});
+
+
+test("the supervision RPC remains valid after a real delivery without a failure detail", async () => {
+  const f = fixture(); await f.bind(); await f.adopt("p0", "lead0");
+  await f.control.message("sup", "p0", "lead0", "Correction", "rpc-delivery");
+  const view = await f.control.view();
+  assert.ok(view.deliveries.some((d) => d.state === "delivered"));
+  assert.deepEqual(supervisionRpc.output.parse(view), view);
 });

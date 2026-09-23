@@ -44,12 +44,29 @@ a machine-wide budget of 100 communication assessments per UTC day. This budget 
 from the existing general Watcher/Jev sensor. Semantic accuracy and live service behavior are
 not qualified by offline examples; notification promotion requires a labeled evaluation.
 
-The manifest targets Paseo `>=0.9.0 <0.10.0`. Both TypeScript configurations, 436 offline tests,
-and the installed Paseo 0.9 compiler pass. A read-only standalone SDK connection worked without
-opening the UI. The panel was inspected with isolated fixture RPCs at desktop and narrow widths.
-An independent-process outbox test covers interruption after simulated transport acceptance.
-These checks do not prove actual agent creation, plugin loading in the app, or end-to-end live
-coordination. Plugins remain disabled on the inspected local daemon; this candidate is not installed.
+The manifest targets Paseo `>=0.9.0 <0.10.0`. On 2026-09-23 the Human authorized
+installation and live qualification. The plugin is installed from this checkout and running on
+the standalone Paseo **0.9.1** daemon at `127.0.0.1:6767`, using the existing Paseo home and
+WebUI. Both TypeScript configurations and 439 tests pass. The desktop client is not used. Supervisor and Lead machine defaults use the host's
+available Codex GPT-6-Astra model.
+
+The live pilot created two disposable Git repositories and two Lead sessions before creating
+the overall Supervisor. Through the real WebUI, both existing Leads were associated with
+explicit ownership. The Supervisor sent project-qualified corrections to both, then requested
+one API-to-mobile dependency. The producer accepted and delivered its contract artifact; the
+consumer read it and confirmed revision 3. Plugin reload preserved the binding, session IDs,
+dependency and receipt IDs. The out-of-scope project probe returned an observe denial without data. Jev remained off.
+The two pilot projects are paused after qualification, with sessions retained for inspection. This exposed and fixed first-run model registration,
+Paseo request preapproval validation, integer revision validation and a non-JSON receipt field
+that broke the live panel.
+
+This is a bounded live pilot, not complete product qualification. The Supervisor's Codex session
+did not expose native `get_agent_activity`; transcript inspection through that tool remains
+unqualified. Existing Leads without Seatworks tools, multiple worktrees per project, managed
+lane creation/landing, crash recovery during an actual provider send, and Jev service quality
+still need separate live coverage. The earlier fixture UI checks and simulated outbox crash test
+are offline evidence only. Live evidence is retained outside the repository under
+`~/.local/share/seatworks-e2e/20260923-live/`.
 
 ## Documentation ownership
 

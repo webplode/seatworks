@@ -1,13 +1,13 @@
 import type { ArgSchema } from "../catalog/kit.ts";
 
-const TYPE_WORDS: Record<string, string> = { string: "text", boolean: "true or false", number: "a number", array: "a list", object: "an object" };
+const TYPE_WORDS: Record<string, string> = { integer: "an integer", string: "text", boolean: "true or false", number: "a number", array: "a list", object: "an object" };
 
 const typeOf = (value: unknown): string => (Array.isArray(value) ? "array" : value === null ? "null" : typeof value);
 
 const blank = (value: unknown): boolean => value === undefined || value === null || (typeof value === "string" && value.trim() === "") || (Array.isArray(value) && value.every(blank));
 
 function fits(name: string, schema: ArgSchema, value: unknown): string | undefined {
-  if (schema.type && typeOf(value) !== schema.type) return `${name} must be ${TYPE_WORDS[schema.type] ?? schema.type}`;
+  if (schema.type && (schema.type === "integer" ? !Number.isInteger(value) : typeOf(value) !== schema.type)) return `${name} must be ${TYPE_WORDS[schema.type] ?? schema.type}`;
   if (schema.enum && !schema.enum.includes(value)) return `${name} must be one of ${schema.enum.join(", ")}`;
   if (schema.items && Array.isArray(value)) {
     const wrong = value.map((item) => fits(`each of ${name}`, schema.items!, item)).find(Boolean);

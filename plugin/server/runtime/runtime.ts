@@ -623,10 +623,12 @@ export class Runtime {
     return indexedProxies(this.source.teamFor(project)).map((proxy) => this.makeIndex(proxy));
   }
 
-  /** Asked once per load and on demand: Paseo keeps a catalog until told to refresh it. */
+  /** Explicit discovery must install its role providers before the host can list their models. */
   async refreshModels(): Promise<ModelCache> {
     const paseo = this.api;
     if (!paseo) throw new Error("Paseo is not connected, so it cannot list the agents' models");
+    const registered = applyReconcile(this.kit, this.source.teamFor());
+    if (registered.length && !await this.reload()) throw new Error("Provider configuration was saved but could not be reloaded. Retry discovery after resolving the host error.");
     // Scoped to one directory: unscoped, Paseo probes the agent for every workspace it has ever opened.
     const cwd = stateRoot();
     await Promise.all([...listingProviders(this.kit).values()].map((provider) => paseo.providers.refresh({ cwd, providers: [provider] })));

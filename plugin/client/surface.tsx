@@ -109,6 +109,7 @@ export function SeatworksSurface({ theme, layout, navigation }: PluginSurfacePro
       <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
         {trouble}
         <SupervisionPanel theme={theme} compact={layout.compact} catalog={data.catalog} machine={data.values} projects={data.projects}
+          available={data.candidates} listFolders={listFolders} attach={attach} onChanged={reload}
           onAdd={() => setDialog(true)} onSettings={(slug) => { setOpen(slug); setTab("team"); setChip(data.catalog.roles.find((r) => r.can.includes(slug === MACHINE ? "supervise" : "lead"))?.id ?? null); }}
           onFlow={(slug) => { setOpen(slug); setTab("flow"); }} onAgent={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined} />
         {dialogNode}

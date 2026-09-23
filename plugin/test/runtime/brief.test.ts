@@ -31,3 +31,21 @@ test("associated external Leads count as work even without a managed lane", () =
   const b = binding(); b.projects[0]!.leads = [{ agent: "external", workspace: "w", objective: "existing work", ownership: [], origin: "external" }];
   assert.equal(teamBrief(b, [], () => emptyLedger(), []).lines, 1);
 });
+test("a Lead's ready report becomes a land card, and a red gate a tests card, never both", () => {
+  const ledger = emptyLedger();
+  ledger.lanes.L1 = { id: "L1", title: "Checkout", status: "open", branch: "sw/L1", base: "main", lead: "lead-1" } as never;
+  ledger.lanes.L2 = { id: "L2", title: "Search", status: "open", branch: "sw/L2", base: "main", lead: "lead-2" } as never;
+  ledger.lanes.L3 = { id: "L3", title: "Still going", status: "open", branch: "sw/L3", base: "main", lead: "lead-3" } as never;
+  const reports = new Map([["L1", { ready: true, gate: true, summary: "Done" }], ["L2", { ready: true, gate: false }], ["L3", { ready: false }]]);
+  const view = teamBrief(binding(), [], () => ledger, [], { reports: () => reports, diff: () => "2 files · +10 −1", teamFiles: () => [] });
+  const land = view.items.find(i => i.kind === "land")!;
+  assert.equal(land.lane, "L1"); assert.equal(land.diff, "sw/L1 → main · 2 files · +10 −1"); assert.equal(land.agent, "lead-1");
+  assert.equal(view.items.filter(i => i.kind === "tests").map(i => i.lane).join(), "L2");
+  assert.equal(view.items.some(i => i.lane === "L3"), false);
+  assert.equal(view.projects[0]!.status, "1 ready to land");
+});
+test("uncommitted team instructions are offered for commit, naming only those files", () => {
+  const view = teamBrief(binding(), [], () => emptyLedger(), [], { reports: () => new Map(), diff: () => null, teamFiles: () => ["AGENTS.md"] });
+  const item = view.items.find(i => i.kind === "commit")!;
+  assert.deepEqual(item.files, ["AGENTS.md"]); assert.equal(item.scope, "p");
+});

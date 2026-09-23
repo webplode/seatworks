@@ -421,7 +421,7 @@ export class SettingsControl implements Control {
   async update(apply: boolean, fetch = true): Promise<UpdateView> {
     const counts = new Map<string, number>();
     for (const seat of await this.live()) counts.set(seat.slug, (counts.get(seat.slug) ?? 0) + 1);
-    const busy = [...counts].map(([slug, count]) => `${slug} ${count} seat${count === 1 ? "" : "s"}`);
+    const busy = [...counts].map(([slug, count]) => `${slug}: ${count} agent${count === 1 ? "" : "s"}`);
     const ctx = { dir: this.deps.kit.dir, managedRoot: join(home(), ".paseo", "plugins"), busy, install: npmInstall, reload: reloadSoon };
     return apply ? applyUpdate(ctx) : checkUpdate(ctx, fetch);
   }

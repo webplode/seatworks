@@ -111,7 +111,7 @@ export function ServersSection({ catalog, team, values, machine, layer, theme, d
         <SettingsCard>
           <SettingsAction
             label={`${entry.label} was removed`}
-            hint="It stayed in the catalogue. Adding it back brings its switch and its settings with it."
+            hint="It is still in the built-in list. Adding it back brings its switch and its settings with it."
             actionLabel="Add it back"
             disabled={disabled}
             onPress={() => void save((current) => setMcp(current, entry.id, { removed: false }))}
@@ -200,7 +200,7 @@ export function ServersSection({ catalog, team, values, machine, layer, theme, d
           label="Remove this server"
           hint={
             state.template
-              ? "It stays in the catalog; add it again whenever you want."
+              ? "It stays in the built-in list; add it again whenever you want."
               : addedHere
                 ? "It was added here, so removing it forgets it — its url and any token with it."
                 : "It comes from the machine's defaults, so removing it here switches it off for this project only; the switch above turns it back on."

@@ -24,7 +24,7 @@ type Props = {
 const CHOSEN = {
   here: { machine: "Chosen here, for every project that sets nothing.", project: "This project chose it." },
   machine: { machine: "", project: "Not chosen here; following this machine." },
-  default: { machine: "Not chosen anywhere; the catalog's default.", project: "Not chosen anywhere; the catalog's default." },
+  default: { machine: "Not chosen anywhere; the built-in default.", project: "Not chosen anywhere; the built-in default." },
 } as const;
 
 /** The watch settings, on the Watcher's chip only: what reads the seats, then its agent or Jev's key, then mail. */
@@ -54,7 +54,7 @@ export function WatcherSettings({ catalog, team, values, machine, layer, theme, 
             key="key"
             ref={field}
             label="OpenRouter key"
-            hint={set ? "Kept on this machine and never shown again. Type another to replace it." : "Jev reads nothing without one, and the watch never falls back to a seat on its own."}
+            hint={set ? "Kept on this machine and never shown again. Type another to replace it." : "Jev cannot watch without one, and Seatworks never switches to a Watcher agent on its own."}
             placeholder="sk-or-…"
             secureTextEntry
             onChangeText={setDraft}
@@ -63,13 +63,13 @@ export function WatcherSettings({ catalog, team, values, machine, layer, theme, 
           <SettingsAction
             key="save"
             label={set ? "Replace the key" : "Save the key"}
-            hint="A key starts paid calls: one per watched seat once it falls quiet, at least one every thirty seconds while it works, and one at once whenever a turn ends or something goes wrong."
+            hint="A key starts paid calls: one per watched agent once it goes quiet, at least one every thirty seconds while it works, and one right away whenever a turn ends or something goes wrong."
             actionLabel="Save key"
             onPress={() => write(typed)}
             disabled={disabled || typed.length === 0}
           />,
           ...(set
-            ? [<SettingsAction key="forget" label="Forget the key" hint="Jev stops reading on the next round, and nothing more is followed, read or recorded until there is a key again." actionLabel="Forget key" onPress={() => write(null)} disabled={disabled} />]
+            ? [<SettingsAction key="forget" label="Forget the key" hint="Jev stops at its next check, and nothing is watched or recorded until there is a key again." actionLabel="Forget key" onPress={() => write(null)} disabled={disabled} />]
             : []),
         ]
       : [
@@ -79,7 +79,7 @@ export function WatcherSettings({ catalog, team, values, machine, layer, theme, 
         ];
   if (catalog.sensor) {
     jev.push(
-      <SettingsRow key="sensor" label="Sensor" hint="From catalog/sensor · asked through OpenRouter">
+      <SettingsRow key="sensor" label="Jev's model" hint="Called through OpenRouter">
         <Text style={{ color: theme.colors.foreground, fontSize: 14 }}>{catalog.sensor.model}</Text>
       </SettingsRow>,
     );
@@ -88,22 +88,22 @@ export function WatcherSettings({ catalog, team, values, machine, layer, theme, 
   return (
     <>
       <SettingsCard>
-        <SettingsRow label="Watch by" hint={byFrom}>
+        <SettingsRow label="Who watches" hint={`Jev is a paid model outside the team, called through OpenRouter. ${byFrom}`}>
           <TabBar
             theme={theme}
             active={by}
             disabled={disabled}
             onPick={(next) => void save((current) => setAttention(current, { by: next as "seat" | "jev" }))}
             tabs={[
-              { id: "seat", label: "Watcher seat" },
+              { id: "seat", label: "Watcher agent" },
               { id: "jev", label: "Jev" },
             ]}
           />
         </SettingsRow>
         {by === "seat" ? rows : jev}
         <SettingsSwitch
-          label="Mail incidents"
-          hint={`To the Lead of the lane, or the Supervisor. Never to the seat it watched. ${mailFrom}`.trim()}
+          label="Send notices"
+          hint={`To the Lead of the work stream, or the Supervisor. Never to the agent being watched. ${mailFrom}`.trim()}
           value={team.attention.watch}
           onValueChange={(next) => void save((current) => setAttention(current, { watch: next }))}
           disabled={disabled}
@@ -111,8 +111,8 @@ export function WatcherSettings({ catalog, team, values, machine, layer, theme, 
       </SettingsCard>
       <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
         {by === "seat"
-          ? "One Watcher per project, seated while a lane is open and let go when none is. It shows on the Flow tab beside the Supervisor, like any seat."
-          : "No Watcher is seated while the watch is by Jev. What is set for the Watcher seat is kept for when it is by a seat again."}
+          ? "One Watcher agent per project. It starts while a work stream is open and stops when none is. It shows on the Flow tab beside the Supervisor, like any agent."
+          : "No Watcher agent runs while Jev watches. The Watcher agent's settings are kept for when you switch back."}
       </Text>
     </>
   );

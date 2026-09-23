@@ -84,7 +84,7 @@ function Trouble({ watch, theme }: { watch: WatchView; theme: PluginTheme }) {
   const shown = watch.trouble.filter((entry) => entry.kind !== "sensor.degraded");
   if (shown.length === 0) return null;
   return (
-    <Section title="Not from the watch" theme={theme}>
+    <Section title="Other problems" theme={theme}>
       {shown.map((entry, index) => (
         <View key={`${entry.kind}-${index}`}>
           {index > 0 ? <Rule theme={theme} /> : null}
@@ -93,7 +93,7 @@ function Trouble({ watch, theme }: { watch: WatchView; theme: PluginTheme }) {
               <Dot color={theme.colors.statusWarning} />
             </View>
             <View style={styles.labels}>
-              <Text style={styles.title}>{entry.kind === "call.malformed" ? "An agent request could not be processed" : entry.kind}</Text>
+              <Text style={styles.title}>{entry.kind === "call.malformed" ? "An agent sent a request that was not valid JSON, so it was dropped" : entry.kind}</Text>
               <Text style={styles.hint}>{entry.detail}</Text>
             </View>
             <Text style={styles.hint}>{ago(entry.minutes)}</Text>
@@ -130,13 +130,13 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
               head.word ? <Text style={[styles.word, { color: tone }]}>{head.word}</Text> : null
             ) : (
               <View style={{ flexDirection: "row", gap: 8 }}>
-                <Button label="Watch by a seat" theme={theme} onPress={onWatchBySeat} />
+                <Button label="Use a Watcher agent" theme={theme} onPress={onWatchBySeat} />
                 <Button label="Add a key" tone="accent" theme={theme} onPress={onAddKey} />
               </View>
             )}
           </View>
           <Text style={[styles.hint, { paddingLeft: 38, paddingRight: 18, paddingBottom: 10 }]}>
-            Jev is a model outside the team. After each step a Lead or Peer takes, it answers questions about what just happened, each a yes or no with how sure it is. An answer past its bar becomes an incident; one below it is only noted here.
+            Jev is a paid model outside the team. After each step a Lead or Peer takes, it answers a few yes-or-no questions about what just happened, and says how sure it is. When it is sure enough, it reports a notice; otherwise the answer is only shown here.
           </Text>
         </View>
       </SettingsCard>
@@ -157,9 +157,9 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
           </Section>
 
           {watch.seats.some((seat) => seat.running) || watch.failing ? (
-            <Section title="Observations below the alert threshold" theme={theme}>
+            <Section title="Looked risky, but not enough to report" theme={theme}>
               {watch.failing ? (
-                <Text style={[styles.hint, { padding: 18 }]}>Nothing to show until Jev answers again: what it leans towards is its own reading.</Text>
+                <Text style={[styles.hint, { padding: 18 }]}>Nothing to show until Jev answers again.</Text>
               ) : (
                 <>
                   {lean.leaning.map((seat, index) => (
@@ -172,7 +172,7 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
                         </View>
                         <View style={{ alignItems: "flex-end", gap: 5 }}>
                           <Meter lean={seat.lean} theme={theme} />
-                          <Text style={styles.hint}>{`${Math.round(seat.lean.p * 100)}% · raised at ${Math.round(seat.lean.bar * 100)}%`}</Text>
+                          <Text style={styles.hint}>{`${Math.round(seat.lean.p * 100)}% sure · reported at ${Math.round(seat.lean.bar * 100)}%`}</Text>
                         </View>
                       </View>
                     </View>
@@ -181,7 +181,7 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
                     <>
                       {lean.leaning.length > 0 ? <Rule theme={theme} /> : null}
                       <Text style={[styles.hint, { paddingHorizontal: 18, paddingVertical: 12 }]}>
-                        {`${lean.leaning.length > 0 ? `${lean.quiet.length} more` : lean.quiet.length} seat${lean.quiet.length === 1 ? "" : "s"} read with nothing leaning: ${lean.quiet.join(", ")}`}
+                        {`${lean.leaning.length > 0 ? `${lean.quiet.length} more` : lean.quiet.length} agent${lean.quiet.length === 1 ? "" : "s"} checked, nothing risky: ${lean.quiet.join(", ")}`}
                       </Text>
                     </>
                   ) : null}
@@ -190,7 +190,7 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
             </Section>
           ) : null}
 
-          <Section title="How right it has been here" theme={theme}>
+          <Section title="How useful its notices have been here" theme={theme}>
             <View style={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Text style={[styles.title, { flex: 1 }]}>{record.title}</Text>
@@ -209,7 +209,7 @@ export function WatchCard({ watch, theme, onAddKey, onWatchBySeat }: { watch: Wa
 
       <Trouble watch={watch} theme={theme} />
       <Text style={[styles.hint, { fontSize: 11 }]}>
-        Nothing Jev concludes reaches the seat it is about. An incident about a Peer goes to its Lead; one about a Lead, or one that pages, goes to the Supervisor.
+        Nothing Jev finds is sent to the agent it is about. A notice about a Peer goes to its Lead; one about a Lead, or an urgent one, goes to the Supervisor.
       </Text>
     </View>
   );
@@ -222,7 +222,7 @@ export function IncidentsCard({ watch, theme }: { watch: WatchView; theme: Plugi
   return (
     <View style={{ gap: 10 }}>
       {watch.incidents.length > 0 ? (
-        <Section title={`Incidents · ${watch.incidents.length} not yet marked`} theme={theme}>
+        <Section title={`Watch notices · ${watch.incidents.length} not yet marked`} theme={theme}>
           {watch.incidents.map((item, index) => {
             const lines = incidentLines(item, watch);
             return (

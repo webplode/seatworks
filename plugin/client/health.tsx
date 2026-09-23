@@ -90,7 +90,7 @@ export function HealthSection({ project, theme, checks, stale, onChecks, runDoct
         <SettingsCard>
           <SettingsAction
             label="Status"
-            hint="Lanes, tasks and open asks right now."
+            hint="Work streams, tasks and open questions right now."
             error={statusError}
             actionLabel={busy === "status" ? "Reading" : "Read"}
             disabled={busy !== null}

@@ -192,28 +192,28 @@ const incident = (over: Partial<WatchIncident> = {}): WatchIncident => ({
 
 test("the Jev card's header says the one thing to know first: reading, idle, not answering, or no key", () => {
   const reading = jevHeader(watching({ telling: true, lanes: 2, lastRead: 0, read: { turns: 128, cost: 0.015 }, seats: [seatOf("a"), seatOf("b"), seatOf("c", { running: false })] }));
-  assert.deepEqual([reading.title, reading.word, reading.tone], ["Jev is reading 2 seats in 2 lanes", "mailing", "success"]);
-  assert.equal(reading.sub, "Last read just now · 128 turns read · $0.015 spent so far");
+  assert.deepEqual([reading.title, reading.word, reading.tone], ["Jev is watching 2 agents in 2 work streams", "sending notices", "success"]);
+  assert.equal(reading.sub, "Last check just now · 128 turns read · $0.015 spent so far");
   const idle = jevHeader(watching({ lastRead: 660, read: { turns: 365, cost: 0.047 } }));
   assert.deepEqual([idle.title, idle.word, idle.tone], ["Nothing is running", "recording only", "muted"]);
-  assert.match(idle.sub, /^Jev last read a turn here 11 hours ago/, "an idle watch says when it last worked, so a dead one is visible");
+  assert.match(idle.sub, /^Jev last checked a turn here 11 hours ago/, "an idle watch says when it last worked, so a dead one is visible");
   const failing = jevHeader(watching({ failing: { minutes: 4, detail: "429 too many requests" } }));
   assert.equal(failing.title, "Jev is not answering");
-  assert.match(failing.sub, /429 too many requests\. The code still reads every turn; what waits for Jev's second look goes after 2 minutes\./);
+  assert.match(failing.sub, /429 too many requests\. Built-in checks still run on every turn; anything waiting for Jev's second look is sent after 2 minutes\./);
   const keyless = jevHeader(watching({ keyed: false, on: false }));
-  assert.deepEqual([keyless.title, keyless.word, keyless.tone], ["Jev is not reading", "", "warning"]);
+  assert.deepEqual([keyless.title, keyless.word, keyless.tone], ["Jev is not watching", "", "warning"]);
 });
 
 test("an incident says who raised it and how sure, and where it has got to, in words", () => {
   const jev = { by: "jev" as const, judgeMinutes: 2, failing: null };
-  assert.deepEqual(incidentLines(incident({ level: "page", told: "supervisor", minutes: 2 }), jev), { sub: "Peer · L1-T1 Pointer · 2 min ago", source: "measured in code", state: "told the Supervisor", danger: true });
-  assert.deepEqual(incidentLines(incident({ source: "jev", sure: { p: 0.86, bar: 0.85 }, told: "lead" }), jev), { sub: "Peer · L1-T1 Pointer · 6 min ago", source: "Jev 86% sure · bar 85%", state: "told Lead L1", danger: false });
+  assert.deepEqual(incidentLines(incident({ level: "page", told: "supervisor", minutes: 2 }), jev), { sub: "Peer · L1-T1 Pointer · 2 min ago", source: "built-in check", state: "told the Supervisor", danger: true });
+  assert.deepEqual(incidentLines(incident({ source: "jev", sure: { p: 0.86, bar: 0.85 }, told: "lead" }), jev), { sub: "Peer · L1-T1 Pointer · 6 min ago", source: "Jev 86% sure · reports at 85%", state: "told Lead L1", danger: false });
   assert.equal(incidentLines(incident({ held: "awaiting" }), jev).state, "held · Jev takes a second look, up to 2 min");
-  assert.equal(incidentLines(incident({ held: "awaiting" }), { ...jev, failing: { minutes: 1, detail: "x" } }).state, "held · Jev is not answering, told after 2 min");
+  assert.equal(incidentLines(incident({ held: "awaiting" }), { ...jev, failing: { minutes: 1, detail: "x" } }).state, "held · Jev is not answering, sent after 2 min");
   const seat = { by: "seat" as const, judgeMinutes: 10, failing: null };
   assert.equal(incidentLines(incident({ held: "awaiting" }), seat).state, "held · waiting for the Watcher, up to 10 min");
   assert.equal(incidentLines(incident({ held: "vetoed" }), seat).state, "held back by the Watcher");
-  assert.equal(incidentLines(incident({ source: "watcher" }), seat).source, "raised by the Watcher");
+  assert.equal(incidentLines(incident({ source: "watcher" }), seat).source, "noticed by the Watcher");
   assert.equal(incidentLines(incident({ held: "shadow" }), seat).state, "recorded · mail is off");
 });
 
@@ -231,15 +231,15 @@ test("what Jev leans towards is listed closest to its bar first, and the seats w
 test("the track record counts useful against noise, and says when there are marks enough to tune by", () => {
   assert.equal(trackRecord({ total: 0, open: 0, useful: 0, noise: 0, unknown: 0 }).title, "Nothing marked yet");
   const some = trackRecord({ total: 18, open: 0, useful: 12, noise: 5, unknown: 1 });
-  assert.deepEqual([some.title, some.percent, some.parts], ["12 of 17 marked incidents were worth it", "71%", [12, 5, 1]]);
+  assert.deepEqual([some.title, some.percent, some.parts], ["12 of 17 marked notices were useful", "71%", [12, 5, 1]]);
   assert.match(some.hint, /with 20 or more marks, run node bin\/calibrate\.ts/);
   assert.match(trackRecord({ total: 21, open: 0, useful: 14, noise: 6, unknown: 1 }).hint, /there are enough marks now/);
 });
 
 test("the Watcher seat on the canvas says whether it runs and how many readings wait for it", () => {
-  assert.deepEqual(watcherState({ id: "w", status: "running", minutes: 0, queued: 2 }), { state: "running · 2 readings waiting", alive: true });
+  assert.deepEqual(watcherState({ id: "w", status: "running", minutes: 0, queued: 2 }), { state: "running · 2 checks waiting", alive: true });
   assert.deepEqual(watcherState({ id: "w", status: "idle", minutes: 3, queued: 0 }), { state: "idle", alive: true });
-  assert.deepEqual(watcherState(null), { state: "not seated · it sits once a lane is open", alive: false });
+  assert.deepEqual(watcherState(null), { state: "not started · starts once a work stream is open", alive: false });
 });
 
 test("money is shown in dollars, with enough places that a few cents do not read as nothing", () => {

@@ -109,10 +109,14 @@ what you pick.
 ## First run
 
 1. In Paseo, open **Seatworks** in the sidebar.
-2. **Add project**, pick the repository, choose an agent for each role, and attach.
-3. Open **Health** and choose **Run**.
-4. Start an agent in that project with the provider **Supervisor · Claude Code (sw2)**, and tell it
-   what you want.
+2. Type what the team should work on. Pick the project with the folder chip (type to search this
+   machine, arrows and Enter to choose), and the team with the team chip: **Cheap**, **Balanced**
+   (your team defaults) or **Max**. Seatworks checks the setup on its own as soon as you pick.
+3. Press **Start**. A new folder joins Seatworks, the Overall Supervisor starts if it is not running,
+   and your words become its first objective. Its chat is home from then on.
+
+Choosing each model yourself, observe-only access and the other settings sit under **More options**
+in **Add project** and in **Team & models**.
 
 The desk seats everyone else as the work needs them. The first lane works in your checkout, and each
 later one in a working copy of its own.
@@ -120,7 +124,13 @@ later one in a working copy of its own.
 **Your project's `AGENTS.md`.** The first time a seat opens, the plugin writes the team's shared
 rules into your `AGENTS.md`, in a marked `seatworks` block. It replaces that block whole and never
 touches your own text. `CLAUDE.md` gets a pointer to `AGENTS.md`. Commit both once, because a lane in
-its own working copy sees only what is committed.
+its own working copy sees only what is committed. The Supervisor chat offers a **Commit** card that
+commits just those two files.
+
+**What the Supervisor chat shows.** One live card lists each project's status and what needs you:
+questions, permission requests, work that is **ready to land** (branch, files changed, tests passed)
+and work whose tests failed. **Land…** asks you to confirm, then lets the Supervisor land that
+project's work and tells it to land this one now. Landing stays your call until you press it.
 
 The panel has four tabs: **Team** (agents and the watch), **Flow** (lanes, tasks and questions,
 live), **MCP** (optional servers per role) and **Health**. Everything the desk keeps lives under

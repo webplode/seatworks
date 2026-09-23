@@ -75,7 +75,7 @@ export function SupervisionSettings({ theme, onFlow, onAgent }: {
             const saved = await bind({ revision: draft.revision, active: false, supervisor: null, projects: draft.projects.map(({ id, grants }) => ({ id, grants })) }) as unknown as Binding;
             await create({ revision: saved.revision });
           })} /> : null}
-        <Text style={text}>Projects and granted operations</Text>
+        <Text style={text}>Projects and what the Supervisor may do in each</Text>
         {[...view.candidates, ...draft.projects.filter((p) => !view.candidates.some((c) => c.id === p.id))].map((p) => {
           const scope = draft.projects.find((s) => s.id === p.id);
           const available = view.candidates.some((c) => c.id === p.id);
@@ -87,7 +87,7 @@ export function SupervisionSettings({ theme, onFlow, onAgent }: {
               () => setDraft({ ...draft, projects: draft.projects.map((s) => s.id !== p.id ? s : { ...s, grants: s.grants.includes(op) ? s.grants.filter((g) => g !== op) : [...s.grants, op] }) })))}</View> : null}
           </View>;
         })}
-        {!view.candidates.length ? <Text style={muted}>No registered projects. Open a project workspace in Paseo, then refresh; discovering it does not grant supervision.</Text> : null}
+        {!view.candidates.length ? <Text style={muted}>No registered projects. Open a project workspace in Paseo, then refresh; a project found this way gets no Supervisor access until you grant it.</Text> : null}
         {choice("Supervision active", draft.active, () => setDraft({ ...draft, active: !draft.active }))}
         <View style={row}>
           <Button label="Save scope" theme={theme} tone="accent" disabled={busy} onPress={() => void run(() => bind({ revision: draft.revision, active: draft.active, supervisor: draft.supervisor?.agent ?? null, projects: draft.projects.map(({ id, grants }) => ({ id, grants })) }))} />
@@ -101,8 +101,8 @@ export function SupervisionSettings({ theme, onFlow, onAgent }: {
           <View style={row}><Text style={{ ...text, fontWeight: "600", flex: 1 }}>{p.name}</Text><Button label="Project Flow" theme={theme} onPress={() => onFlow(p.slug)} /></View>
           <Text style={muted}>{p.root}</Text>
           {view.problems[p.id] ? <Text style={{ color: theme.colors.statusDanger }}>{view.problems[p.id]}</Text> : null}
-          <Text style={muted}>Communication watch: {view.communication[p.id]?.status ?? "off"} · {view.communication[p.id]?.detail ?? "Shadow assessment is off; Supervisor control works independently."}</Text>
-          <Button label={view.communication[p.id]?.status === "off" || !view.communication[p.id] ? "Enable Jev communication shadow" : "Turn off communication shadow"}
+          <Text style={muted}>Message check by Jev: {view.communication[p.id]?.status ?? "off"} · {view.communication[p.id]?.detail ?? "Off. The Supervisor works the same either way."}</Text>
+          <Button label={view.communication[p.id]?.status === "off" || !view.communication[p.id] ? "Let Jev check messages (record only)" : "Stop Jev checking messages"}
             theme={theme} disabled={busy || Boolean(draft) || Boolean(picking)} onPress={() => void run(async () => {
               const settings = await readSettings({ project: p.slug }) as unknown as { status: string; revision: string; values: Layer; error?: string };
               if (settings.status !== "ready") throw new Error(settings.error ?? "Settings unavailable.");
@@ -110,17 +110,17 @@ export function SupervisionSettings({ theme, onFlow, onAgent }: {
               const saved = await writeSettings({ project: p.slug, revision: settings.revision, values: { ...settings.values, attention: { ...settings.values.attention, communication } } as never }) as { status: string; error?: string };
               if (saved.status !== "saved") throw new Error(saved.error ?? "Settings changed. Refresh before retrying.");
             })} />
-          <Text style={muted}>Shadow uses the configured Jev service and key to assess communication evidence, up to 100 calls per machine per day. Results are recorded; no notifications are sent.</Text>
+          <Text style={muted}>Jev, the paid watch model, reviews the messages between agents using your OpenRouter key, up to 100 calls per machine per day. Results are only recorded; nothing is sent to anyone.</Text>
           {!p.leads.length ? <Text style={muted}>No existing Lead associated. Select an agent below or open work through the Supervisor.</Text> : null}
           {p.leads.map((lead) => {
             const live = candidates.find((a) => a.id === lead.agent);
             const waiting = view.deliveries.filter((d) => d.to === lead.agent && ["queued", "unknown"].includes(d.state));
             const blockers = view.dependencies.filter((d) => d.consumer.agent === lead.agent && !["confirmed", "canceled"].includes(d.state));
             return <View key={lead.agent} style={{ gap: 4 }}>
-              <Text style={text}>{live?.title ?? lead.agent} · {live?.status ?? "unavailable"}{live?.waiting ? " · awaiting permission" : ""}</Text>
+              <Text style={text}>{live?.title ?? lead.agent} · {live?.status ?? "unavailable"}{live?.waiting ? " · waiting for permission" : ""}</Text>
               <Text style={text}>{lead.objective}</Text>
-              <Text style={muted}>{lead.origin === "external" ? "Limited: native observation and messages; desk participation unverified" : "Seatworks managed"} · {lead.ownership.join(", ")}</Text>
-              <Text style={muted}>Evidence: {live?.updatedAt ?? "unknown"} · {waiting.length} pending/uncertain commands · {blockers.length} dependencies</Text>
+              <Text style={muted}>{lead.origin === "external" ? "Started outside Seatworks: can be watched and messaged, but may not use Seatworks tools" : "Seatworks managed"} · {lead.ownership.join(", ")}</Text>
+              <Text style={muted}>Last update: {live?.updatedAt ?? "unknown"} · {waiting.length} messages waiting or unconfirmed · {blockers.length} open dependencies</Text>
               {onAgent ? <Button label="Open conversation" theme={theme} onPress={() => onAgent(lead.agent)} /> : null}
               {lead.origin === "external" ? <Button label="Remove association" theme={theme} disabled={busy || Boolean(draft)} onPress={() => void run(() => adopt({ revision: view.binding.revision, project: p.id, agent: lead.agent, objective: lead.objective, ownership: lead.ownership, remove: true }))} /> : null}
             </View>;
@@ -139,9 +139,9 @@ export function SupervisionSettings({ theme, onFlow, onAgent }: {
       })}
       {view.dependencies.length ? <View style={{ gap: 8 }}><Text style={{ ...text, fontWeight: "600" }}>Cross-project dependencies</Text>
         {view.dependencies.map((d) => <View key={d.id} style={{ gap: 3 }}><Text style={text}>{d.producer.project} → {d.consumer.project} · {d.state}</Text>
-          <Text style={text}>{d.request}</Text><Text style={muted}>Artifact: {d.artifact ?? "awaiting producer"} · Next: {d.checkpoint}</Text></View>)}
+          <Text style={text}>{d.request}</Text><Text style={muted}>Result: {d.artifact ?? "not ready yet"} · Next: {d.checkpoint}</Text></View>)}
       </View> : null}
-      {view.deliveries.length ? <View style={{ gap: 8 }}><Text style={{ ...text, fontWeight: "600" }}>Recent deliveries</Text>
+      {view.deliveries.length ? <View style={{ gap: 8 }}><Text style={{ ...text, fontWeight: "600" }}>Recent messages</Text>
         {view.deliveries.slice(0, 12).map((d) => <View key={d.id}><Text selectable style={text}>{d.state} · {d.to} · {d.id}</Text>
           <Text style={muted} numberOfLines={3}>{d.detail ?? d.text}</Text></View>)}
       </View> : null}

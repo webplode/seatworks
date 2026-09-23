@@ -377,7 +377,7 @@ export const report: Tool = async ({ ctx, roster }, caller, args) => {
   const to = await roster.supervisorFor(caller.project, lane.opener);
   const letter = letters.report(lane, summary, args.ready === true, strs(args.carried), gate);
   const posted = await ctx.post(to, `report:${lane.id}:${hash(summary)}`, letter, caller.project);
-  ctx.event(caller.project, { kind: "lane.report", lane: lane.id, ready: args.ready === true, gate: gate?.ok, to: to ?? null, text: posted === "nobody" ? letter : undefined });
+  ctx.event(caller.project, { kind: "lane.report", lane: lane.id, ready: args.ready === true, gate: gate?.ok, summary: summary.slice(0, 600), to: to ?? null, text: posted === "nobody" ? letter : undefined });
   // With nobody supervising seated the post goes nowhere; it is kept in the event log and the Lead told so.
   if (posted === "nobody") {
     return ok(`Nobody supervising this project is seated, so the report reached no one. It is kept in ${caller.project.state}/events.log for whoever comes back; there is nothing to wait for until someone does.`);

@@ -27,7 +27,7 @@ function size(bytes: number): string {
 
 const short = (path: string) => path.replace(/^\/(Users|home)\/[^/]+/, "~");
 
-const KIND: Record<CleanItem["kind"], string> = { seat: "Seat folder", copy: "Working copy", records: "Project records", snapshot: "Copy of guides or skills", backup: "Settings backup" };
+const KIND: Record<CleanItem["kind"], string> = { seat: "Agent folder", copy: "Working copy", records: "Project records", snapshot: "Copy of guides or skills", backup: "Settings backup" };
 
 /** Picked unless it holds something of the owner's, or cannot go at all. */
 const picked = (items: CleanItem[]) => new Set(items.filter((item) => !item.careful && !item.held).map((item) => item.path));
@@ -37,7 +37,7 @@ function unitName(change: ContentChange): string {
   const last = change.unit.split("/").pop() ?? change.unit;
   if (change.kind === "prompt") return `${last.replace(/\.md$/, "").toLowerCase().replace(/^./, (first) => first.toUpperCase())} prompt`;
   if (change.kind === "skill") return `${last} skill`;
-  if (change.kind === "team") return "Team block";
+  if (change.kind === "team") return "AGENTS.md team section";
   return last;
 }
 
@@ -48,7 +48,7 @@ function versionLine(view: UpdateView | null): { title: string; state: string } 
   if (view.updated) return { title: `Seatworks ${now}`, state: `Updated from ${view.updated.from}. The plugin is reloading.` };
   if (view.behind > 0) {
     const title = `Seatworks ${now} → ${view.next && view.next !== now ? view.next : plural(view.behind, "commit")}`;
-    return { title, state: view.busy.length > 0 ? `Stop every seat first: ${view.busy.join(", ")}.` : (view.blocked ?? plural(view.behind, "new commit")) };
+    return { title, state: view.busy.length > 0 ? `Stop every agent first: ${view.busy.join(", ")}.` : (view.blocked ?? plural(view.behind, "new commit")) };
   }
   if (view.blocked) return { title: `Seatworks ${now} · ${view.head}`, state: view.blocked };
   return { title: `Seatworks ${now} · ${view.head}`, state: view.fetched ? "Up to date." : `Check asks ${view.upstream ?? "its remote"} for anything newer.` };

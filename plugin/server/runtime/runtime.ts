@@ -46,8 +46,9 @@ import { Supervision } from "./supervision.ts";
 import { SupervisionControl } from "./supervision-control.ts";
 import { supervisionRpc, bindingRpc, adoptRpc, createSupervisorRpc } from "../../shared/rpc.ts";
 import { CommunicationWatch } from "./watch/jev/communication.ts";
-import { briefRpc } from "../../shared/brief.ts";
+import { briefRpc, commitTeamFilesRpc } from "../../shared/brief.ts";
 import { teamBrief } from "./brief.ts";
+import { commitTeamFiles, diffStat, laneReports, uncommittedTeamFiles } from "./landing.ts";
 import { outputText } from "./timeline.ts";
 
 type EventName = keyof PluginLifecycleEvents;
@@ -357,7 +358,7 @@ export class Runtime {
     const project = projectOf(event.agent.cwd);
     for (const call of malformed(event.timeline)) {
       this.desk.event(project, { kind: "call.malformed", agent: event.agent.id, role: role.role, tool: call.tool, error: call.quote });
-      this.troubled(project, "call.malformed", `the ${role.label}'s ${call.tool} was written with an input that is not JSON, and never reached the desk`);
+      this.troubled(project, "call.malformed", `the ${role.label}'s ${call.tool} sent a request that was not valid JSON, so Seatworks never received it. Ask it to try again`);
     }
   }
 
@@ -493,7 +494,11 @@ export class Runtime {
       const scope = binding.projects.find(p => p.root === root)!;
       const { project } = this.supervision.store.authorize(binding.supervisor!.agent, scope.id, "observe");
       return loadLedger(project.state);
-    }, this.outbox.letters());
+    }, this.outbox.letters(), {
+      reports: (root) => laneReports(projectOf(root).state),
+      diff: (root, lane) => diffStat(lane.worktree ?? root, lane.base, lane.branch),
+      teamFiles: (root) => uncommittedTeamFiles(root),
+    });
   }
 
   private async publishBrief() {
@@ -511,6 +516,13 @@ export class Runtime {
   }
 
   register(server: PluginServerContext): void {
+    server.handle(commitTeamFilesRpc, async (input) => {
+      const scope = this.supervision.store.read().projects.find(p => p.id === input.scope);
+      if (!scope) throw new Error("That project is no longer supervised. Refresh and try again.");
+      const result = commitTeamFiles(scope.root);
+      void this.publishBrief();
+      return result;
+    });
     server.handle(briefRpc, async (_input, context) => { this.pluginApi = context.paseo; const data = await this.brief(); void this.publishBrief(); return data; });
     this.timers.push(setInterval(() => void this.publishBrief(), 5000));
     server.handle(supervisionRpc, async () => await this.supervision.view() as never);

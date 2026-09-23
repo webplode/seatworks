@@ -63,7 +63,7 @@ export async function applyUpdate(ctx: UpdateContext): Promise<UpdateView> {
   const view = await checkUpdate(ctx);
   if (view.blocked || view.behind === 0) return view;
   // A seat keeps the version it started with, so updating under a running lane would run it on two versions.
-  if (ctx.busy.length > 0) return { ...view, blocked: `Stop every seat first: ${ctx.busy.join(", ")}.` };
+  if (ctx.busy.length > 0) return { ...view, blocked: `Stop every Seatworks agent before updating. Still running: ${ctx.busy.join(", ")}.` };
   const from = view.head;
   const moved = await git(ctx.dir, ["merge", "--ff-only", "--quiet", "@{u}"]);
   if (moved.code !== 0) return { ...view, blocked: `Could not move forward: ${moved.stderr.trim()}` };

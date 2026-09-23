@@ -9,7 +9,7 @@ export const CONTROL = { radius: 6, height: 40, padding: 12, gap: 8, font: 14, p
 export function sourceLabel(source: Source, layer: "machine" | "project", follows?: string): string {
   if (source === "here") return layer === "machine" ? "Set here" : "Set for this project";
   if (source === "machine") return "From this machine";
-  return follows ? `Not set · follows the ${follows}` : "Catalog default";
+  return follows ? `Not set · follows the ${follows}` : "Built-in default";
 }
 
 export function Button({ label, theme, tone = "plain", disabled, onPress }: {

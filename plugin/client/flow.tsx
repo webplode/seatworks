@@ -33,7 +33,7 @@ const since = (minutes: number): string => (minutes < 1 ? "just now" : `${minute
 const seatText = (seat: FlowSeat | null): string => {
   if (!seat) return "no active agent";
   if (seat.waiting.length > 0) return `waiting on you · ${seat.waiting[0]}`;
-  if (seat.status === "gone") return seat.minutes > 0 ? `gone · last heard ${seat.minutes} min ago` : "gone";
+  if (seat.status === "gone") return seat.minutes > 0 ? `stopped · last heard ${seat.minutes} min ago` : "stopped";
   return `${seat.status} · ${ago(seat.minutes)}`;
 };
 
@@ -139,11 +139,11 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
   const watcher = flow && flow.watch.by === "seat" && (flow.watch.watcher || flow.lanes.length > 0) ? watcherState(flow.watch.watcher) : null;
 
   return (
-    <SettingsSection title="Team activity" info="Expand a line of work to see its tasks. Open an agent to continue its conversation.">
+    <SettingsSection title="Team activity" info="Expand a work stream to see its tasks. Open an agent to continue its conversation.">
       <SettingsCard>
         <SettingsSwitch
           label="Follow the team live"
-          hint={!following ? "The default every project starts with. A project's own Flow tab is what reads its ledger." : live ? "Reads the ledger every few seconds while this tab is open." : "Switched off, so this tab costs nothing."}
+          hint={!following ? "The default every project starts with. Each project's own Flow tab shows its work." : live ? "Checks for updates every few seconds while this tab is open." : "Switched off, so this tab costs nothing."}
           value={live}
           onValueChange={onLive}
           disabled={disabled}
@@ -152,11 +152,11 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
 
       {!live ? null : error ? (
         <SettingsCard>
-          <Empty theme={theme} title="The flow could not be read" body={error} />
+          <Empty theme={theme} title="Team activity could not be loaded" body={error} />
         </SettingsCard>
       ) : flow === null ? (
         <SettingsCard>
-          <Empty theme={theme} title={following ? "Reading the ledger" : "Flow follows one project"} body={following ? "This refreshes on its own." : "Open a project to watch its lanes; the switch above only sets the default."} />
+          <Empty theme={theme} title={following ? "Loading team activity" : "Team activity is shown per project"} body={following ? "This refreshes on its own." : "Open a project to see its work streams; the switch above only sets the default."} />
         </SettingsCard>
       ) : empty ? (
         <SettingsCard>
@@ -172,7 +172,7 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
                   {index === 0 && watcher ? (
                     <>
                       <View style={{ width: COL_GAP }} />
-                      <Node theme={theme} title="Watcher" hint="reads every Lead and Peer" state={watcher.state} alive={watcher.alive} reads />
+                      <Node theme={theme} title="Watcher" hint="watches every Lead and Peer" state={watcher.state} alive={watcher.alive} reads />
                     </>
                   ) : null}
                 </View>
@@ -188,8 +188,8 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
       {live && flow && flow.moreLanes > 0 ? (
         <SettingsCard>
           <SettingsRow
-            label={`${flow.moreLanes} more lane${flow.moreLanes === 1 ? "" : "s"}`}
-            hint={`This screen draws the first ${flow.lanes.length} open lanes and no more. The rest are running; the status page lists every one of them.`}
+            label={`${flow.moreLanes} more work stream${flow.moreLanes === 1 ? "" : "s"}`}
+            hint={`This screen shows only the first ${flow.lanes.length} open work streams. The rest are still running; the Status report lists all of them.`}
           />
         </SettingsCard>
       ) : null}

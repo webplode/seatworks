@@ -97,8 +97,8 @@ test("update waits until no seat runs in any project, and moves nothing meanwhil
   const { dir, ctx, calls, publish } = world();
   const before = git(dir, "rev-parse", "HEAD");
   publish({ "a.txt": "a" }, "Add a");
-  const view = await applyUpdate({ ...ctx, busy: ["shop-abc123 3 seats", "api-def456 1 seat"] });
-  assert.equal(view.blocked, "Stop every seat first: shop-abc123 3 seats, api-def456 1 seat.");
+  const view = await applyUpdate({ ...ctx, busy: ["shop-abc123: 3 agents", "api-def456: 1 agent"] });
+  assert.equal(view.blocked, "Stop every Seatworks agent before updating. Still running: shop-abc123: 3 agents, api-def456: 1 agent.");
   assert.equal(git(dir, "rev-parse", "HEAD"), before);
   assert.deepEqual(calls, { install: 0, reload: 0 });
 });

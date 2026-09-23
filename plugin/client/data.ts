@@ -486,12 +486,12 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 export type JevHeader = { title: string; sub: string; word: string; tone: "success" | "warning" | "muted" };
 
 export function jevHeader(watch: WatchView): JevHeader {
-  const word = watch.telling ? "mailing" : "recording only";
-  if (!watch.keyed) return { title: "Jev is not reading", sub: "Watch by Jev needs an OpenRouter key on this machine. Until there is one, nothing is followed, read or recorded.", word: "", tone: "warning" };
+  const word = watch.telling ? "sending notices" : "recording only";
+  if (!watch.keyed) return { title: "Jev is not watching", sub: "Jev, the paid watch model, needs an OpenRouter key on this machine. Until there is one, nothing is watched or recorded.", word: "", tone: "warning" };
   if (watch.failing) {
     return {
       title: "Jev is not answering",
-      sub: `Its last reading failed ${since(watch.failing.minutes)}: ${watch.failing.detail}. The code still reads every turn; what waits for Jev's second look goes after ${watch.judgeMinutes} minutes.`,
+      sub: `Its last check failed ${since(watch.failing.minutes)}: ${watch.failing.detail}. Built-in checks still run on every turn; anything waiting for Jev's second look is sent after ${watch.judgeMinutes} minutes.`,
       word: "not answering",
       tone: "warning",
     };
@@ -499,9 +499,9 @@ export function jevHeader(watch: WatchView): JevHeader {
   const tally = `${watch.read.turns.toLocaleString("en-US")} turns read · ${spent(watch.read.cost)} spent so far`;
   const running = watch.seats.filter((seat) => seat.running).length;
   if (running > 0) {
-    return { title: `Jev is reading ${plural(running, "seat")}${watch.lanes > 1 ? ` in ${watch.lanes} lanes` : ""}`, sub: `Last read ${watch.lastRead === null ? "not yet" : since(watch.lastRead)} · ${tally}`, word, tone: "success" };
+    return { title: `Jev is watching ${plural(running, "agent")}${watch.lanes > 1 ? ` in ${watch.lanes} work streams` : ""}`, sub: `Last check ${watch.lastRead === null ? "not yet" : since(watch.lastRead)} · ${tally}`, word, tone: "success" };
   }
-  return { title: "Nothing is running", sub: watch.lastRead === null ? "Jev has not read a turn here yet." : `Jev last read a turn here ${since(watch.lastRead)} · ${tally}`, word, tone: "muted" };
+  return { title: "Nothing is running", sub: watch.lastRead === null ? "Jev has not checked a turn here yet." : `Jev last checked a turn here ${since(watch.lastRead)} · ${tally}`, word, tone: "muted" };
 }
 
 /** An incident's lines as the card shows them: who and when, how it was raised, and where it has got to. */
@@ -509,14 +509,14 @@ export type IncidentLines = { sub: string; source: string; state: string; danger
 
 export function incidentLines(item: WatchIncident, watch: Pick<WatchView, "by" | "judgeMinutes" | "failing">): IncidentLines {
   const reader = watch.by === "seat" ? "the Watcher" : "Jev";
-  const source = item.source === "watcher" ? "raised by the Watcher" : item.source === "jev" ? (item.sure ? `Jev ${pct(item.sure.p)} sure · bar ${pct(item.sure.bar)}` : "raised by Jev") : "measured in code";
+  const source = item.source === "watcher" ? "noticed by the Watcher" : item.source === "jev" ? (item.sure ? `Jev ${pct(item.sure.p)} sure · reports at ${pct(item.sure.bar)}` : "noticed by Jev") : "built-in check";
   let state: string;
   if (item.told === "lead") state = item.lane ? `told Lead ${item.lane}` : "told its Lead";
   else if (item.told === "supervisor") state = "told the Supervisor";
-  else if (item.held === "awaiting") state = watch.failing ? `held · Jev is not answering, told after ${watch.judgeMinutes} min` : watch.by === "seat" ? `held · waiting for the Watcher, up to ${watch.judgeMinutes} min` : `held · Jev takes a second look, up to ${watch.judgeMinutes} min`;
+  else if (item.held === "awaiting") state = watch.failing ? `held · Jev is not answering, sent after ${watch.judgeMinutes} min` : watch.by === "seat" ? `held · waiting for the Watcher, up to ${watch.judgeMinutes} min` : `held · Jev takes a second look, up to ${watch.judgeMinutes} min`;
   else if (item.held === "vetoed") state = `held back by ${reader}`;
   else if (item.held === "budget") state = "held · today's limit is reached";
-  else if (item.held === "nobody") state = "held · nobody is seated to tell";
+  else if (item.held === "nobody") state = "held · no agent is running to tell";
   else if (item.held === "shadow") state = "recorded · mail is off";
   else state = "recorded";
   return { sub: `${item.name} · ${since(item.minutes)}`, source, state, danger: item.told === "supervisor" && item.level === "page" };
@@ -532,20 +532,20 @@ export function leaning(seats: WatchSeat[]): { leaning: (WatchSeat & { lean: Wat
 export function trackRecord(marks: WatchView["marks"]): { title: string; percent: string | null; parts: [number, number, number]; hint: string } {
   const judged = marks.useful + marks.noise;
   const parts: [number, number, number] = [marks.useful, marks.noise, marks.unknown];
-  if (judged + marks.unknown === 0) return { title: "Nothing marked yet", percent: null, parts, hint: "The Leads and the Supervisor mark each incident with ack: useful, noise or unknown." };
+  if (judged + marks.unknown === 0) return { title: "Nothing marked yet", percent: null, parts, hint: "The Leads and the Supervisor mark each notice as useful, noise or unknown." };
   const tune = judged >= 20 ? "there are enough marks now to run node bin/calibrate.ts." : "with 20 or more marks, run node bin/calibrate.ts.";
   return {
-    title: `${marks.useful} of ${judged} marked incidents were worth it`,
+    title: `${marks.useful} of ${judged} marked notices were useful`,
     percent: judged > 0 ? pct(marks.useful / judged) : null,
     parts,
-    hint: `${marks.useful} useful · ${marks.noise} noise · ${marks.unknown} unknown, as the Leads and the Supervisor marked them. Noise is what the bars are tuned against: ${tune}`,
+    hint: `${marks.useful} useful · ${marks.noise} noise · ${marks.unknown} unknown, as the Leads and the Supervisor marked them. Noise is what the reporting thresholds are tuned against: ${tune}`,
   };
 }
 
 /** The Watcher seat as the Flow canvas draws it, beside the Supervisor. */
 export function watcherState(watcher: WatchView["watcher"]): { state: string; alive: boolean } {
-  if (!watcher) return { state: "not seated · it sits once a lane is open", alive: false };
-  const waiting = watcher.queued > 0 ? ` · ${plural(watcher.queued, "reading")} waiting` : "";
+  if (!watcher) return { state: "not started · starts once a work stream is open", alive: false };
+  const waiting = watcher.queued > 0 ? ` · ${plural(watcher.queued, "check")} waiting` : "";
   return { state: `${watcher.status}${waiting}`, alive: watcher.status !== "closed" };
 }
 

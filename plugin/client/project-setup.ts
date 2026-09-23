@@ -1,5 +1,5 @@
 import type { Binding, Operation, SupervisionView } from "../shared/supervision.ts";
-import type { Layer } from "./data.ts";
+import type { Layer, RoleChoice } from "./data.ts";
 
 export const workGrants: Operation[] = ["observe", "message", "answer", "open_lane", "set_project", "ack", "coordinate"];
 
@@ -27,4 +27,19 @@ export async function addSupervisedProject(input: { root: string; name: string; 
 
 export function bindingInput(binding: Binding, active: boolean, supervisor = binding.supervisor?.agent ?? null) {
   return { revision: binding.revision, active, supervisor, projects: binding.projects.map(({ id, grants }) => ({ id, grants })) };
+}
+
+type Settings = { status: string; revision?: string; values?: Layer; error?: string };
+
+/** Replaces the project's role choices outright: attaching folds them in, which could never go back to the team defaults. */
+export async function writeRoles(slug: string, roles: Record<string, RoleChoice> | undefined, calls: {
+  read(input: { project: string }): Promise<Settings>;
+  write(input: { project: string; revision: string; values: Layer }): Promise<Settings>;
+}): Promise<void> {
+  const held = await calls.read({ project: slug });
+  if (held.status !== "ready" || held.revision === undefined) throw new Error(held.error ?? "This project's settings could not be read.");
+  const { roles: _old, ...rest } = held.values ?? {};
+  const kept = Object.fromEntries(Object.entries(roles ?? {}).filter(([, choice]) => Object.keys(choice).length));
+  const written = await calls.write({ project: slug, revision: held.revision, values: Object.keys(kept).length ? { ...rest, roles: kept } : rest });
+  if (written.status !== "saved") throw new Error(written.error ?? "The team could not be saved.");
 }

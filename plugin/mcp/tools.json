@@ -2,7 +2,7 @@
   "supervisor": [
     {
       "name": "open_lane",
-      "description": "Open a lane for one outcome: by default it takes over the project's own working copy, creates the lane branch there and starts a Lead with this directive, so nothing is created and nothing is left to clean up. Any number of lanes may be open at once, and a second one gets a working copy of its own without being asked. A writeSet is yours to declare or leave out: when this lane declares one, it is checked against the open lanes' writeSets and contracts and against the paths the project keeps to one writer; a lane that declares none is not checked.",
+      "description": "Open a lane for one outcome: by default it takes over the project's own working copy, creates the lane branch there and starts a Lead with this directive, so nothing is created and nothing is left to clean up. Any number of lanes may be open at once; while another lane is in the project's copy, pass isolate or after, since one checkout holds one branch. A writeSet is yours to declare or leave out: when this lane declares one, it is checked against the open lanes' writeSets and contracts and against the paths the project keeps to one writer; a lane that declares none is not checked.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -42,11 +42,19 @@
           },
           "isolate": {
             "type": "boolean",
-            "description": "Give this lane a working copy of its own instead of the project's. You do not need it when another lane is already in the project's copy: the desk takes one for this lane on its own, because one checkout holds one branch. Pass it when the Human asked for their own checkout back, or to keep this lane out of it. The copy and everything it needed are torn down when the lane closes."
+            "description": "Give this lane a working copy of its own instead of the project's: to start now while another lane is in the project's copy, when the Human wants their checkout back, or to keep this lane out of it. The Human sees its work in their checkout only once it lands. The copy is torn down when the lane closes."
           },
           "base": {
             "type": "string",
             "description": "Optional base branch; defaults to the project's."
+          },
+          "onBranch": {
+            "type": "boolean",
+            "description": "Carry on the branch the project's own copy is on, here, instead of starting a lane branch, once the Human has chosen that. Nothing is switched and uncommitted work stays where it is, for the lane to build on. The lane is never merged anywhere: landing it runs the gate and closes it, and the branch stays checked out. It takes no base and no isolate, and is refused while another lane works in the project's copy."
+          },
+          "newBranch": {
+            "type": "string",
+            "description": "With onBranch: first start this branch where the copy is, taking its uncommitted work along, and carry that on instead; for when the Human chose a new branch that keeps their work in progress and agreed its name. It must not exist yet."
           },
           "writeSet": {
             "type": "array",
@@ -62,9 +70,16 @@
             },
             "description": "Shared files or modules this lane depends on without writing."
           },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lanes this one waits for. Nothing starts until every one has landed; it then opens by itself, and you get a letter if it cannot. Takes no newBranch."
+          },
           "detourOf": {
             "type": "string",
-            "description": "The lane this one clears the way for, when a Lead found a missing prerequisite mid-lane. The detour gets its own Lead and hands back; the lane it unblocks waits rather than widening."
+            "description": "The lane this one clears the way for, when a Lead found a missing prerequisite mid-lane. The detour gets its own Lead in a copy of its own and hands back; the lane it unblocks waits rather than widening."
           },
           "role": {
             "type": "string",
@@ -135,7 +150,7 @@
     },
     {
       "name": "close_lane",
-      "description": "Close a lane and archive its agents. With land true the desk first merges the base branch into the lane in the lane's own copy when the base has moved, runs the project's gate there, then moves the base branch up to the lane. If any of that cannot happen the lane stays open and the reason comes back; a conflict with the base is its Lead's to settle in the lane. A landed lane branch is deleted once its copy is put away; one closed without landing is kept. A red gate stops the landing unless you land over it with overGate true \u2014 the verdict is evidence, and landing over it is your call.",
+      "description": "Close a lane and archive its agents. With land true the desk first merges the base branch into the lane in the lane's own copy when the base has moved, runs the project's gate there, then moves the base branch up to the lane. If any of that cannot happen the lane stays open and the reason comes back; a conflict with the base is its Lead's to settle in the lane. A landed lane branch is deleted once its copy is put away; one closed without landing is kept. A lane opened with onBranch is not merged or switched away from: landing it runs the gate and closes it, and its branch stays as it is. A red gate stops the landing unless you land over it with overGate true — the verdict is evidence, and landing over it is your call.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -160,6 +175,89 @@
         "required": [
           "lane",
           "land",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "amend_lane",
+      "description": "Change what an open or waiting lane is asked. Give only the fields that change; the old values are kept with why. Its Lead is told, and a READY it gave before no longer stands.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "string",
+            "description": "The lane to change."
+          },
+          "why": {
+            "type": "string",
+            "description": "What the Human asked that changes it, in a sentence."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "The outcome as it stands now."
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every acceptance line as it stands now, not only the new one."
+          },
+          "outOfScope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Everything out of scope as it stands now."
+          },
+          "writeSet": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Paths or globs it writes now."
+          },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Shared files or modules it depends on now."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
+          }
+        },
+        "required": [
+          "lane",
+          "why",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "replace_lead",
+      "description": "Seat a new Lead on an open lane whose Lead is gone, where the lane stands: its copy, branch, tasks and the asks waiting on the old Lead carry over, and the new Lead is told it takes over. A Lead Paseo already started for the lane is taken on instead of a second one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "string",
+            "description": "The lane whose Lead is gone."
+          },
+          "role": {
+            "type": "string",
+            "description": "Optional role to lead it, when the kit has more than one that can lead. Left out, the kit's first."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
+          }
+        },
+        "required": [
+          "lane",
           "project"
         ]
       }
@@ -372,7 +470,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Recent entries, 1\u201350; default 20. Long entries are explicitly truncated."
+            "description": "Recent entries, 1–50; default 20. Long entries are explicitly truncated."
           }
         },
         "required": [
@@ -433,6 +531,13 @@
           "parallel": {
             "type": "boolean",
             "description": "Run beside the lane's writer in a separate working copy. Only for an independent write set."
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tasks of this lane this one waits for. Nothing starts until every one has been accepted; it then starts by itself, and you get a letter if it cannot."
           },
           "role": {
             "type": "string",
@@ -545,6 +650,45 @@
         "required": [
           "task",
           "text"
+        ]
+      }
+    },
+    {
+      "name": "amend_task",
+      "description": "Change what a task asks while its Peer works on it. Give only the fields that change; the old values are kept with why, and the Peer reads the change at its next turn. A task whose contract changed is better cut and started again.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "The task to change."
+          },
+          "why": {
+            "type": "string",
+            "description": "Why it changes, in a sentence."
+          },
+          "goal": {
+            "type": "string",
+            "description": "The goal as it stands now."
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every acceptance line as it stands now, not only the new one."
+          },
+          "outOfScope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Everything out of scope as it stands now."
+          }
+        },
+        "required": [
+          "task",
+          "why"
         ]
       }
     },

@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 import type { Team } from "../catalog/team.ts";
 import type { Kit, RoleSpec } from "../catalog/kit.ts";
 import { type Ledger, type Task, ledgerFault, loadLedger, saveLedger } from "./ledger.ts";
 import type { Project } from "./project.ts";
+import { appendRecord } from "./records.ts";
 import { type Incidents, incidentsFault, loadIncidents, saveIncidents } from "./incidents.ts";
 import type { Sent } from "../runtime/watch/seat/reader.ts";
 import type { Supervision } from "../runtime/supervision.ts";
@@ -18,6 +17,9 @@ export type Caller = { id: string; role: RoleSpec; title: string; project: Proje
 export const str = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 export const strs = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : typeof value === "string" && value.trim() ? [value.trim()] : [];
+/** Only the fields the call names, read as text or as a list: an amendment changes what it is given and nothing else. */
+export const given = (args: Args, texts: string[], lists: string[]): Record<string, string | string[]> =>
+  Object.fromEntries([...texts.map((key) => [key, str(args[key])] as const), ...lists.map((key) => [key, strs(args[key])] as const)].filter(([key]) => args[key] !== undefined));
 export const ok = (text: string): ToolReply => ({ ok: true, text });
 export const no = (text: string): ToolReply => ({ ok: false, text });
 export const hash = (...parts: string[]): string => createHash("sha1").update(parts.join("\n")).digest("hex").slice(0, 12);
@@ -48,6 +50,7 @@ export type DeskDeps = {
 export class DeskContext {
   readonly kit: Kit;
   readonly projects = new Map<string, Project>();
+  readonly seating = new Set<string>();
   private readonly deps: DeskDeps;
   private readonly locks = new Map<string, Promise<unknown>>();
 
@@ -120,8 +123,7 @@ export class DeskContext {
 
   event(project: Project, data: Record<string, unknown>): void {
     try {
-      mkdirSync(project.state, { recursive: true });
-      appendFileSync(join(project.state, "events.log"), `${JSON.stringify({ at: new Date().toISOString(), ...data })}\n`);
+      appendRecord(project.state, "events", `${JSON.stringify({ at: new Date().toISOString(), ...data })}\n`);
     } catch (error) {
       console.error("seatworks-v2: events.log write failed:", error);
     }

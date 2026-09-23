@@ -2,7 +2,7 @@
 
 export type FlowSeat = { id: string; role: string; status: string; minutes: number; waiting: string[] };
 export type FlowTask = { id: string; title: string; status: string; kind: string; peer: FlowSeat | null; minutes: number; handback: number | null };
-export type FlowLane = { id: string; title: string; status: string; branch: string; base: string; lead: FlowSeat | null; tasks: FlowTask[]; taskCount: number; running: number; open: boolean };
+export type FlowLane = { id: string; title: string; status: string; branch: string; base?: string; lead: FlowSeat | null; tasks: FlowTask[]; taskCount: number; running: number; open: boolean; after?: string[]; held?: string };
 export type FlowAsk = { id: string; kind: string; fromRole: string; to: string; minutes: number; text: string };
 export type WatchLean = { title: string; p: number; bar: number };
 export type WatchSeat = {

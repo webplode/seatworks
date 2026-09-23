@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginHookContext, PluginLifecycleEvents, PluginServerContext } from "@getpaseo/plugin/server";
@@ -20,11 +20,13 @@ import type { CodeIndex } from "../desk/context.ts";
 import { Desk } from "../desk/desk.ts";
 import { type Ledger, type Sibling, alongside, laneOfLead, loadLedger, openAsksTo, taskOfPeer } from "../desk/ledger.ts";
 import { letters } from "../desk/letters.ts";
+import { appendRecord } from "../desk/records.ts";
 import { type Project, gateCommands, loadConfig, projectOf } from "../desk/project.ts";
 import { SettingsControl } from "./control.ts";
 import { codeIndex } from "./code-index.ts";
 import { type Letter, Outbox } from "./outbox.ts";
 import { Patrol } from "./patrol.ts";
+import { Relink, reloadPlugin } from "./relink.ts";
 import { registerRpc } from "./rpc.ts";
 import { Seating } from "./seating.ts";
 import { spoolDirs, takeRequests, writeReply } from "./spool.ts";
@@ -81,6 +83,7 @@ export class Runtime {
   private readonly sensorNoted = new Map<string, number>();
   private readonly troubles = new Map<string, { kind: string; at: number; detail: string }[]>();
   private readonly offline = new Set<string>();
+  private readonly relink = new Relink(reloadPlugin);
   private readonly makeIndex: (proxy: IndexedProxy) => CodeIndex;
   private readonly reload: () => Promise<boolean>;
   private readonly reloadAgent: AgentReload;
@@ -600,6 +603,7 @@ export class Runtime {
 
   private tickFailed(error: unknown): void {
     console.error("seatworks-v2: tick failed:", error);
+    if (this.tick && this.relink.failed(errorText(error))) console.error("seatworks-v2: lost the daemon link; reloading the plugin.");
     if (!/not connected|client closed|transport/i.test(errorText(error))) return;
     for (const project of this.desk.projects.values()) {
       if (this.offline.has(project.slug)) continue;
@@ -739,8 +743,7 @@ export class Runtime {
 
   private log(project: Project, line: string): void {
     try {
-      mkdirSync(project.state, { recursive: true });
-      appendFileSync(join(project.state, "attention.log"), `${new Date().toISOString()}  ${line}\n`);
+      appendRecord(project.state, "attention", `${new Date().toISOString()}  ${line}\n`);
     } catch (error) {
       console.error("seatworks-v2: attention log write failed:", error);
     }

@@ -13,7 +13,7 @@ export function tailOf(text: string): string {
 }
 
 /** Reads only the tail: a gate log can grow past what a whole-file read survives. Drops a partial first line. */
-function lastBytes(file: string, limit = 64 * 1024): string {
+export function lastBytes(file: string, limit = 64 * 1024): string {
   try {
     const size = statSync(file).size;
     const from = Math.max(0, size - limit);

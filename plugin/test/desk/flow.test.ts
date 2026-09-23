@@ -156,3 +156,27 @@ test("a working copy given back does not hand its name to the next one while a l
   ledger.slots.S2 = { id: "S2", path: "/w/shop/S2", createdAt: now + 2 };
   assert.equal(nextSlotId(ledger), "S3");
 });
+
+test("a lane carrying on the Human's branch is drawn without a base, so it never reads as a branch off itself", () => {
+  const ledger = working();
+  ledger.lanes.L2 = { ...ledger.lanes.L2!, base: "fix/login", branch: "fix/login", onBranch: true };
+  const lanes = flowView(project, ledger, seats, now).lanes;
+  assert.deepEqual(lanes.map((lane) => [lane.id, lane.branch, lane.base]), [["L1", "lane-l1", "main"], ["L2", "fix/login", undefined]]);
+});
+
+test("a lane waiting on others is drawn with what it waits for and why it is not open yet", () => {
+  const ledger = working();
+  ledger.lanes.L3 = { ...lane("L3", "open"), status: "waiting", after: ["L1"] };
+  ledger.lanes.L4 = { ...lane("L4", "open"), status: "waiting", after: ["L0"], held: { why: "Lane L0 closed without landing." } };
+  const [waits, held] = flowView(project, ledger, seats, now).lanes.slice(2);
+  assert.deepEqual([waits!.id, waits!.status, waits!.after, waits!.held, waits!.lead], ["L3", "waiting", ["L1"], undefined, null]);
+  assert.deepEqual([held!.id, held!.held], ["L4", "Lane L0 closed without landing."]);
+});
+
+test("the view is plain JSON as Paseo checks it, with no field left undefined, whatever the lanes hold", () => {
+  const ledger = working();
+  ledger.lanes.L2 = { ...ledger.lanes.L2!, base: "fix/login", branch: "fix/login", onBranch: true };
+  ledger.lanes.L3 = { ...lane("L3", "open"), status: "waiting", after: ["L1"] };
+  const view = flowView(project, ledger, seats, now);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(view)), view, "Paseo refuses a reply with an undefined field, and the panel shows the flow as unreadable");
+});

@@ -20,7 +20,11 @@ export const STEPS: StateStep[] = [{ to: 2, machine(root) {
   const old = JSON.parse(readFileSync(file, "utf8"));
   if (!old || typeof old !== "object" || Array.isArray(old)) throw new Error("Invalid version 2 settings; nothing was migrated.");
   writeJson(file, { ...old, profiles: old.profiles ?? { disabled: [] } });
-} }];
+} }, {
+  // 4 takes in upstream's formats 2 to 4 at once: Lane.onBranch, lanes that wait, their landed mark,
+  // amendment history and tasks that wait. All are optional additions, so nothing is carried.
+  to: 4,
+}];
 
 const MACHINE_FILES = ["state.json", "settings.json", "outbox.json", "content.json", "supervision.json", "dependencies.json", "jev-budget.json"];
 const PROJECT_FILES = ["ledger.json", "incidents.json", "project.json", "meta.json", "settings.json"];

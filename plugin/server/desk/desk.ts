@@ -8,6 +8,8 @@ import { type Args, type Caller, type CodeIndex, DeskContext, type DeskDeps, typ
 import { errorText } from "../core/errors.ts";
 import { type Ledger, type Task, loadLedger } from "./ledger.ts";
 import { clip, letters } from "./letters.ts";
+import { tidyRecords } from "./records.ts";
+import { fileRecords, keepArchived, takeFinished } from "./archive.ts";
 import { MergeQueue } from "./merge.ts";
 import { type Project, projectOf } from "./project.ts";
 import { Roster } from "./roster.ts";
@@ -19,6 +21,7 @@ import * as incidents from "./tools/incidents.ts";
 import * as lead from "./tools/lead.ts";
 import * as shared from "./tools/shared.ts";
 import * as supervisor from "./tools/supervisor.ts";
+import { openWaiting, startWaiting } from "./waiting.ts";
 import * as watcher from "./tools/watcher.ts";
 import * as worker from "./tools/worker.ts";
 import type { SupervisionControl } from "../runtime/supervision-control.ts";
@@ -29,11 +32,14 @@ import { firstOverlap } from "../core/scope.ts";
 const TOOLS: Record<string, Tool> = {
   open_lane: supervisor.openLane,
   close_lane: supervisor.closeLane,
+  amend_lane: supervisor.amendLane,
+  replace_lead: supervisor.replaceLead,
   set_project: supervisor.setProject,
   start_task: lead.startTask,
   start_review: lead.startReview,
   accept: lead.accept,
   rework: lead.rework,
+  amend_task: lead.amendTask,
   cut: lead.cut,
   report: lead.report,
   done: worker.done,
@@ -188,8 +194,31 @@ export class Desk {
     return this.services.ctx.setTask(project, taskId, change);
   }
 
-  sweep(project: Project, busy = false): Promise<void> {
-    return this.services.slots.sweep(project, busy);
+  /** The patrol's net under a close or an acceptance that never got to start what waited on it; one whose start failed waits for the next. */
+  async openWaiting(project: Project): Promise<void> {
+    await openWaiting(this.services, project, false);
+    await startWaiting(this.services, project, false);
+  }
+
+  /** Checked on a plain read first, so a round with nothing to archive does not rewrite the ledger; records follow once it is saved. */
+  async archiveFinished(project: Project, gone: (agentId: string) => boolean): Promise<void> {
+    const taken = takeFinished(loadLedger(project.state), gone)
+      ? await this.services.ctx.ledger(project, (ledger) => {
+          const found = takeFinished(ledger, gone);
+          if (found) keepArchived(project.state, found);
+          return found;
+        })
+      : undefined;
+    const filed = fileRecords(project.state, loadLedger(project.state));
+    if (taken || filed.length > 0) {
+      this.services.ctx.event(project, { kind: "ledger.archived", lanes: taken?.lanes.map((entry) => entry.lane!.id) ?? [], agents: taken?.agents.length ?? 0, asks: taken?.asks.length ?? 0, records: filed.length });
+    }
+  }
+
+  async sweep(project: Project, busy = false): Promise<void> {
+    await this.services.slots.sweep(project, busy);
+    const dropped = tidyRecords(project.state, loadLedger(project.state));
+    if (dropped.length > 0) this.services.ctx.event(project, { kind: "records.tidied", files: dropped.length });
   }
 
   /**
@@ -268,7 +297,7 @@ export class Desk {
             const scoped = <T>(values: Record<string, T>) => Object.fromEntries(Object.entries(values).filter(([id]) => selected.has(id)));
             return ok(JSON.stringify({ binding: { ...view.binding, projects: view.binding.projects.filter((p) => selected.has(p.id)) }, agents: view.agents.filter((a) => selected.has(a.project)), deliveries: view.deliveries.filter((d) => selected.has(d.project)), dependencies: view.dependencies.filter((d) => selected.has(d.producer.project) && selected.has(d.consumer.project)), communication: scoped(view.communication), problems: scoped(view.problems) }));
           }
-          const operation = ({ status: "observe", incidents: "observe" } as Record<string, Operation>)[request.tool] ?? request.tool as Operation;
+          const operation = ({ status: "observe", incidents: "observe", amend_lane: "open_lane", replace_lead: "open_lane" } as Record<string, Operation>)[request.tool] ?? request.tool as Operation;
           const scope = await this.supervision.verifyTarget(caller.id, String(args.project ?? ""), operation);
           if (request.tool === "close_lane" && args.land) this.supervision.store.authorize(caller.id, scope.scope.id, "land");
           caller.project = scope.project;

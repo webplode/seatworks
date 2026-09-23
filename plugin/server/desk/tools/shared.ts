@@ -1,10 +1,12 @@
 import { type Kit, can, roleNamed, rolesThatCan } from "../../catalog/kit.ts";
+import { uncommittedWork } from "../../catalog/project-files.ts";
+import { currentBranch, headSha } from "../../core/git.ts";
 import { hash, no, ok, str } from "../context.ts";
 import { type Ask, findTask, laneOfLead, loadLedger } from "../ledger.ts";
 import { letters } from "../letters.ts";
 import { loadConfig } from "../project.ts";
 import type { Tool } from "../services.ts";
-import { statusText } from "../status.ts";
+import { type OwnCopy, statusText } from "../status.ts";
 
 /** Names the roles that do hold the capability, since the kit is data and only the desk has read it. */
 export function namedOrNot(kit: Kit, capability: string, named: string, doing: string): string {
@@ -70,9 +72,16 @@ export const answer: Tool = async ({ ctx, roster }, caller, args) => {
   return ok(`Answered ${ask.id}; the asker ${posted === "sent" ? "has it" : "reads it as soon as it can take it"}.${waiting ? " Whoever it was waiting on has been told what it was answered with." : ""}`);
 };
 
+async function ownCopy(root: string): Promise<OwnCopy> {
+  const branch = await currentBranch(root);
+  return { branch, head: branch ? undefined : (await headSha(root))?.slice(0, 7), work: await uncommittedWork(root) };
+}
+
+/** A supervisor also sees the Human's own checkout, read from git only here, when it asks. */
 export const status: Tool = async ({ roster }, caller) => {
   const ledger = loadLedger(caller.project.state);
   const seats = new Map((await roster.open()).map((seat) => [seat.id, seat]));
   const lane = can(caller.role, "lead") ? laneOfLead(ledger, caller.id)?.id : undefined;
-  return ok(statusText(caller.project, ledger, loadConfig(caller.project.state), seats, Date.now(), lane));
+  const copy = can(caller.role, "supervise") ? await ownCopy(caller.project.root) : undefined;
+  return ok(statusText(caller.project, ledger, loadConfig(caller.project.state), seats, Date.now(), { laneId: lane, copy }));
 };

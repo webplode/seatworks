@@ -62,7 +62,7 @@ export function flowView(
   const lanes: FlowLane[] = [];
   let moreLanes = 0;
   for (const lane of Object.values(ledger.lanes)) {
-    if (lane.status !== "open") continue;
+    if (lane.status === "closed") continue;
     if (lanes.length >= LANE_CAP) {
       moreLanes += 1;
       continue;
@@ -73,12 +73,13 @@ export function flowView(
       title: lane.title,
       status: lane.status,
       branch: lane.branch,
-      base: lane.base,
+      ...(lane.onBranch ? {} : { base: lane.base }),
       lead: seatOf(seats, lane.lead, ledger.agents[lane.lead ?? ""]?.role ?? "lead", now),
       tasks: held.get(lane.id) ?? [],
       taskCount: count.total,
       running: count.running,
       open: open.has(lane.id),
+      ...(lane.status === "waiting" ? { after: lane.after ?? [], ...(lane.held ? { held: lane.held.why } : {}) } : {}),
     });
   }
 
@@ -95,7 +96,7 @@ export function flowView(
     });
   }
 
-  // The Supervisor seated now: `ledger.agents` is never pruned, so its first entry is the oldest, maybe archived.
+  // The Supervisor seated now: `ledger.agents` keeps each role's newest gone seat, so its first entry may be archived.
   const recorded = Object.values(ledger.agents).filter((agent) => supervises.has(agent.role));
   const live = recorded
     .filter((agent) => seats.has(agent.id))

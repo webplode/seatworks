@@ -1,8 +1,7 @@
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, unlinkSync } from "node:fs";
-import { readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import { gunzipSync, gzip } from "node:zlib";
+import { gunzipSync } from "node:zlib";
+import { appendRolling, rolledStamps } from "../../../core/rolling.ts";
 import type { View, ViewName } from "./views.ts";
 
 export type Kept = {
@@ -25,17 +24,14 @@ export type Kept = {
 };
 
 export const ROTATE_BYTES = 32 * 1024 * 1024;
-export const KEEP_FILES = 64;
+export const KEEP_BYTES = 96 * 1024 * 1024;
 
 export const KEPT_FILE = "current.jsonl";
-const ROTATED = /^(\d{8})\.jsonl(\.gz(\.part)?)?$/;
-const packed = promisify(gzip);
+const ROLLED = { prefix: "", ext: ".jsonl" };
 
 export function assessmentsDir(state: string): string {
   return join(state, "assessments");
 }
-
-const gone = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 
 /** Minutes since a reading was last kept, by one `stat` rather than parsing a megabytes-long file on every poll. */
 export function lastKept(state: string, now = Date.now()): number | undefined {
@@ -46,58 +42,10 @@ export function lastKept(state: string, now = Date.now()): number | undefined {
   }
 }
 
-async function pack(plain: string): Promise<void> {
-  let data: Buffer;
-  try {
-    data = await readFile(plain);
-  } catch (error) {
-    if (gone(error)) return;
-    throw error;
-  }
-  try {
-    await writeFile(`${plain}.gz.part`, await packed(data));
-    await rename(`${plain}.gz.part`, `${plain}.gz`);
-  } catch (error) {
-    await unlink(`${plain}.gz.part`).catch(() => undefined);
-    throw error;
-  }
-  await unlink(plain).catch((error: unknown) => {
-    if (!gone(error)) throw error;
-  });
-}
+const stamps = (names: string[], complete = false) => rolledStamps(names, ROLLED, complete);
 
-function stamps(names: string[], complete = false): string[] {
-  const found = new Set<string>();
-  for (const name of names) {
-    const match = ROTATED.exec(name);
-    if (match && !(complete && match[3])) found.add(match[1]!);
-  }
-  return [...found].sort();
-}
-
-function prune(dir: string, keep: number): void {
-  const names = readdirSync(dir);
-  const all = stamps(names);
-  for (const stamp of all.slice(0, Math.max(0, all.length - keep))) {
-    for (const name of [`${stamp}.jsonl`, `${stamp}.jsonl.gz`, `${stamp}.jsonl.gz.part`]) if (names.includes(name)) unlinkSync(join(dir, name));
-  }
-}
-
-export function keepAssessment(state: string, kept: Kept, rotateAt = ROTATE_BYTES, keep = KEEP_FILES): Promise<void> {
-  const dir = assessmentsDir(state);
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, KEPT_FILE);
-  const line = `${JSON.stringify(kept)}\n`;
-  let rotated: string | undefined;
-  if (existsSync(file) && statSync(file).size + Buffer.byteLength(line) > rotateAt) {
-    const last = stamps(readdirSync(dir)).at(-1);
-    rotated = join(dir, `${String(Number(last ?? 0) + 1).padStart(8, "0")}.jsonl`);
-    renameSync(file, rotated);
-  }
-  appendFileSync(file, line);
-  if (!rotated) return Promise.resolve();
-  prune(dir, keep);
-  return pack(rotated);
+export function keepAssessment(state: string, kept: Kept, rotateAt = ROTATE_BYTES, keepBytes = KEEP_BYTES): Promise<void> {
+  return appendRolling({ dir: assessmentsDir(state), current: KEPT_FILE, ...ROLLED, rotateAt, keepBytes, plain: 0 }, `${JSON.stringify(kept)}\n`);
 }
 
 export type Tally = { turns: number; cost: number };

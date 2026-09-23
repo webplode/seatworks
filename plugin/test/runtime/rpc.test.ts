@@ -1,4 +1,3 @@
-import { STATE_VERSION } from "../../server/core/state.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -13,6 +12,7 @@ const { Runtime } = await import("../../server/runtime/runtime.ts");
 const { registerRpc } = await import("../../server/runtime/rpc.ts");
 const { makeKit } = await import("../kit.ts");
 const { KEPT } = await import("../../shared/rpc.ts");
+const { STATE_VERSION } = await import("../../server/core/state.ts");
 
 function served(paseo?: unknown, folders?: (query: string) => Promise<string[]>) {
   const kit = makeKit();
@@ -164,7 +164,9 @@ test("attaching a project is undone by detaching it, unless work is still runnin
   const state = join(HOME, ".local/share/seatworks-v2/projects", added.slug);
   writeFileSync(join(state, "ledger.json"), JSON.stringify({ version: STATE_VERSION, lanes: { L1: { id: "L1", status: "open" } }, tasks: {} }));
   const refused = await call("seatworks.projects.remove", { project: added.slug });
-  assert.match(refused.error, /open lane\(s\)/);
+  assert.match(refused.error, /1 open or waiting lane\(s\)/);
+  writeFileSync(join(state, "ledger.json"), JSON.stringify({ version: STATE_VERSION, lanes: { L1: { id: "L1", status: "waiting", after: ["L0"] } }, tasks: {} }));
+  assert.match((await call("seatworks.projects.remove", { project: added.slug })).error, /1 open or waiting lane\(s\)/, "a lane waiting to open is work still to come");
 
   // Closed lanes and their cut tasks are provenance that nothing deletes, so they must not count as work.
   writeFileSync(

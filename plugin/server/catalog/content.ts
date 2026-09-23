@@ -74,7 +74,7 @@ export function skillSources(kit: Kit, role: RoleSpec, extra: Map<string, string
   return found;
 }
 
-export const DESK_OWNED = new Set(["ledger.json", "incidents.json", "assessments", "project.json", "meta.json", "settings.json", "status.md", "events.log", "attention.log", "handbacks", "gates"]);
+export const DESK_OWNED = new Set(["ledger.json", "incidents.json", "assessments", "project.json", "meta.json", "settings.json", "status.md", "events.log", "attention.log", "handbacks", "gates", "archive"]);
 
 /** Derived from the role's prompt, skills and rules, since a hand-kept list drifted and the sandbox refused the writes it missed. */
 export function stateTargets(kit: Kit, role: RoleSpec, extra: Map<string, string> = new Map(), rules = ""): string[] {

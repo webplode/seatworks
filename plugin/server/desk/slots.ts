@@ -52,14 +52,47 @@ export class Slots {
     const run = await git(project.root, ["switch", "-c", branch, base]);
     if (run.code !== 0) throw new Error(run.stderr.trim() || "git switch failed");
     try {
-      const workspaceId = (await this.projectWorkspace(project)).id;
-      this.index(project, { id: "main", path: project.root, createdAt: Date.now() }, true);
+      const taken = await this.takeOwnCopy(project);
       this.ctx.event(project, { kind: "lane.inPlace", branch, base });
-      return { path: project.root, workspaceId };
+      return taken;
     } catch (error) {
       await this.giveBack(project, base, branch);
       throw error;
     }
+  }
+
+  /** Carries on the branch the project's own copy is on, or first starts `branch` from `from` there with the uncommitted work along. */
+  async carryOn(project: Project, branch: string, from?: string): Promise<{ path: string; workspaceId: string }> {
+    if (from) {
+      const run = await git(project.root, ["switch", "-c", branch]);
+      if (run.code !== 0) throw new Error(run.stderr.trim() || "git switch failed");
+    }
+    try {
+      const taken = await this.takeOwnCopy(project);
+      this.ctx.event(project, { kind: "lane.onBranch", branch, ...(from ? { from } : {}) });
+      return taken;
+    } catch (error) {
+      if (from) await this.unstart(project, from, branch);
+      throw error;
+    }
+  }
+
+  /** Undoes a branch `carryOn` started: it holds no commit yet, so the copy goes back to `from` with the uncommitted work and the branch is dropped. */
+  async unstart(project: Project, from: string, branch: string): Promise<void> {
+    if ((await currentBranch(project.root)) !== branch) return;
+    const run = await git(project.root, ["switch", from]);
+    if (run.code !== 0) {
+      this.ctx.log(project, `the project's own copy could not go back from ${branch} to ${from}: ${run.stderr.trim() || `git switch exited ${run.code}`}`);
+      return;
+    }
+    if ((await contains(project.root, from, branch)) === true) await git(project.root, ["branch", "-D", branch]);
+    this.ctx.event(project, { kind: "lane.unstarted", branch, from });
+  }
+
+  private async takeOwnCopy(project: Project): Promise<{ path: string; workspaceId: string }> {
+    const workspaceId = (await this.projectWorkspace(project)).id;
+    this.index(project, { id: "main", path: project.root, createdAt: Date.now() }, true);
+    return { path: project.root, workspaceId };
   }
 
   /** Undoes what `inPlace` did to the owner's repository: a lane failing mid-open has no slot id for `openLane` to clean up through. */

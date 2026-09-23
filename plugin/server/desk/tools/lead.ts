@@ -1,10 +1,9 @@
 import { roleThatCan } from "../../catalog/kit.ts";
 import { skillSources } from "../../catalog/content.ts";
 import { skillDirsFor } from "../../catalog/team.ts";
-import { branchExists, currentBranch, diffCounts, git, headSha, outsideOwned, resetHard, trackedFiles } from "../../core/git.ts";
+import { branchExists, currentBranch, diffCounts, git, headSha, outsideOwned, resetHard } from "../../core/git.ts";
 import { workState } from "../../catalog/project-files.ts";
-import { firstOverlap, serialHits, serialPaths } from "../../core/scope.ts";
-import { type Args, type Caller, hash, no, ok, str, strs } from "../context.ts";
+import { type Args, type Caller, given, hash, no, ok, str, strs } from "../context.ts";
 import { errorText } from "../../core/errors.ts";
 import { gateNote, laneGate } from "../gates.ts";
 import {
@@ -13,8 +12,7 @@ import {
   type Lane,
   type Ledger,
   type Task,
-  type TaskStatus,
-  activeTasks,
+  amend,
   findTask,
   laneOfLead,
   loadLedger,
@@ -23,14 +21,11 @@ import {
   slugify,
 } from "../ledger.ts";
 import { clip, letters } from "../letters.ts";
-import { type Project, loadConfig } from "../project.ts";
+import { holderOf, startPeer, taskPlacement } from "../opening.ts";
+import type { Project } from "../project.ts";
 import type { DeskServices, Tool } from "../services.ts";
+import { startWaiting, taskWaitsFor } from "../waiting.ts";
 import { namedOrNot } from "./shared.ts";
-
-const HOLDS: TaskStatus[] = ["running", "rework", "done", "stalled"];
-
-/** Handed-back and stalled tasks still hold the copy (their Peer is seated there), unless the stalled Peer's seat is gone. */
-const holds = (task: Task): boolean => HOLDS.includes(task.status) && !(task.status === "stalled" && task.peerGone);
 
 /** What is in the way, named: a stray message file reads as unfinished work otherwise. */
 async function uncommittedIn(cwd: string): Promise<string> {
@@ -38,12 +33,6 @@ async function uncommittedIn(cwd: string): Promise<string> {
   const lines = run.stdout.split("\n").filter((line) => line.trim());
   const shown = lines.slice(0, 6).map((line) => line.trim()).join(", ");
   return lines.length > 6 ? `${shown} and ${lines.length - 6} more` : shown || "something git reports but does not name";
-}
-
-function holderOf(ledger: Ledger, lane: Lane, except?: string): Task | undefined {
-  return Object.values(ledger.tasks).find(
-    (task) => task.lane === lane.id && task.id !== except && task.kind === "code" && task.mode !== "parallel" && holds(task),
-  );
 }
 
 function laneTask(ledger: Ledger, caller: Caller, id: string): { lane: Lane; task: Task } | string {
@@ -54,25 +43,7 @@ function laneTask(ledger: Ledger, caller: Caller, id: string): { lane: Lane; tas
   return { lane, task };
 }
 
-async function placementProblem(project: Project, ledger: Ledger, lane: Lane, owned: string[], parallel: boolean): Promise<string | undefined> {
-  const active = activeTasks(ledger, lane.id).filter((task) => task.kind === "code");
-  if (!parallel) {
-    const holder = holderOf(ledger, lane);
-    if (!holder) return undefined;
-    return holder.status === "done"
-      ? `${holder.id} has handed back and is waiting on you, and it still holds the lane's working copy — rework would wake its Peer in there. Accept or cut it first, or set parallel only for owned paths independent of it.`
-      : `${holder.id} is still writing in the lane's working copy, and it holds one writer at a time. Wait for its hand-back and accept or cut it, or set parallel only for owned paths independent of it.`;
-  }
-  const serial = serialHits(owned, serialPaths(await trackedFiles(lane.worktree ?? project.root), loadConfig(project.state).serialOnly));
-  if (serial.length > 0) return `A parallel task can't own ${serial.join(", ")}; run it in the lane's working copy instead.`;
-  for (const task of active) {
-    const clash = firstOverlap(owned, task.owned);
-    if (clash) return `The owned paths overlap ${task.id} at ${clash}; run it after ${task.id} instead of in parallel.`;
-  }
-  return undefined;
-}
-
-function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args, parallel: boolean, startSha: string | undefined): Promise<Task> {
+function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args, parallel: boolean, startSha: string | undefined, waiting?: { after: string[]; role: string }): Promise<Task> {
   const title = str(args.title);
   return desk.ctx.ledger(project, (current) => {
     const id = nextTaskId(current.lanes[lane.id]!, "code");
@@ -93,7 +64,10 @@ function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args
       worktree: parallel ? undefined : lane.worktree,
       slot: parallel ? undefined : lane.slot,
       startSha,
-      status: "running",
+      status: waiting ? "waiting" : "running",
+      after: waiting?.after,
+      // Who takes it, kept for when it starts: the call that asked for it is long gone by then.
+      opening: waiting && { role: waiting.role },
       openedAt: now,
       updatedAt: now,
       silent: 0,
@@ -104,15 +78,18 @@ function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args
 }
 
 export const startTask: Tool = async (desk, caller, args) => {
-  const { ctx, slots, agents } = desk;
+  const { ctx } = desk;
   const { project } = caller;
   const owned = strs(args.owned);
   const parallel = args.parallel === true;
+  const after = [...new Set(strs(args.after).map((id) => id.trim().toUpperCase()))];
   const ledger = loadLedger(project.state);
   const lane = laneOfLead(ledger, caller.id);
   if (!lane?.worktree) return no("You have no open lane.");
-  const problem = await placementProblem(project, ledger, lane, owned, parallel);
-  if (problem) return no(problem);
+  const pending = after.length > 0 ? taskWaitsFor(ledger, lane.id, after) : [];
+  if (typeof pending === "string") return no(`${pending} Start this task without waiting for it.`);
+  const problem = pending.length > 0 ? undefined : await taskPlacement(project, ledger, lane, owned, parallel);
+  if (problem) return no(`${problem.why} ${problem.instead}`);
   // Writing, not `work`: a reviewing role holds `work` too, and would be offered as a Peer that cannot write.
   const asked = str(args.role);
   const workRole = roleThatCan(ctx.kit, "write", asked || undefined);
@@ -123,37 +100,15 @@ export const startTask: Tool = async (desk, caller, args) => {
   if (unknown.length > 0) {
     return no(held.length === 0 ? `This kit gives ${workRole.label}s no skills, so ${unknown.join(", ")} cannot be opened.` : `${workRole.label}s have no skill called ${unknown.join(", ")}. They have: ${held.sort().join(", ")}.`);
   }
-  const task = await recordTask(desk, project, lane, args, parallel, parallel ? undefined : await headSha(lane.worktree));
-  try {
-    let slot: { id?: string; path: string; workspaceId?: string };
-    if (parallel) {
-      slot = await slots.acquire(project, task.branch!, lane.branch, { task: task.id });
-      await ctx.setTask(project, task.id, (entry) => Object.assign(entry, { slot: slot.id, worktree: slot.path }));
-    } else {
-      slot = lane.slot ? loadLedger(project.state).slots[lane.slot]! : { path: lane.worktree, workspaceId: lane.workspaceId };
-    }
-    const peer = await agents.start(project, slot, workRole.role, {
-      parent: caller.id,
-      title: `${task.id} ${task.title}`,
-      prompt: letters.brief(task, lane),
-      labels: { "seatworks.lane": lane.id, "seatworks.task": task.id, "seatworks.role": workRole.role },
-    });
-    await ctx.setTask(project, task.id, (entry) => {
-      entry.peer = peer;
-    });
-    await ctx.ledger(project, (current) => {
-      current.agents[peer] = { id: peer, role: workRole.role, lane: lane.id, task: task.id };
-    });
-    ctx.event(project, { kind: "task.started", task: task.id, peer, mode: task.mode, slot: slot.id ?? "in place" });
-    const where = parallel ? `in its own working copy ${slot.id} on ${task.branch}` : `in the lane's working copy on ${lane.branch}`;
-    return ok(`Started ${task.id} ${where} with Peer ${peer}. Its hand-back arrives as mail; there is nothing to wait for in this turn.`);
-  } catch (error) {
-    const failed = await ctx.setTask(project, task.id, (entry) => {
-      entry.status = "cut";
-    });
-    if (failed && parallel) await slots.release(project, failed.slot, failed.branch, lane.branch);
-    return no(`The Peer could not start: ${errorText(error)}`);
+  if (pending.length > 0) {
+    const task = await recordTask(desk, project, lane, args, parallel, undefined, { after, role: workRole.role });
+    ctx.event(project, { kind: "task.waiting", task: task.id, after });
+    return ok(`${task.id} waits for ${pending.map((entry) => `${entry.id} (${entry.status})`).join(", ")}. It starts by itself once they have all been accepted, checked again against the tasks running then; if it cannot, or one is cut, you get a letter. Cut it to drop it.`);
   }
+  const task = await recordTask(desk, project, lane, args, parallel, parallel ? undefined : await headSha(lane.worktree));
+  const started = await startPeer(desk, project, lane, task, { role: workRole.role, parent: caller.id, failed: "cut" });
+  if (typeof started === "string") return no(started);
+  return ok(`Started ${task.id} ${started.where} with Peer ${started.peer}. Its hand-back arrives as mail; there is nothing to wait for in this turn.`);
 };
 
 /** A landed parallel task's copy and branch are gone, so its change is read from the merge, not `laneBranch...HEAD`. */
@@ -235,13 +190,14 @@ export const startReview: Tool = async ({ ctx, agents }, caller, args) => {
   }
 };
 
-export const accept: Tool = async ({ ctx, agents, merges }, caller, args) => {
+export const accept: Tool = async (desk, caller, args) => {
+  const { ctx, agents, merges } = desk;
   const { project } = caller;
   const found = laneTask(loadLedger(project.state), caller, str(args.task));
   if (typeof found === "string") return no(found);
   const { lane, task } = found;
   if (task.kind !== "code") return no(`${task.id} is a review; cut it when you are done with it.`);
-  if (["merged", "queued", "merging", "cut"].includes(task.status)) return no(`${task.id} is ${task.status}.`);
+  if (["waiting", "merged", "queued", "merging", "cut"].includes(task.status)) return no(`${task.id} is ${task.status}.`);
   if (task.mode === "parallel") {
     await ctx.setTask(project, task.id, (entry) => {
       entry.status = "queued";
@@ -277,6 +233,7 @@ export const accept: Tool = async ({ ctx, agents, merges }, caller, args) => {
   await ctx.post(lane.lead, `merge:${task.id}:merged:${Date.now()}`, letters.merged(task, counts, outsideOwned(counts?.files ?? [], task.owned), gate), caller.project);
   if (updated) await agents.retire(project, updated, lane.branch);
   ctx.event(project, { kind: "task.accepted", task: task.id, mode: "lane" });
+  await startWaiting(desk, project, true);
   return ok(
     counts && counts.files.length === 0
       ? `${task.id} is accepted; it changed nothing, so ${lane.branch} stands where it did. The working copy is free for the next task.`
@@ -290,7 +247,7 @@ export const rework: Tool = async ({ ctx, roster }, caller, args) => {
     const found = laneTask(ledger, caller, str(args.task));
     if (typeof found === "string") return found;
     const { lane, task } = found;
-    if (["merged", "cut", "queued", "merging"].includes(task.status)) return `${task.id} is ${task.status}.`;
+    if (["waiting", "merged", "cut", "queued", "merging"].includes(task.status)) return `${task.id} is ${task.status}.`;
     const holder = task.mode === "parallel" ? undefined : holderOf(ledger, lane, task.id);
     if (holder) return `${holder.id} holds the lane's working copy; waking the Peer on ${task.id} in there would put two writers in one checkout. Accept or cut ${holder.id} first.`;
     task.status = "rework";
@@ -310,7 +267,29 @@ export const rework: Tool = async ({ ctx, roster }, caller, args) => {
     : ok(`Rework sent to the Peer on ${result.id}; its next hand-back arrives as mail.`);
 };
 
-export const cut: Tool = async ({ ctx, roster, slots }, caller, args) => {
+/** Changes what a task asks while its Peer works, keeping what it asked before; the Peer is told at its next turn, not cut off. */
+export const amendTask: Tool = async ({ ctx }, caller, args) => {
+  const changes = given(args, ["goal"], ["acceptance", "outOfScope"]);
+  if (changes.goal === "" || changes.acceptance?.length === 0) return no("A task keeps a goal and at least one acceptance line; give what it asks now.");
+  const done = await ctx.ledger(caller.project, (ledger) => {
+    const found = laneTask(ledger, caller, str(args.task));
+    if (typeof found === "string") return found;
+    const { task } = found;
+    if (["merged", "cut", "queued", "merging"].includes(task.status)) return `${task.id} is ${task.status}; start a task for what is asked now.`;
+    const amendment = amend(task, changes, caller.id, str(args.why));
+    if (!amendment) return `Nothing about ${task.id} would change; pass the fields it asks differently now.`;
+    task.updatedAt = Date.now();
+    return { task: { ...task }, amendment };
+  });
+  if (typeof done === "string") return no(done);
+  ctx.event(caller.project, { kind: "task.amended", task: done.task.id, fields: Object.keys(done.amendment.was), by: caller.id });
+  if (done.task.status === "waiting") return ok(`${done.task.id} is amended; it starts as it is now.`);
+  const posted = await ctx.post(done.task.peer, `amended:${done.task.id}:${done.task.amended!.length}`, letters.amended(done.task, done.amendment, "worker"));
+  return ok(`${done.task.id} is amended${posted === "nobody" ? ", and it has no Peer to tell" : "; its Peer has it at its next turn"}.`);
+};
+
+export const cut: Tool = async (desk, caller, args) => {
+  const { ctx, roster, slots } = desk;
   const { project } = caller;
   const ledger = loadLedger(project.state);
   const found = laneTask(ledger, caller, str(args.task));
@@ -337,6 +316,7 @@ export const cut: Tool = async ({ ctx, roster, slots }, caller, args) => {
   const kept = task.kind === "code" && task.mode === "parallel" ? await slots.release(project, task.slot, task.branch, lane.branch) : undefined;
   ctx.event(project, { kind: "task.cut", task: task.id, reason: str(args.reason), kept });
   const branch = kept ? ` Its branch ${kept} holds commits nothing else has and is kept.` : "";
+  await startWaiting(desk, project, true);
   return ok(`${task.id} is cut and its agent stopped.${undone}${branch}`);
 };
 

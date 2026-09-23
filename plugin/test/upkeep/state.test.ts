@@ -22,6 +22,13 @@ function machineAt(version: string): { root: string; shop: string } {
   return { root, shop: join(root, "projects", "shop-abc123") };
 }
 
+/** A fixture read as this version reads it, since an older one is refused until carried. */
+function carriedTo(version: string) {
+  const { root, shop } = machineAt(version);
+  upgradeState(root, undefined, undefined, NOW);
+  return loadLedger(shop);
+}
+
 test("the fixture of the current format exists, so the next change to a kept file has one to be carried from", () => {
   assert.ok(existsSync(join(FIXTURES, `v${STATE_VERSION}`)), `test/fixtures/state/v${STATE_VERSION} is missing`);
 });
@@ -29,11 +36,19 @@ test("the fixture of the current format exists, so the next change to a kept fil
 for (const version of readdirSync(FIXTURES).filter((name) => /^v\d+$/.test(name))) {
   test(`what was kept in state format ${version.slice(1)} is carried to this version and read in full`, () => {
     const { root, shop } = machineAt(version);
-    assert.deepEqual(upgradeState(root, undefined, undefined, NOW).failed, []);
+    const from = Number(version.slice(1));
+    const report = upgradeState(root, undefined, undefined, NOW);
+    assert.deepEqual(report.failed, []);
+    assert.deepEqual(report.upgraded, from === STATE_VERSION ? [] : [`machine: ${from} → ${STATE_VERSION}`, `shop-abc123: ${from} → ${STATE_VERSION}`]);
+    assert.equal(readJson<{ version?: number }>(join(root, "state.json"), {}).version, STATE_VERSION, "the machine now carries this version's number");
+    assert.equal(readJson<{ version?: number }>(join(shop, "ledger.json"), {}).version, STATE_VERSION, "and so does the ledger");
+    assert.deepEqual(readdirSync(shop).filter((name) => STATE_BACKUP.test(name)), from === STATE_VERSION ? [] : [`backup-state-${from}-20260922-071230`], "a copy of what was there is kept before anything moves");
+    assert.deepEqual(upgradeState(root, undefined, undefined, NOW), { upgraded: [], failed: [] }, "and a second start carries nothing again");
 
     assert.equal(ledgerFault(shop), undefined);
     const ledger = loadLedger(shop);
-    assert.deepEqual([Object.keys(ledger.lanes), Object.keys(ledger.tasks), Object.keys(ledger.asks)], [["L1"], ["L1-T1"], ["A1"]]);
+    assert.deepEqual([Object.keys(ledger.lanes), Object.keys(ledger.asks)], [["L1"], ["A1"]]);
+    assert.equal(ledger.tasks["L1-T1"]!.status, "merged", "the task every format has, whatever later formats add beside it");
     assert.equal(ledger.tasks["L1-T1"]!.handback?.summary, "Tax added");
     assert.equal(ledger.asks.A1!.answer, "Round half up.");
     assert.deepEqual(Object.keys(loadIncidents(shop).items), ["I1"]);
@@ -43,6 +58,23 @@ for (const version of readdirSync(FIXTURES).filter((name) => /^v\d+$/.test(name)
     assert.equal(readLayer(join(shop, "settings.json"), ProjectLayerSchema).status, "ready");
   });
 }
+
+// Format 4 takes in upstream's formats 2 to 4 at once; 2 and 3 here are this fork's machine-file steps.
+test("a lane carried on the Human's branch, its landing and what it was asked before an amendment read back from format 4, and a lane from before has none of them", () => {
+  const lane = carriedTo("v4").lanes.L1!;
+  assert.deepEqual([lane.onBranch, lane.branch, lane.base], [true, "fix/totals", "fix/totals"]);
+  assert.equal(lane.landed, true);
+  assert.deepEqual(lane.amended?.map((entry) => [entry.by, entry.was]), [["agent-sup-1", { acceptance: ["tax shown"] }]]);
+  const before = carriedTo("v3").lanes.L1!;
+  assert.deepEqual([before.onBranch, before.landed, before.amended], [undefined, undefined, undefined], "a lane from format 3 is the lane branch it always was");
+});
+
+test("a task that waited, and why it was held, read back from format 4, and a task from before has neither", () => {
+  const waited = carriedTo("v4").tasks["L1-T2"]!;
+  assert.deepEqual([waited.after, waited.opening?.role, waited.held?.tried], [["L1-T1"], "peer", true]);
+  const before = carriedTo("v3").tasks["L1-T1"]!;
+  assert.deepEqual([before.after, before.opening, before.held], [undefined, undefined, undefined]);
+});
 
 test("a step carries every project and the machine, keeps a copy of the files first, and runs once", () => {
   const { root, shop } = machineAt("v1");

@@ -38,12 +38,19 @@ export function cleanState(cwd: string): Promise<Cleanliness> {
   return cleanliness(cwd, ["status", "--porcelain", "--untracked-files=no"]);
 }
 
-/** Nothing uncommitted or untracked, as a lane takeover requires; `besides` excuses a change that is nobody's work. */
-export async function pristineState(cwd: string, besides: (path: string) => Promise<boolean> = async () => false): Promise<Cleanliness> {
+/** Uncommitted and untracked paths, or undefined when git cannot say; `besides` excuses a change that is nobody's work. */
+export async function uncommittedPaths(cwd: string, besides: (path: string) => Promise<boolean> = async () => false): Promise<string[] | undefined> {
   const run = await git(cwd, ["status", "--porcelain"]);
-  if (run.code !== 0) return "unknown";
-  for (const line of run.stdout.split("\n").filter(Boolean)) if (!(await besides(line.slice(3)))) return "dirty";
-  return "clean";
+  if (run.code !== 0) return undefined;
+  const found: string[] = [];
+  for (const line of run.stdout.split("\n").filter(Boolean)) if (!(await besides(line.slice(3)))) found.push(line.slice(3));
+  return found;
+}
+
+/** Nothing uncommitted or untracked, as a lane takeover requires. */
+export async function pristineState(cwd: string, besides?: (path: string) => Promise<boolean>): Promise<Cleanliness> {
+  const paths = await uncommittedPaths(cwd, besides);
+  return paths === undefined ? "unknown" : paths.length > 0 ? "dirty" : "clean";
 }
 
 export async function trackedFiles(cwd: string): Promise<string[]> {

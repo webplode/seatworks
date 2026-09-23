@@ -4,10 +4,12 @@ import { readJson, writeJson } from "../core/store.ts";
 import { errorText } from "../core/errors.ts";
 import { STATE_VERSION } from "../core/state.ts";
 
-export type LaneStatus = "open" | "closed";
-export type TaskStatus = "running" | "done" | "rework" | "queued" | "merging" | "merged" | "failed" | "cut" | "stalled";
+export type LaneStatus = "waiting" | "open" | "closed";
+export type TaskStatus = "waiting" | "running" | "done" | "rework" | "queued" | "merging" | "merged" | "failed" | "cut" | "stalled";
 /** Free-form: the ledger carries whatever it is told, because nothing routes on it. */
 export type AskKind = string;
+/** What a change replaced, kept so the record says what the work was asked before it was asked again. */
+export type Amendment = { at: number; by: string; why: string; was: Record<string, string | string[]> };
 
 export type Lane = {
   id: string;
@@ -21,6 +23,7 @@ export type Lane = {
   base: string;
   branch: string;
   detourOf?: string;
+  onBranch?: boolean;
   worktree?: string;
   slot?: string;
   writeSet: string[];
@@ -29,6 +32,11 @@ export type Lane = {
   workspaceId?: string;
   opener: string;
   status: LaneStatus;
+  after?: string[];
+  opening?: { isolate?: boolean; role?: string };
+  held?: { why: string; tried?: boolean };
+  landed?: boolean;
+  amended?: Amendment[];
   restoring?: Restoring;
   landing?: { by: string; writers: string[] };
   openedAt: number;
@@ -60,6 +68,10 @@ export type Task = {
   openedAt: number;
   updatedAt: number;
   handback?: Handback;
+  after?: string[];
+  opening?: { role: string };
+  held?: { why: string; tried?: boolean };
+  amended?: Amendment[];
   reworks?: number;
   silent: number;
   peerGone?: boolean;
@@ -159,6 +171,21 @@ export function readLedger(state: string): Ledger {
   return ledger;
 }
 
+/** Sets what `changes` gives and keeps what it replaced in the entry's history; undefined when nothing would change. */
+export function amend(entry: Lane | Task, changes: Record<string, string | string[]>, by: string, why: string, at = Date.now()): Amendment | undefined {
+  const fields = entry as unknown as Record<string, string | string[]>;
+  const was: Amendment["was"] = {};
+  for (const [field, value] of Object.entries(changes)) {
+    if (JSON.stringify(fields[field]) === JSON.stringify(value)) continue;
+    was[field] = fields[field]!;
+    fields[field] = value;
+  }
+  if (Object.keys(was).length === 0) return undefined;
+  const amendment = { at, by, why, was };
+  entry.amended = [...(entry.amended ?? []), amendment];
+  return amendment;
+}
+
 export function nextLaneId(ledger: Ledger): string {
   ledger.seq.lane += 1;
   return `L${ledger.seq.lane}`;
@@ -206,6 +233,11 @@ export function openAsksTo(ledger: Ledger, agentId: string): Ask[] {
 
 export function openAsksFrom(ledger: Ledger, agentId: string): Ask[] {
   return Object.values(ledger.asks).filter((ask) => ask.status === "open" && ask.from === agentId);
+}
+
+/** The lane in the project's own copy: an open one without a copy of its own, or a closed one whose Lead is still ending a turn there. */
+export function ownCopyHolder(lanes: Lane[]): Lane | undefined {
+  return lanes.find((lane) => lane.status === "open" && !lane.slot) ?? lanes.find((lane) => lane.restoring);
 }
 
 export function tasksOf(ledger: Ledger, laneId: string): Task[] {

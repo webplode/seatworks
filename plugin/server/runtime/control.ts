@@ -289,14 +289,14 @@ export class SettingsControl implements Control {
     if (!project) return { error: unknownProject(slug) };
     // Live work only: lanes and tasks are never removed, so counting them made Detach impossible after the first lane.
     const ledger = loadLedger(project.state);
-    const open = Object.values(ledger.lanes).filter((lane) => lane.status === "open").length;
+    const open = Object.values(ledger.lanes).filter((lane) => lane.status !== "closed").length;
     // A closed lane still restoring the owner's copy is live: detached, the repo stays on its branch for good.
     const restoring = Object.values(ledger.lanes).filter((lane) => lane.restoring).length;
     // A free slot row left by a failed checkout is the desk's pool, not a copy anyone holds.
     const copies = Object.values(ledger.slots).filter((slot) => slot.lane || slot.task || slot.releasing).length;
     if (open > 0 || copies > 0 || restoring > 0) {
       const held = [
-        open > 0 ? `${open} open lane(s)` : "",
+        open > 0 ? `${open} open or waiting lane(s)` : "",
         restoring > 0 ? `${restoring} closed lane(s) whose working copy — the project's own — is not back on its base branch yet: a seat is still writing there, or the copy has changes that stop the switch (see restore.held in events.log)` : "",
         copies > 0 ? `${copies} working cop${copies === 1 ? "y" : "ies"} still checked out` : "",
       ].filter(Boolean);
@@ -334,7 +334,7 @@ export class SettingsControl implements Control {
     const waiting = [...seats.values()].filter(
       (seat) => can(seatOf(this.deps.kit, seat.provider)?.role, "supervise") && projectOf(seat.cwd).slug === project.slug && (seat.pendingPermissions?.length ?? 0) > 0,
     );
-    return { text: statusText(project, loadLedger(project.state), loadConfig(project.state), seats, Date.now(), undefined, waiting, this.deps.held()) };
+    return { text: statusText(project, loadLedger(project.state), loadConfig(project.state), seats, Date.now(), { waiting, held: this.deps.held() }) };
   }
 
   async flow(slug: string, since?: string, open?: string[]): Promise<unknown> {

@@ -69,7 +69,10 @@
       "Edit(~/.local/share/seatworks-v2/projects/*/events.log)",
       "Edit(~/.local/share/seatworks-v2/projects/*/attention.log)",
       "Edit(~/.local/share/seatworks-v2/projects/*/handbacks/**)",
-      "Edit(~/.local/share/seatworks-v2/projects/*/gates/**)"
+      "Edit(~/.local/share/seatworks-v2/projects/*/gates/**)",
+      "Edit(~/.local/share/seatworks-v2/projects/*/archive/**)",
+      "Edit(~/.local/share/seatworks-v2/projects/*/events.*.log*)",
+      "Edit(~/.local/share/seatworks-v2/projects/*/attention.*.log*)"
     ]
   },
   "sandbox": {

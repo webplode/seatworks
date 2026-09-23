@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Cleanliness, git, pristineState } from "../core/git.ts";
+import { type Cleanliness, git, pristineState, uncommittedPaths } from "../core/git.ts";
 
 export const BEGIN = "<!-- seatworks:begin (written by Seatworks; edit outside this block, it is replaced whole) -->";
 export const END = "<!-- seatworks:end -->";
@@ -63,6 +63,11 @@ export async function onlyTheBlock(root: string, path: string): Promise<boolean>
 
 export function workState(cwd: string): Promise<Cleanliness> {
   return pristineState(cwd, (path) => onlyTheBlock(cwd, path));
+}
+
+/** The paths `workState` counts, so what the Supervisor is shown is what a lane takeover would refuse over. */
+export function uncommittedWork(cwd: string): Promise<string[] | undefined> {
+  return uncommittedPaths(cwd, (path) => onlyTheBlock(cwd, path));
 }
 
 /** A copy of its own is made from what is committed, so a block only in the working copy is missing there. */

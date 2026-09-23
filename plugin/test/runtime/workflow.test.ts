@@ -1,243 +1,21 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { mock, test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import type { WatchView, WatchSeat } from "../../shared/views.ts";
+import { HOME, type Pending, harness, ideCalls, kit, laneWithPeer, repo } from "./harness.ts";
 
-const HOME = mkdtempSync(join(tmpdir(), "sw2-flow-home-"));
-process.env.HOME = HOME;
-globalThis.fetch = (async () => new Response("{}", { status: 503 })) as typeof fetch;
-
-const { loadKit } = await import("../../server/catalog/kit.ts");
-const { applyModels } = await import("../../server/catalog/models.ts");
-const { loadLedger } = await import("../../server/desk/ledger.ts");
-const { projectOf } = await import("../../server/desk/project.ts");
-type Project = ReturnType<typeof projectOf>;
-const { Runtime } = await import("../../server/runtime/runtime.ts");
+const { placeProjectFiles } = await import("../../server/catalog/project-files.ts");
+const { saveLedger } = await import("../../server/desk/ledger.ts");
+const { KEEP_CLOSED_LANES } = await import("../../server/desk/archive.ts");
+const { loadConfig, projectOf } = await import("../../server/desk/project.ts");
+const { upgradeState } = await import("../../server/upkeep/state.ts");
+const { STATE_VERSION } = await import("../../server/core/state.ts");
 const { firstOverlap, serialHits, serialPaths, SERIAL_ONLY } = await import("../../server/core/scope.ts");
-const { FakeTimeline, settle } = await import("./fake-timeline.ts");
+const { settle } = await import("./fake-timeline.ts");
 const { readAssessments } = await import("../../server/runtime/watch/jev/assessments.ts");
-
-type Pending = { id: string; kind: string; name: string; title?: string; input?: Record<string, unknown> };
-type Fake = {
-  id: string;
-  provider: string;
-  workspaceId: string;
-  cwd: string;
-  title: string;
-  status: string;
-  archivedAt: string | null;
-  updatedAt: string;
-  sent: string[];
-  steered: string[];
-  pending: Pending[];
-  answered: { requestId: string; response: { behavior: string; updatedInput?: { answers?: Record<string, string> } } }[];
-  prompt?: string;
-};
-
-function fakePaseo() {
-  const agents = new Map<string, Fake>();
-  const workspaces = new Map<string, string>();
-  const workspaceNames = new Map<string, string>();
-  const workspaceProjects = new Map<string, string>();
-  const archivedWorkspaces = new Set<string>();
-  const timelines = new Map<string, InstanceType<typeof FakeTimeline>>();
-  const timelineOf = (id: string) => {
-    const found = timelines.get(id) ?? new FakeTimeline();
-    timelines.set(id, found);
-    return found;
-  };
-  let count = 0;
-  const ref = (id: string) => {
-    const agent = agents.get(id);
-    return {
-      id,
-      timeline: timelineOf(id),
-      get status() { return agent?.status ?? null; },
-      get cwd() { return agent?.cwd ?? null; },
-      get archivedAt() { return agent?.archivedAt ?? null; },
-      get pendingPermissions() { return agent?.pending ?? []; },
-      async refresh() {},
-      current() { return agent ? { id: agent.id, provider: agent.provider, cwd: agent.cwd, title: agent.title, workspaceId: agent.workspaceId } : null; },
-      async send(text: string, options?: { activeTurnBehavior?: string }) {
-        agent?.sent.push(text);
-        if (options?.activeTurnBehavior === "steer") agent?.steered.push(text);
-      },
-      async respondToPermission({ requestId, response }: Fake["answered"][number]) {
-        const at = agent?.pending.findIndex((request) => request.id === requestId) ?? -1;
-        if (!agent || at < 0) throw new Error(`No pending permission request with id '${requestId}'`);
-        agent.pending.splice(at, 1);
-        agent.answered.push({ requestId, response });
-      },
-      async archive() { if (agent) Object.assign(agent, { archivedAt: new Date().toISOString(), status: "closed" }); },
-    };
-  };
-  const add = (provider: string, cwd: string, title: string, status = "idle", prompt?: string) => {
-    const id = `agent-${++count}`;
-    agents.set(id, { id, provider, workspaceId: `workspace:${cwd}`, cwd, title, status, archivedAt: null, updatedAt: new Date().toISOString(), sent: [], steered: [], pending: [], answered: [], prompt });
-    return id;
-  };
-  const workspace = (id: string) => ({
-    id,
-    projectId: workspaceProjects.get(id) ?? null,
-    async refresh() {
-      const path = id.startsWith("workspace:") ? id.slice("workspace:".length) : workspaces.get(id);
-      return path ? { id, projectId: projectOf(path).slug, workspaceDirectory: path, archivingAt: archivedWorkspaces.has(id) ? new Date().toISOString() : null } : null;
-    },
-    agents: {
-      async create(options: { config: { provider: string }; title: string; prompt: string }) {
-        return ref(add(options.config.provider, workspaces.get(id)!, options.title, "running", options.prompt));
-      },
-    },
-  });
-  const paseo = {
-    projects: {
-      async list() {
-        const roots = [...new Set([...agents.values()].map((a) => projectOf(a.cwd).root))];
-        return { projects: roots.map((root) => ({ projectId: projectOf(root).slug, projectRootPath: root, projectDisplayName: root })) };
-      },
-    },
-    agents: {
-      ref,
-      // The daemon caps a page at 200 rows and reports the rest through pageInfo, so the fake does too.
-      async list(options?: { page?: { limit?: number; cursor?: string } }) {
-        const all = [...agents.values()].map((agent) => ({ agent: { ...agent, pendingPermissions: agent.pending } }));
-        const from = Number(options?.page?.cursor ?? 0);
-        const limit = options?.page?.limit ?? 200;
-        const next = from + limit;
-        return {
-          entries: all.slice(from, next),
-          pageInfo: { hasMore: next < all.length, nextCursor: next < all.length ? String(next) : null, prevCursor: null },
-        };
-      },
-    },
-    workspaces: {
-      // The daemon files a directory under the given project, or makes one of the directory when given none.
-      async create({ title, source }: { title?: string; source: { path: string; projectId?: string } }) {
-        const id = `ws-${workspaces.size + 1}`;
-        workspaces.set(id, source.path);
-        workspaceProjects.set(id, source.projectId ?? `prj:${source.path}`);
-        if (title) workspaceNames.set(id, title);
-        return workspace(id);
-      },
-      async list() {
-        return {
-          entries: [...workspaces.keys()].map((id) => ({ id, projectId: workspaceProjects.get(id)!, name: workspaceNames.get(id) ?? "", archivingAt: archivedWorkspaces.has(id) ? new Date().toISOString() : null })),
-          pageInfo: { nextCursor: null, prevCursor: null, hasMore: false },
-        };
-      },
-      async archive(id: string) {
-        archivedWorkspaces.add(typeof id === "string" ? id : (id as { id: string }).id);
-        return { archivedAt: new Date().toISOString() };
-      },
-      ref: workspace,
-    },
-  };
-  return { paseo: paseo as never, agents, add, workspaces, workspaceNames, workspaceProjects, archivedWorkspaces, timelineOf };
-}
-
-function repo(): { root: string; git: (cwd: string, ...args: string[]) => string } {
-  const root = mkdtempSync(join(tmpdir(), "sw2-flow-repo-"));
-  const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@x", ...args], { encoding: "utf-8" });
-  writeFileSync(join(root, "a.txt"), "one\ntwo\nthree\n");
-  writeFileSync(join(root, "b.txt"), "bee\n");
-  // A real one, because the desk now reads the serial-only rules against the files that exist.
-  writeFileSync(join(root, "package-lock.json"), "{}\n");
-  // An IntelliJ project, which is what the index these tests fake serves.
-  mkdirSync(join(root, ".idea"));
-  writeFileSync(join(root, ".idea", "misc.xml"), "<project/>\n");
-  git(root, "init", "-q", "-b", "main");
-  git(root, "add", "-A");
-  git(root, "commit", "-qm", "seed");
-  return { root, git };
-}
-
-const kit = loadKit(join(dirname(fileURLToPath(import.meta.url)), "..", ".."));
-const thinking = ["low", "medium", "high"].map((id) => ({ id, label: id }));
-applyModels(kit, {
-  claude: { at: "", error: null, models: [{ id: "claude-opus-5", label: "Opus 5", thinkingOptions: thinking }] },
-  codex: { at: "", error: null, models: [{ id: "gpt-5.6-luna", label: "GPT-5.6-Luna" }] },
-});
-
-const ideCalls: { kind: "open" | "sync" | "close"; path: string }[] = [];
-const ide = {
-  async open(path: string) {
-    ideCalls.push({ kind: "open" as const, path });
-    return { ok: true, text: "opened" };
-  },
-  async sync(path: string) {
-    ideCalls.push({ kind: "sync" as const, path });
-    return { ok: true, text: "synced" };
-  },
-  async close(path: string) {
-    ideCalls.push({ kind: "close" as const, path });
-    return { ok: true, text: "closed" };
-  },
-};
-
-function harness(outbox: string) {
-  const { root, git } = repo();
-  const state = join(HOME, ".local", "share", "seatworks-v2");
-  mkdirSync(state, { recursive: true });
-  // By Jev with a key and an unreachable endpoint: the watch on, the sensor silent unless a test asks.
-  writeFileSync(join(state, "settings.json"), JSON.stringify({ sensor: { key: "sk-or-harness" }, attention: { by: "jev" }, mcp: { "intellij-index": { enabled: true }, "code-search": { enabled: true }, context7: { enabled: true } } }));
-  const { paseo, agents, add: nativeAdd, workspaces, workspaceNames, workspaceProjects, archivedWorkspaces, timelineOf } = fakePaseo();
-  const runtime = new Runtime(kit, { outboxFile: join(HOME, outbox), paseo, codeIndex: (proxy: { id: string; gitExclude?: string[] }) => ({ ...ide, id: proxy.id, gitExclude: proxy.gitExclude ?? [] }), reloadDaemon: async () => true });
-  const project = projectOf(root);
-  runtime.supervision.store.change(runtime.supervision.store.read().revision, (binding) => { binding.active = false; binding.supervisor = null; binding.projects = []; });
-  const add: typeof nativeAdd = (...args) => {
-    const id = nativeAdd(...args);
-    if (args[0].includes("supervisor") && (!runtime.supervision.store.read().supervisor || agents.get(runtime.supervision.store.read().supervisor!.agent)?.archivedAt)) {
-      const selected = projectOf(args[1]);
-      runtime.supervision.store.change(runtime.supervision.store.read().revision, (binding) => {
-        binding.active = true;
-        binding.supervisor = { agent: id, workspace: `workspace:${args[1]}` };
-        if (!binding.projects.some((p) => p.id === selected.slug)) binding.projects.push({ id: selected.slug, slug: selected.slug, root: selected.root, name: selected.slug, grants: ["observe", "message", "answer", "open_lane", "set_project", "close_lane", "land", "ack", "coordinate"], leads: [] });
-      });
-    }
-    return id;
-  };
-  let n = 0;
-  // `where` is the calling working copy, since several desk keys turned out shared between projects.
-  const call = async (agent: string, role: string, tool: string, args: Record<string, unknown>, where = root) =>
-    runtime.desk.handle({ id: `${outbox}-${++n}`, agent, role, tool, args: role === "supervisor" ? { ...args, project: projectOf(where).slug } : args, cwd: where, at: Date.now() });
-  const idle = async (id: string) => {
-    agents.get(id)!.status = "idle";
-    runtime.outbox.turnEnded(id);
-    await runtime.outbox.pump(id);
-  };
-  const commit = (cwd: string, file: string, text: string) => {
-    writeFileSync(join(cwd, file), text);
-    git(cwd, "add", "-A");
-    git(cwd, "commit", "-qm", `edit ${file}`);
-  };
-  const ledger = (of: Project = project) => loadLedger(of.state);
-  const tick = (now?: number) => (runtime as unknown as { patrol: { tick(now?: number): Promise<void> } }).patrol.tick(now);
-  // Paseo fires a turn start before a turn end; without one, a turn is measured from half an hour ago.
-  const beginTurn = (id: string) => (runtime as unknown as { turnStarted(agentId: string): void }).turnStarted(id);
-  // Paseo hands this hook the seat's whole append-only timeline, not the turn that ended.
-  const told = new Map<string, unknown[]>();
-  const endTurn = (id: string, text: string, ...calls: unknown[]) => {
-    const timeline = told.get(id) ?? [];
-    timeline.push({ type: "user_message", text: "go" }, ...calls, { type: "assistant_message", text });
-    told.set(id, timeline);
-    return (runtime as unknown as { turnEnded: (event: unknown) => Promise<void> }).turnEnded({
-      agent: { id, provider: agents.get(id)!.provider, cwd: agents.get(id)!.cwd, title: agents.get(id)!.title, parentAgentId: null, workspaceId: null },
-      turnId: `t-${id}-${Date.now()}`,
-      outcome: { kind: "completed" },
-      timeline: [...timeline],
-    });
-  };
-  const permission = (id: string, request: Pending) =>
-    (runtime as unknown as { permissionRequested: (event: unknown) => Promise<void> }).permissionRequested({
-      agent: { id, provider: agents.get(id)!.provider, cwd: agents.get(id)!.cwd, title: agents.get(id)!.title, parentAgentId: null, workspaceId: null },
-      request,
-    });
-  return { root, git, paseo, agents, add, workspaces, workspaceNames, workspaceProjects, archivedWorkspaces, runtime, project, call, idle, commit, ledger, endTurn, tick, beginTurn, permission, timelineOf };
-}
 
 test("write sets overlap by path prefix and glob, and serial-only paths are caught", () => {
   assert.equal(firstOverlap(["src/pages/"], ["src/api/"]), undefined);
@@ -396,6 +174,195 @@ test("a lane that fails after taking the project's own copy gives it back", asyn
   assert.equal(lane.status, "closed");
   assert.equal(h.git(h.project.root, "branch", "--show-current").trim(), before, "the owner's repository is back where it was");
   assert.equal(h.git(h.project.root, "branch", "--list", lane.branch).trim(), "", "and the branch the lane made, which holds nothing, is gone");
+
+  // The first attempt left the project's workspace behind, so the daemon has to fail to find it as well as to make one.
+  const workspaces = (h.paseo as unknown as { workspaces: { create: unknown; list: unknown } }).workspaces;
+  workspaces.list = workspaces.create = async () => {
+    throw new Error("the daemon made no workspace");
+  };
+  const unhoused = await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", acceptance: ["four"], outOfScope: ["anything else in the repository"] });
+  assert.equal(unhoused.ok, false, unhoused.text);
+  assert.equal(h.git(h.project.root, "branch", "--show-current").trim(), before, "a copy Paseo would not take is handed back too");
+  // The Supervisor's scope check reads Paseo's workspaces too, so here the call is refused before any lane is recorded.
+  assert.equal(h.ledger().lanes.L2, undefined, "nothing was taken, so nothing is left to hand back");
+  h.runtime.dispose();
+});
+
+test("the Supervisor's status shows the Human's own copy, names a choice only where carrying on is a real question, and what each open lane is for", async () => {
+  const h = harness("outbox-own-copy.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.call(sup, "supervisor", "set_project", { base: "main", gate: "true" });
+  const status = async () => (await h.call(sup, "supervisor", "status", {})).text;
+  const choice = /The Human decides where the next lane works/;
+  placeProjectFiles(h.root, "Team rules.");
+
+  const fresh = await status();
+  assert.match(fresh, /Base main\.[^\n]*\n\n## The project's own copy\n\n[^\n]* is on main, clean\.\nNo lane is working in it\./, fresh);
+  assert.doesNotMatch(fresh, choice, "on the base and clean but for the desk's own block, a lane just opens");
+
+  h.git(h.root, "switch", "-qc", "fix/login");
+  const offBase = await status();
+  assert.match(offBase, /is on fix\/login, clean\./);
+  assert.match(offBase, choice, "the reported case: a clean branch that is not the base");
+  assert.match(offBase, /carry on fix\/login here, or a new branch off main/);
+
+  for (let n = 1; n <= 12; n++) writeFileSync(join(h.root, `wip-${String(n).padStart(2, "0")}.txt`), "half done\n");
+  writeFileSync(join(h.root, "a.txt"), "edited\n");
+  const dirty = await status();
+  assert.match(dirty, /with 13 uncommitted files: a\.txt, wip-01\.txt, [^\n]*wip-09\.txt, and 3 more\./, dirty);
+  assert.match(dirty, /takes the uncommitted work along/);
+
+  h.git(h.root, "stash", "-u", "-q");
+  h.git(h.root, "switch", "-q", "main");
+  const opened = await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", acceptance: ["four"], outOfScope: ["anything else"], writeSet: ["a.txt"], contracts: ["b.txt"] });
+  assert.equal(opened.ok, true, opened.text);
+  const held = await status();
+  assert.match(held, /Lane L1 is working in it\./);
+  assert.doesNotMatch(held, choice, "a lane holds the copy, so the next one takes a copy of its own");
+  assert.match(held, /Outcome: a\.txt gains words\nWrites: a\.txt\nDepends on: b\.txt/);
+
+  const lead = (await h.call(h.ledger().lanes.L1!.lead!, "lead", "status", {})).text;
+  assert.doesNotMatch(lead, /The project's own copy|Outcome:/, "a Lead's status is its own lane, as before");
+  h.runtime.dispose();
+});
+
+test("a lane asked to carry on the Human's branch works on it where it is, keeps their uncommitted work, and lands by its gate alone", async () => {
+  const h = harness("outbox-onbranch.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.call(sup, "supervisor", "set_project", { gate: "test ! -f BROKEN" });
+  h.git(h.root, "switch", "-qc", "fix/login");
+  h.commit(h.root, "a.txt", "one\ntwo\nthree\nhalf a fix\n");
+  writeFileSync(join(h.root, "b.txt"), "bee, still being edited\n");
+  const main = h.git(h.root, "rev-parse", "main").trim();
+  const scope = { outcome: "the login fix is finished", acceptance: ["a"], outOfScope: ["anything else in the repository"] };
+
+  const opened = await h.call(sup, "supervisor", "open_lane", { title: "Finish the fix", ...scope, onBranch: true });
+  assert.equal(opened.ok, true, opened.text);
+  const lane = h.ledger().lanes.L1!;
+  assert.equal(lane.branch, "fix/login", "no lane branch of its own");
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login");
+  assert.deepEqual(h.git(h.root, "branch", "--format=%(refname:short)").trim().split("\n").sort(), ["fix/login", "main"]);
+  assert.equal(readFileSync(join(h.root, "b.txt"), "utf-8"), "bee, still being edited\n", "the Human's uncommitted edit is where they left it");
+  assert.equal(h.agents.get(lane.lead!)!.cwd, h.project.root);
+  assert.match(h.agents.get(lane.lead!)!.prompt ?? "", /fix\/login, the Human's own[\s\S]*commit it as found in a commit of its own/, "the Human's work in progress stays theirs, apart from the lane's");
+  assert.notEqual(loadConfig(h.project.state).base, "fix/login", "a branch carried on is not made the project's base");
+
+  const second = await h.call(sup, "supervisor", "open_lane", { title: "Also here", ...scope, onBranch: true });
+  assert.equal(second.ok, false, "one checkout holds one branch, and L1 has it");
+  assert.match(second.text, /L1/);
+
+  h.commit(h.root, "b.txt", "bee, done\n");
+  const closed = await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: true });
+  assert.equal(closed.ok, true, closed.text);
+  assert.match(closed.text, /the work stays on fix\/login, the branch it carried on; nothing was merged anywhere/);
+  assert.equal(h.git(h.root, "rev-parse", "main").trim(), main, "nothing was merged into main");
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login", "and the Human's copy was not switched away");
+  assert.equal(readFileSync(join(h.root, "b.txt"), "utf-8"), "bee, done\n");
+  h.runtime.dispose();
+});
+
+test("carrying on a branch is refused where there is none to carry on, and a failed open leaves the Human's branch alone", async () => {
+  const h = harness("outbox-onbranch-refused.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const scope = { outcome: "x", acceptance: ["a"], outOfScope: ["anything else in the repository"] };
+  h.git(h.root, "switch", "-qc", "fix/login");
+
+  for (const extra of [{ isolate: true }, { base: "main" }]) {
+    const refused = await h.call(sup, "supervisor", "open_lane", { title: "Odd", ...scope, onBranch: true, ...extra });
+    assert.equal(refused.ok, false, JSON.stringify(extra));
+  }
+  const failed = await h.call(sup, "supervisor", "open_lane", { title: "No lead", ...scope, onBranch: true, role: "peer" });
+  assert.equal(failed.ok, false, failed.text);
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login", "still on the Human's branch");
+  assert.match(h.git(h.root, "branch", "--list", "fix/login"), /fix\/login/, "and it was not deleted");
+  assert.doesNotMatch(readFileSync(join(h.project.state, "events.log"), "utf-8"), /lane\.gaveBack/, "nor was it ever handed to the undo made for a lane branch");
+
+  writeFileSync(join(h.root, "b.txt"), "bee, half done\n");
+  const alone = await h.call(sup, "supervisor", "open_lane", { title: "Alone", ...scope, newBranch: "fix/login-2" });
+  assert.match(alone.text, /newBranch goes with onBranch/, "a new branch is only started for a lane that carries it on");
+  const taken = await h.call(sup, "supervisor", "open_lane", { title: "Taken", ...scope, onBranch: true, newBranch: "main" });
+  assert.equal(taken.ok, false);
+  assert.match(taken.text, /main already exists/);
+  const unled = await h.call(sup, "supervisor", "open_lane", { title: "No lead", ...scope, onBranch: true, newBranch: "fix/login-2", role: "peer" });
+  assert.equal(unled.ok, false, unled.text);
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login", "a branch started for a lane that failed to open is undone");
+  assert.equal(h.git(h.root, "branch", "--list", "fix/login-2").trim(), "");
+  assert.equal(readFileSync(join(h.root, "b.txt"), "utf-8"), "bee, half done\n", "and the uncommitted work came back with the copy");
+
+  h.git(h.root, "switch", "-q", "--detach");
+  const detached = await h.call(sup, "supervisor", "open_lane", { title: "Nowhere", ...scope, onBranch: true });
+  assert.equal(detached.ok, false);
+  assert.match(detached.text, /not on a branch/);
+  h.runtime.dispose();
+});
+
+test("a new branch the Human agreed to starts where their copy is, takes their uncommitted work along, and is carried on", async () => {
+  const h = harness("outbox-onbranch-new.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.call(sup, "supervisor", "set_project", { base: "main" });
+  h.git(h.root, "switch", "-qc", "fix/login");
+  writeFileSync(join(h.root, "b.txt"), "bee, half done\n");
+
+  const workspaces = (h.paseo as unknown as { workspaces: { create: unknown } }).workspaces;
+  const create = workspaces.create;
+  workspaces.create = async () => {
+    throw new Error("the daemon made no workspace");
+  };
+  const unhoused = await h.call(sup, "supervisor", "open_lane", { title: "Split off", outcome: "x", acceptance: ["a"], outOfScope: ["anything else in the repository"], onBranch: true, newBranch: "fix/login-2" });
+  workspaces.create = create;
+  assert.equal(unhoused.ok, false, unhoused.text);
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login", "a branch started for a copy Paseo would not take is undone");
+  assert.equal(h.git(h.root, "branch", "--list", "fix/login-2").trim(), "");
+  assert.equal(readFileSync(join(h.root, "b.txt"), "utf-8"), "bee, half done\n");
+
+  const opened = await h.call(sup, "supervisor", "open_lane", { title: "Split off", outcome: "x", acceptance: ["a"], outOfScope: ["anything else in the repository"], onBranch: true, newBranch: "fix/login-2" });
+  assert.equal(opened.ok, true, opened.text);
+  const lane = Object.values(h.ledger().lanes).find((entry) => entry.status === "open")!;
+  assert.equal(lane.branch, "fix/login-2");
+  assert.match((await h.call(sup, "supervisor", "status", {})).text, new RegExp(`## ${lane.id} Split off\\n\\nBranch fix/login-2, carried on in the project's own copy\\.`));
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login-2");
+  assert.equal(readFileSync(join(h.root, "b.txt"), "utf-8"), "bee, half done\n");
+  assert.equal(h.git(h.root, "rev-parse", "fix/login").trim(), h.git(h.root, "rev-parse", "fix/login-2").trim(), "the branch it left is where it was");
+
+  const closed = await h.call(sup, "supervisor", "close_lane", { lane: lane.id, land: false });
+  assert.equal(closed.ok, true, closed.text);
+  assert.equal(h.ledger().lanes[lane.id]!.restoring, undefined, "nothing is left to put back, so no round retries it");
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "fix/login-2");
+  assert.equal(readFileSync(join(h.root, "b.txt"), "utf-8"), "bee, half done\n");
+
+  h.git(h.root, "switch", "-q", "main");
+  const onBase = await h.call(sup, "supervisor", "open_lane", { title: "Straight on main", outcome: "x", acceptance: ["a"], outOfScope: ["anything else in the repository"], onBranch: true });
+  assert.equal(onBase.ok, true, onBase.text);
+  assert.match(onBase.text, /carries on main [^,]*, which is the project's base: nothing separates this work from it/, "allowed, and said plainly");
+  h.runtime.dispose();
+});
+
+test("a lane open when the Human updates the plugin from state 1 carries on and lands as the lane branch it was", async () => {
+  const h = harness("outbox-upgrade.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.call(sup, "supervisor", "set_project", { gate: "true" });
+  const opened = await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", acceptance: ["four"], outOfScope: ["anything else in the repository"] });
+  assert.equal(opened.ok, true, opened.text);
+  const lane = h.ledger().lanes.L1!;
+  h.commit(h.root, "a.txt", "one\ntwo\nthree\nfour\n");
+
+  // What the plugin before this version left on disk: the same ledger, numbered 1, and a machine with no number.
+  const file = join(h.project.state, "ledger.json");
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf-8")), version: 1 }));
+  const root = join(HOME, ".local", "share", "seatworks-v2");
+  rmSync(join(root, "state.json"), { force: true });
+  const report = upgradeState(root);
+  assert.deepEqual(report.failed, []);
+  assert.ok(report.upgraded.includes(`${h.project.slug}: 1 → ${STATE_VERSION}`), report.upgraded.join(", "));
+  assert.deepEqual(h.ledger().lanes.L1, lane, "the open lane is on record exactly as it was");
+
+  const closed = await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: true });
+  assert.equal(closed.ok, true, closed.text);
+  assert.equal(h.git(h.root, "show", "main:a.txt"), "one\ntwo\nthree\nfour\n", "the lane landed on its base");
+  h.agents.get(lane.lead!)!.status = "idle";
+  await h.endTurn(lane.lead!, "closing up");
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "main", "the copy is handed back on its base once the Lead stops");
+  assert.equal(h.git(h.root, "branch", "--list", lane.branch).trim(), "", "and the landed lane branch is gone");
   h.runtime.dispose();
 });
 
@@ -513,7 +480,7 @@ test("parallel work needs independent write sets and merges back from its own wo
   const clash = await h.call(sup, "supervisor", "open_lane", { title: "C", outcome: "c", acceptance: ["c"], outOfScope: ["anything else in the repository"], writeSet: ["b.txt"] });
   assert.equal(clash.ok, false);
   assert.match(clash.text, /overlaps lane L1/, "two lanes that declared the same file are one lane, whichever copy each of them writes in");
-  const fine = await h.call(sup, "supervisor", "open_lane", { title: "C", outcome: "c", acceptance: ["c"], outOfScope: ["anything else in the repository"], writeSet: ["c.txt"] });
+  const fine = await h.call(sup, "supervisor", "open_lane", { title: "C", outcome: "c", acceptance: ["c"], outOfScope: ["anything else in the repository"], writeSet: ["c.txt"], isolate: true });
   assert.equal(fine.ok, true, fine.text);
   assert.ok(h.ledger().lanes.L2!.slot, "L1 is writing in the project's own copy, so the next lane is given one instead of switching the branch under it");
   h.runtime.dispose();
@@ -810,7 +777,20 @@ test("one workspace carries a whole project, and the desk puts it away when the 
   h.runtime.dispose();
 });
 
-test("a lane that declared no write set does not lock the project to one lane: the next lane takes a copy of its own", async () => {
+test("a project removed while the plugin runs is not written back by the round", async () => {
+  const h = harness("outbox-removed.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.tick(Date.now());
+  assert.ok(existsSync(join(h.project.state, "status.md")), "a project on record has its status page");
+  // Its seats gone: a live one is a project still in use, and seeing it records the project again.
+  h.agents.get(sup)!.archivedAt = new Date().toISOString();
+  rmSync(h.project.state, { recursive: true, force: true });
+  await h.tick(Date.now());
+  assert.equal(existsSync(h.project.state), false, "the Human removed it, and the round leaves it removed");
+  h.runtime.dispose();
+});
+
+test("a lane that declared no write set does not lock the project to one lane, and where the next one works is the Supervisor's call", async () => {
   const h = harness("outbox-lockout.json");
   const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
   const scope = { outOfScope: ["anything else in the repository"] };
@@ -819,13 +799,17 @@ test("a lane that declared no write set does not lock the project to one lane: t
   const first = await h.call(sup, "supervisor", "open_lane", { title: "Authorization", outcome: "roles gate the api", acceptance: ["a"], ...scope });
   assert.equal(first.ok, true, first.text);
 
-  // One checkout is one branch, so the next lane gets its own copy rather than switching the first's.
-  const next = await h.call(sup, "supervisor", "open_lane", { title: "Authentication", outcome: "sessions exist", acceptance: ["a"], writeSet: ["src/auth/**"], ...scope });
+  // One checkout is one branch: the desk names both ways and takes neither for the Supervisor.
+  const asked = { title: "Authentication", outcome: "sessions exist", acceptance: ["a"], writeSet: ["src/auth/**"], ...scope };
+  const refused = await h.call(sup, "supervisor", "open_lane", asked);
+  assert.match(refused.text, /Lane L1 is working in the project's own copy on lane\/l1-authorization\. Pass isolate to open this lane in a copy of its own now, or open it with after L1/);
+  assert.equal(Object.keys(h.ledger().lanes).length, 1, "nothing is recorded for a lane that did not open");
+  const next = await h.call(sup, "supervisor", "open_lane", { ...asked, isolate: true });
   assert.equal(next.ok, true, next.text);
   assert.equal(h.git(h.root, "branch", "--show-current").trim(), h.ledger().lanes.L1!.branch, "the project's own copy stays on the lane it is carrying");
 
-  // The DETOUR of the concept: a hole found mid-lane gets its own Lead, and a copy of its own too.
-  const detour = await h.call(sup, "supervisor", "open_lane", { title: "Sessions", outcome: "sessions last a day", acceptance: ["a"], isolate: true, ...scope });
+  // The DETOUR of the concept: a hole found mid-lane gets its own Lead, and a copy of its own without asking, since it cannot wait.
+  const detour = await h.call(sup, "supervisor", "open_lane", { title: "Sessions", outcome: "sessions last a day", acceptance: ["a"], detourOf: "L1", ...scope });
   assert.equal(detour.ok, true, detour.text);
   const lanes = h.ledger().lanes;
   assert.equal(Object.values(lanes).filter((lane) => lane.status === "open").length, 3);
@@ -939,7 +923,7 @@ async function threeLanes(outbox: string, gate: string) {
   await h.call(sup, "supervisor", "set_project", { gate });
   const scope = { outOfScope: ["anything else in the repository"] };
   for (const [title, path] of [["Part A", "a/**"], ["Part B", "b/**"], ["Part C", "c/**"]] as const) {
-    const opened = await h.call(sup, "supervisor", "open_lane", { title, outcome: title, acceptance: ["done"], writeSet: [path], ...scope });
+    const opened = await h.call(sup, "supervisor", "open_lane", { title, outcome: title, acceptance: ["done"], writeSet: [path], isolate: title !== "Part A", ...scope });
     assert.equal(opened.ok, true, opened.text);
   }
   const lanes = h.ledger().lanes;
@@ -999,7 +983,7 @@ test("a lane main cannot be merged into is refused and stays open, its copy as i
   h.runtime.dispose();
 });
 
-test("a lane closed in the project's own copy does not switch the branch out from under the next lane", async () => {
+test("a lane closed in the project's own copy keeps that copy until its Lead stops, and the next lane waits for it or takes a copy of its own", async () => {
   const h = harness("outbox-stalerestore.json");
   const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
   const scope = { outOfScope: ["anything else in the repository"] };
@@ -1012,25 +996,28 @@ test("a lane closed in the project's own copy does not switch the branch out fro
   assert.equal(closed.ok, true, closed.text);
   assert.deepEqual(h.ledger().lanes.L1!.restoring!.writers, [first.lead!], "and the wait is on the record, not in memory");
 
-  // The next lane takes the project's copy, because nothing is open in it any more.
-  const next = await h.call(sup, "supervisor", "open_lane", { title: "Second", outcome: "y", acceptance: ["a"], ...scope });
+  // Switched now, the first Lead's next commit would land on the next lane's branch.
+  const asked = { title: "Second", outcome: "y", acceptance: ["a"], ...scope };
+  assert.match((await h.call(sup, "supervisor", "open_lane", asked)).text, /Lane L1 is closed, but its Lead is still ending a turn in the project's own copy, which goes back to main when that turn ends\. Pass isolate/);
+  assert.match((await h.call(sup, "supervisor", "status", {})).text, /Lane L1 is closed, and its Lead is ending a turn in it; it goes back to main after\./);
+  const next = await h.call(sup, "supervisor", "open_lane", { ...asked, isolate: true });
   assert.equal(next.ok, true, next.text);
   const second = h.ledger().lanes.L2!;
-  assert.equal(second.slot, undefined, "in the project's own copy");
-  assert.equal(h.git(h.root, "branch", "--show-current").trim(), second.branch);
+  assert.ok(second.slot, "in a copy of its own");
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), first.branch, "the copy the first Lead is writing in is not moved under it");
 
-  // Now the first Lead stops. Its restore is for a branch the copy has left, so it must not fire.
   h.agents.get(first.lead!)!.status = "idle";
   await h.endTurn(first.lead!, "stopping");
-  assert.equal(h.git(h.root, "branch", "--show-current").trim(), second.branch, "a live lane's checkout is not somebody else's to move");
-  h.commit(h.root, "a.txt", "L2 work\n");
-  assert.equal(h.git(h.root, "log", "-1", "--format=%s", second.branch).trim(), "edit a.txt", "so L2's commits land on L2's branch, not on main");
+  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "main", "once it stops, the project's copy is back on its base");
+  const copy = h.ledger().slots[second.slot!]!.path;
+  h.commit(copy, "a.txt", "L2 work\n");
+  assert.equal(h.git(h.root, "log", "-1", "--format=%s", second.branch).trim(), "edit a.txt", "and L2's commits are on L2's branch");
 
   // And a Lead that never comes back at all: the round finishes what its turn was holding up.
   assert.equal((await h.call(sup, "supervisor", "close_lane", { lane: "L2", land: false, reason: "done" })).ok, true);
   h.agents.get(second.lead!)!.archivedAt = new Date().toISOString();
   await h.tick(Date.now());
-  assert.equal(h.git(h.root, "branch", "--show-current").trim(), "main", "the owner's own repository is not left on a dead lane's branch");
+  assert.deepEqual(Object.keys(h.ledger().slots), [], "its copy is put away, not left behind for good");
   h.runtime.dispose();
 });
 
@@ -1352,7 +1339,10 @@ test("a seat opening in a project writes the team's block there, and the first l
   assert.equal(own.ok, true, own.text);
   assert.match(own.text, /team block in AGENTS\.md and CLAUDE\.md is not committed/);
   await h.call(sup, "supervisor", "close_lane", { lane: "L2", land: false, reason: "done" });
+  const lead = h.ledger().lanes.L1!.lead!;
   await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: false, reason: "done" });
+  h.agents.get(lead)!.status = "idle";
+  await h.endTurn(lead, "done");
 
   // The Human's own line in the same file is their work in progress, and a lane does not carry it off.
   writeFileSync(join(h.root, "AGENTS.md"), `Use pnpm.\n\n${readFileSync(join(h.root, "AGENTS.md"), "utf-8")}`);
@@ -1397,7 +1387,7 @@ test("a Lead is pointed at the project's concept once the Human has settled one,
   assert.doesNotMatch(h.agents.get(first.lead!)!.prompt ?? "", /CONTEXT\.md/);
 
   writeFileSync(join(h.project.state, "CONTEXT.md"), "# Shop\n\n## Behavior\n\n- A guest may check out.\n");
-  await h.call(sup, "supervisor", "open_lane", { title: "Second", outcome: "x", acceptance: ["y"], outOfScope: ["z"], writeSet: ["b.txt"] });
+  await h.call(sup, "supervisor", "open_lane", { title: "Second", outcome: "x", acceptance: ["y"], outOfScope: ["z"], writeSet: ["b.txt"], isolate: true });
   const second = h.ledger().lanes.L2!;
   const directive = h.agents.get(second.lead!)!.prompt ?? "";
   assert.match(directive, new RegExp(`is in ${join(h.project.state, "CONTEXT.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Read it before you start`));
@@ -1708,21 +1698,6 @@ test("mail reaches a running seat inside its turn where its harness can take it 
     codex.steers = true;
   }
 });
-
-async function laneWithPeer(outbox: string, settings?: Record<string, unknown>) {
-  const h = harness(outbox);
-  if (settings) {
-    mkdirSync(h.project.state, { recursive: true });
-    writeFileSync(join(h.project.state, "settings.json"), JSON.stringify(settings));
-  }
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
-  await h.call(sup, "supervisor", "open_lane", { title: "Build", outcome: "a.txt changes", acceptance: ["a"], outOfScope: ["anything else in the repository"] });
-  const lane = h.ledger().lanes.L1!;
-  await h.call(lane.lead!, "lead", "start_task", { title: "Clean build", goal: "g", acceptance: ["a"], owned: ["a.txt"], outOfScope: ["the rest of the repository"] });
-  const peer = h.ledger().tasks["L1-T1"]!.peer!;
-  await h.tick();
-  return { h, sup, lane, peer, timeline: h.timelineOf(peer) };
-}
 
 const watchersOf = (h: ReturnType<typeof harness>) => [...h.agents.values()].filter((agent) => agent.provider.startsWith("sw2-watcher-"));
 const bySeat = (extra: Record<string, unknown> = {}) => ({ attention: { by: "seat", ...extra } });
@@ -2667,5 +2642,27 @@ test("every call is held to the schema the seat was shown, and told what it take
   assert.match(report.text, /needs ready/);
   const blank = await h.call(peer, "peer", "done", { outcome: "complete", summary: "  " });
   assert.match(blank.text, /needs summary/, "a required text has to say something");
+  h.runtime.dispose();
+});
+
+test("a patrol round files finished lanes past the newest few into the archive, and leaves the rest", async () => {
+  const h = harness("outbox-archive.json");
+  h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.tick(Date.now());
+  const ledger = h.ledger();
+  for (let n = 1; n <= KEEP_CLOSED_LANES + 1; n++) {
+    ledger.lanes[`L${n}`] = { id: `L${n}`, title: `old ${n}`, outcome: "", acceptance: [], outOfScope: [], base: "main", branch: `lane/l${n}`, writeSet: [], contracts: [], opener: "sup", status: "closed", openedAt: n, tasks: 0, lead: `gone-lead-${n}` };
+  }
+  ledger.seq.lane = KEEP_CLOSED_LANES + 1;
+  saveLedger(h.project.state, ledger);
+  mkdirSync(join(h.project.state, "handbacks"), { recursive: true });
+  writeFileSync(join(h.project.state, "handbacks", "L1-T1-1.md"), "what L1 handed back");
+  await h.tick(Date.now());
+  assert.ok(!existsSync(join(h.project.state, "handbacks", "L1-T1-1.md")), "its hand-back went with it");
+  assert.equal(h.ledger().lanes.L1, undefined, "the oldest finished lane left the ledger");
+  assert.equal(Object.keys(h.ledger().lanes).length, KEEP_CLOSED_LANES);
+  const filed = gunzipSync(readFileSync(join(h.project.state, "archive", "L1.json.gz"))).toString("utf-8");
+  assert.match(filed, /"id":"L1"/);
+  assert.match(filed, /what L1 handed back/);
   h.runtime.dispose();
 });

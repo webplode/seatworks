@@ -93,13 +93,20 @@ const Node = memo(function Node({ title, hint, state, alive, caret, reads, theme
 
 const Lane = memo(function Lane({ lane, theme, onOpen, onAgent }: { lane: FlowLane; theme: PluginTheme; onOpen(id: string): void; onAgent?: (id: string) => void }) {
   const styles = useStyles(theme);
+  if (lane.status === "waiting") {
+    return (
+      <View style={styles.lane}>
+        <Node theme={theme} title={`Waiting · ${lane.id} ${lane.title}`} hint={`after ${(lane.after ?? []).join(", ")}`} state={lane.held ? `not open: ${lane.held}` : "opens once those land"} alive={false} />
+      </View>
+    );
+  }
   return (
     <View style={styles.lane}>
       <View style={{ gap: 8 }}>
       <Node
         theme={theme}
         title={`Lead · ${lane.id} ${lane.title}`}
-        hint={`${lane.branch} off ${lane.base}`}
+        hint={lane.base ? `${lane.branch} off ${lane.base}` : `${lane.branch}, carried on in place`}
         state={countsInstead(lane) ? `${lane.taskCount} task${lane.taskCount === 1 ? "" : "s"}, ${lane.running} running` : seatText(lane.lead)}
         alive={Boolean(lane.lead && lane.lead.status !== "gone")}
         caret={lane.taskCount === 0 ? undefined : lane.open ? "▾" : "▸"}
@@ -136,7 +143,7 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
   const styles = useStyles(theme);
   const empty = flow !== null && flow.lanes.length === 0 && flow.supervisors.length === 0;
   // By a seat the Watcher is a seat like the others, beside the Supervisor, once a lane has put it there.
-  const watcher = flow && flow.watch.by === "seat" && (flow.watch.watcher || flow.lanes.length > 0) ? watcherState(flow.watch.watcher) : null;
+  const watcher = flow && flow.watch.by === "seat" && (flow.watch.watcher || flow.lanes.some((lane) => lane.status === "open")) ? watcherState(flow.watch.watcher) : null;
 
   return (
     <SettingsSection title="Team activity" info="Expand a work stream to see its tasks. Open an agent to continue its conversation.">
@@ -189,7 +196,7 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
         <SettingsCard>
           <SettingsRow
             label={`${flow.moreLanes} more work stream${flow.moreLanes === 1 ? "" : "s"}`}
-            hint={`This screen shows only the first ${flow.lanes.length} open work streams. The rest are still running; the Status report lists all of them.`}
+            hint={`This screen shows only the first ${flow.lanes.length} open work streams. The rest are still open or waiting; the Status report lists all of them.`}
           />
         </SettingsCard>
       ) : null}

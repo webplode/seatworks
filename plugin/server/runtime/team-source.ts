@@ -56,6 +56,11 @@ export class TeamSource {
     }
   }
 
+  /** Whether the project is still on record: detached, or its state removed by hand, it is not. */
+  onRecord(project: Project): boolean {
+    return existsSync(join(project.state, "meta.json"));
+  }
+
   /** A project that is no longer on record: the next attach has to write it again. */
   forget(slug: string): void {
     this.recorded.delete(slug);

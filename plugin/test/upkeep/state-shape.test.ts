@@ -10,7 +10,7 @@ const PLUGIN = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SHAPES = join(PLUGIN, "test", "fixtures", "state", "shapes.json");
 
 const KEPT: [string, string[]][] = [
-  ["server/desk/ledger.ts", ["LaneStatus", "TaskStatus", "AskKind", "Lane", "Handback", "Task", "Ask", "Releasing", "Restoring", "Slot", "AgentRef", "Ledger"]],
+  ["server/desk/ledger.ts", ["LaneStatus", "TaskStatus", "AskKind", "Amendment", "Lane", "Handback", "Task", "Ask", "Releasing", "Restoring", "Slot", "AgentRef", "Ledger"]],
   ["server/desk/incidents.ts", ["Held", "Judged", "Incident", "Incidents"]],
   ["server/desk/project.ts", ["GateOn", "ProjectConfig"]],
   ["server/runtime/outbox.ts", ["LetterSchema", "Letter"]],

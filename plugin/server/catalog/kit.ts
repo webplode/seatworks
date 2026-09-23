@@ -60,7 +60,7 @@ export type HarnessSpec = {
     rule?: string;
     desk?: Record<string, unknown>;
   };
-  provider: { env?: Record<string, string>; profileModeId?: string; command?: string[]; forceFlags?: Record<string, string> };
+  provider: { env?: Record<string, string>; profileModeId?: string; command?: string[]; forceFlags?: Record<string, string>; keychainEnv?: Record<string, string> };
 };
 
 const HARNESS_FIELDS = new Set([

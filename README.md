@@ -63,7 +63,7 @@ thinking level where the agent offers them.
 
 | Agent | Before its first seat | Sandbox | Mail into a running turn |
 |---|---|---|---|
-| Claude Code | `claude` signed in | yes | yes |
+| Claude Code | `claude setup-token` once, then `security add-generic-password -U -s "Seatworks Claude Code token" -a "$USER" -w` with that token: a seat keeps its own config directory, so your own `claude` login does not reach it | yes | yes |
 | Codex | `codex login` once. The `codex` CLI must be on the machine that runs the daemon | yes | yes |
 | Pi | `pi` signed in, and `pi install npm:pi-mcp-adapter` once. That adapter is how a Pi seat reaches the desk | no | yes |
 | Devin CLI | `devin` signed in | no | no, it waits for the turn to end |

@@ -154,7 +154,7 @@ only you can answer.
 | `exitPattern` | How the agent writes a failed exit, so the watch can tell failure from output |
 | `checks` | Files the Health tab looks for |
 | `hasThinking` | Whether the agent takes a thinking level |
-| `provider` | Env, launch command, `forceFlags`, and the starting mode |
+| `provider` | Env, launch command, `forceFlags`, `keychainEnv` (an env var filled at launch from a macOS keychain entry the seat has no login for), and the starting mode |
 
 Required: `id`, `label`, `baseProvider`, `configDirEnv`, `profileRoot`, `skillsDir`, `settings`,
 `mcp` and `provider`.

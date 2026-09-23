@@ -60,6 +60,9 @@
     ],
     "forceFlags": {
       "--setting-sources": "user"
+    },
+    "keychainEnv": {
+      "CLAUDE_CODE_OAUTH_TOKEN": "Seatworks Claude Code token"
     }
   },
   "contextFile": "CLAUDE.md",

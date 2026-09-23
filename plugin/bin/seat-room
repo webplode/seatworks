@@ -21,6 +21,18 @@ if [ -n "$var" ] && [ -z "$(printenv "$var" || true)" ]; then
     exec node "$(dirname "$0")/acp-catalog.mjs" "Seat room: $refusal" "$bin" ${1+"$@"}
 fi
 
+# A seat's own config directory has no login of its own: a token kept in the owner's keychain signs it in.
+secrets=$(jq -r '.provider.keychainEnv // {} | to_entries[] | .key + "\t" + .value' "$manifest")
+while IFS="$(printf '\t')" read -r name service; do
+    [ -n "$name" ] || continue
+    [ -z "$(printenv "$name" || true)" ] || continue
+    command -v security >/dev/null 2>&1 || continue
+    secret=$(security find-generic-password -s "$service" -w 2>/dev/null || true)
+    [ -z "$secret" ] || export "$name=$secret"
+done <<SECRETS
+$secrets
+SECRETS
+
 forced=$(jq -r '.provider.forceFlags // {} | to_entries[] | .key + "\t" + (.value | tostring)' "$manifest")
 while IFS="$(printf '\t')" read -r flag value; do
     [ -n "$flag" ] || continue

@@ -87,3 +87,42 @@ test("a seat the plugin configured starts the agent on its own settings", async 
   assert.deepEqual(replies, []);
   assert.equal(readFileSync(launched, "utf-8"), "/seats/acme-peer acp\n");
 });
+
+/** A seat whose harness names a keychain entry, with a `security` on PATH that answers only for that entry. */
+function keyed(stored: string | undefined) {
+  const dir = tempDir("sw2-seat-room-key-");
+  mkdirSync(join(dir, "harness", "acme"), { recursive: true });
+  mkdirSync(join(dir, "bin"));
+  writeFileSync(join(dir, "harness", "acme", "harness.json"), JSON.stringify({ baseProvider: "claude", configDirEnv: "ACME_HOME", provider: { keychainEnv: { ACME_TOKEN: "Acme seat token" } } }));
+  const launched = join(dir, "launched");
+  const agent = join(dir, "agent");
+  writeFileSync(agent, `#!/bin/sh\nprintf '%s' "\${ACME_TOKEN:-none}" > ${JSON.stringify(launched)}\n`);
+  const security = join(dir, "bin", "security");
+  writeFileSync(security, `#!/bin/sh\n[ "$1 $2 $3" = "find-generic-password -s Acme seat token" ] || exit 44\n${stored === undefined ? "exit 44" : `[ "$4" = "-w" ] && echo ${JSON.stringify(stored)}`}\n`);
+  chmodSync(agent, 0o755);
+  chmodSync(security, 0o755);
+  return { launched, env: { PATH: `${join(dir, "bin")}:${process.env.PATH!}`, SEATWORKS_KIT: dir, SEATWORKS_HARNESS: "acme", SEATWORKS_AGENT_BIN: agent, ACME_HOME: "/seats/acme-peer" } };
+}
+
+test("a configured seat is signed in from the keychain entry its harness names", async () => {
+  const { launched, env } = keyed("tok-123");
+  assert.equal((await open(env, [], [])).code, 0);
+  assert.equal(readFileSync(launched, "utf-8"), "tok-123");
+});
+
+test("a token already in the seat's env is kept, and a missing keychain entry still starts the agent", async () => {
+  const set = keyed("tok-123");
+  assert.equal((await open({ ...set.env, ACME_TOKEN: "own" }, [], [])).code, 0);
+  assert.equal(readFileSync(set.launched, "utf-8"), "own");
+  const missing = keyed(undefined);
+  assert.equal((await open(missing.env, [], [])).code, 0);
+  assert.equal(readFileSync(missing.launched, "utf-8"), "none");
+});
+
+test("a launch the plugin did not configure never reads the keychain", async () => {
+  const { launched, env } = keyed("tok-123");
+  const { ACME_HOME: _, ...unconfigured } = env;
+  const { code } = await open(unconfigured, [], []);
+  assert.equal(code, 2);
+  assert.equal(existsSync(launched), false);
+});

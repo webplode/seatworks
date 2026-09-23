@@ -159,7 +159,7 @@ const kit = loadKit(join(dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const thinking = ["low", "medium", "high"].map((id) => ({ id, label: id }));
 applyModels(kit, {
   claude: { at: "", error: null, models: [{ id: "claude-opus-5", label: "Opus 5", thinkingOptions: thinking }] },
-  devin: { at: "", error: null, models: [{ id: "swe-2-max", label: "SWE-2 Max" }] },
+  codex: { at: "", error: null, models: [{ id: "gpt-5.6-luna", label: "GPT-5.6-Luna" }] },
 });
 
 const ideCalls: { kind: "open" | "sync" | "close"; path: string }[] = [];
@@ -755,7 +755,7 @@ test("each project gets the agent and model its own settings choose, and the mac
   const lane = h.ledger().lanes.L1!;
   await h.call(lane.lead!, "lead", "start_task", { title: "Default peer", goal: "g", acceptance: ["a"], owned: ["a.txt"], outOfScope: ["the rest of the repository"] });
   const onDefaults = h.agents.get(h.ledger().tasks["L1-T1"]!.peer!)!.provider;
-  assert.equal(onDefaults, "sw2-peer-devin/swe-2-max");
+  assert.equal(onDefaults, "sw2-peer-codex/gpt-5.6-luna");
   assert.equal(h.agents.get(lane.lead!)!.provider, "sw2-lead-claude/claude-opus-5");
 
   writeFileSync(join(h.project.state, "settings.json"), JSON.stringify({ roles: { peer: { harness: "claude", model: "claude-opus-5" } } }));
@@ -1673,6 +1673,9 @@ test("a Peer stopped on a question is answered by its Lead's message, and one st
 });
 
 test("mail reaches a running seat inside its turn where its harness can take it there, and waits where it cannot", async () => {
+  // Every agent the kit ships can be steered; the Peer's is made one that cannot.
+  const codex = kit.harnesses.codex!;
+  codex.steers = false;
   const h = harness("outbox-steer.json");
   const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Pricing", outcome: "discounts round correctly", acceptance: ["a"], outOfScope: ["anything else"] });
@@ -1702,6 +1705,7 @@ test("mail reaches a running seat inside its turn where its harness can take it 
     assert.deepEqual(h.agents.get(peer)!.sent, [], "the Peer's harness cannot, and sending would replace its turn");
   } finally {
     mock.timers.reset();
+    codex.steers = true;
   }
 });
 
@@ -1734,7 +1738,7 @@ test("by a seat, one Watcher sits in the project while a lane is open, on the Pe
   await h.tick();
   const [watcher, ...more] = watchersOf(h);
   assert.deepEqual(more, [], "one, however many rounds find it");
-  assert.equal(watcher!.provider, "sw2-watcher-devin/swe-2-max", "on the Peer's agent and model, nothing having been set for it");
+  assert.equal(watcher!.provider, "sw2-watcher-codex/gpt-5.6-luna", "on the Peer's agent and model, nothing having been set for it");
   assert.equal(watcher!.cwd, h.project.root, "in the project, not in a lane's copy");
   assert.equal(watcher!.status, "running");
 
@@ -1882,7 +1886,7 @@ test("a Watcher raises against a step it was read: the step, not its words, reac
   const invented = await raise({ kind: "missing_mechanism", step: "R4.S9" });
   assert.equal(invented.ok, false);
   assert.match(invented.text, /R4\.S9 is not a step a reading sent you/, "a step it was never read cannot be reported");
-  const other = h.add("sw2-watcher-devin/swe-2-max", h.project.root, "another watcher");
+  const other = h.add("sw2-watcher-codex/gpt-5.6-luna", h.project.root, "another watcher");
   assert.equal((await raise({ kind: "missing_mechanism", step: "R1.S1" }, other)).ok, false, "nor one read to another Watcher");
 
   const raised = await raise({ kind: "missing_mechanism", step: "R1.S1" });
@@ -2478,7 +2482,7 @@ test("a seat whose brief cannot be read is not described to the sensor as having
 test("taking the key away does not release the incidents the watch was still holding", async () => {
   const { h, sup } = await laneWithPeer("outbox-retell-off.json", { attention: { watch: true } });
   // `stuck` is a kind the sensor confirms, so this is held "awaiting" its reading rather than sent.
-  await h.runtime.desk.notice(h.project, { id: "p-a", provider: "sw2-peer-devin/swe-2-max", title: "p-a" }, [{ kind: "stuck", level: "attend", quote: "round and round", facts: ["stuck"] }]);
+  await h.runtime.desk.notice(h.project, { id: "p-a", provider: "sw2-peer-codex/gpt-5.6-luna", title: "p-a" }, [{ kind: "stuck", level: "attend", quote: "round and round", facts: ["stuck"] }]);
   assert.deepEqual(Object.values(incidentsOf(h.project.state)).map((item) => item.held), ["awaiting"]);
 
   writeFileSync(join(HOME, ".local", "share", "seatworks-v2", "settings.json"), JSON.stringify({}));
@@ -2492,7 +2496,7 @@ test("taking the key away does not release the incidents the watch was still hol
 
 test("a day's budget holds back what is only worth attention, however many arrive at once, and never what is irreversible", async () => {
   const { h, sup } = await laneWithPeer("outbox-budget.json", { attention: { watch: true, incidentsPerDay: 1 } });
-  const seat = (id: string) => ({ id, provider: "sw2-peer-devin/swe-2-max", title: id });
+  const seat = (id: string) => ({ id, provider: "sw2-peer-codex/gpt-5.6-luna", title: id });
   // Not `stuck`: the sensor confirms that one, so it would be held awaiting a reading before the budget has a say.
   const attend = (quote: string) => [{ kind: "test-weakened", level: "attend" as const, quote, facts: ["test-weakened"] }];
   await Promise.all([
@@ -2517,8 +2521,8 @@ test("one overall Supervisor receives project-qualified incidents even when both
   writeFileSync(join(other.state, "settings.json"), JSON.stringify({ attention: { watch: true } }));
   h.runtime.supervision.store.change(h.runtime.supervision.store.read().revision, (b) => { b.projects.push({ id: other.slug, root: other.root, slug: other.slug, name: "second", grants: ["observe"], leads: [] }); });
   const page = [{ kind: "destructive", level: "page" as const, quote: "rm -rf build", facts: ["destructive"] }];
-  await h.runtime.desk.notice(h.project, { id: "p-a", provider: "sw2-peer-devin/swe-2-max" }, page);
-  await h.runtime.desk.notice(other, { id: "p-b", provider: "sw2-peer-devin/swe-2-max" }, page);
+  await h.runtime.desk.notice(h.project, { id: "p-a", provider: "sw2-peer-codex/gpt-5.6-luna" }, page);
+  await h.runtime.desk.notice(other, { id: "p-b", provider: "sw2-peer-codex/gpt-5.6-luna" }, page);
   await h.idle(sup);
   const mail = h.agents.get(sup)!.sent.join("\n");
   assert.equal(mail.split("INCIDENT I1 (destructive, page)").length - 1, 2);

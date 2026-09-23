@@ -62,8 +62,8 @@
       "label": "Peer",
       "description": "Does one task and hands it back",
       "defaults": {
-        "harness": "devin",
-        "model": "swe-2-max"
+        "harness": "codex",
+        "model": "gpt-5.6-luna"
       },
       "can": [
         "work",
@@ -88,8 +88,8 @@
       "label": "Reviewer",
       "description": "Read-only Peer that reviews a task branch with clean context",
       "defaults": {
-        "harness": "devin",
-        "model": "swe-2-max"
+        "harness": "codex",
+        "model": "gpt-5.6-luna"
       },
       "can": [
         "work",

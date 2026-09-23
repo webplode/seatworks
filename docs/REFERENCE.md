@@ -169,13 +169,10 @@ settings revision changes, its settings file is gone, or a login appeared since.
 | Claude Code | `~/.claude/profiles/…` | `settings.json` (deny rules, sandbox), `.claude.json` (its own MCP servers cleared), `skills/`, a `projects` link, `CLAUDE.md` for working rules | `bin/seat-room` with `--setting-sources user`, so the project's settings, hooks and skills stay out |
 | Codex | `~/.codex/seats/…` | `config.toml` (`model_provider` and `model_providers` from your own `~/.codex/config.toml`; `workspace-write`, or `read-only` for Reviewer and Watcher; `approval_policy = "never"`; subagents off), `model-catalog.json`, `rules/seatworks.rules`, `skills/`, an `auth.json` link, `AGENTS.md` | Paseo's Codex provider |
 | Pi | `~/.pi/seats/…` | `settings.json` (`pi-mcp-adapter`, project trust off, tool lists for Reviewer and Watcher), `mcp.json`, `skills/`, links to login, models and npm | Paseo's Pi provider |
-| Devin CLI | `~/.devin/seats/…` | `devin/config.json` (permissions, command denials, subagents off, other tools' config off), `devin/AGENTS.md`, `devin/mcp_config.json`, `devin/skills/`, a link to your git config | `bin/seat-room acp`, over Paseo's ACP provider |
 
 - **Claude Code** still reads the project's `CLAUDE.md`: the working directory is passed as an
   additional directory.
 - **Codex** needs the `codex` CLI to build a seat, because the build asks it for its models.
-- **Devin** uses `XDG_CONFIG_HOME` as its config variable. Without `~/.config/git`, a Devin seat
-  commits as whoever git resolves.
 
 ## MCP servers
 
@@ -378,10 +375,8 @@ it:
 
 ## Known limits
 
-- **Devin can't be steered.** Mail to a running Devin seat waits for its turn to end.
-- **Pi and Devin have no sandbox.** Pi has no command rules either, so a Pi seat is held only by its
-  tools. Devin has command denials, such as `git push` and `gh`, but no path rules.
-- **Reading an archived Devin seat's history leaves a `devin acp` running.** Paseo resumes the
+- **Pi has no sandbox** and no command rules either, so a Pi seat is held only by its tools.
+- **Reading an archived Pi seat's history leaves a `pi` running.** Paseo resumes the
   agent to serve it and never closes it; `paseo logs` or the app's history view does this. The watch
   stops rather than read a seat once it is archived.
 - **A Codex seat can call only the tools the kit can name.** Codex refuses any MCP call not

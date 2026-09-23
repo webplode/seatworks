@@ -12,6 +12,8 @@ import { SeatWatch } from "../../server/runtime/watch/watches.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const kit = loadKit(join(here, "..", ".."));
+// The kit no longer ships Devin, but its recorded ACP stream still stands for an agent whose exit line reads as completed.
+const DEVIN_EXIT = "^Exited with code ([0-9]+)$";
 
 const fixture = (name: string): StreamMessage[] =>
   readFileSync(join(here, "..", "fixtures", "stream", `${name}.jsonl`), "utf-8")
@@ -59,7 +61,7 @@ const kinds = (facts: Fact[]) => facts.map((fact) => fact.kind);
 
 test("a failed shell call is seen on every harness however it says so, once, and never again from a reload's history", () => {
   for (const harness of ["claude", "pi", "codex", "devin"]) {
-    const exit = kit.harnesses[harness]?.exitPattern;
+    const exit = harness === "devin" ? DEVIN_EXIT : kit.harnesses[harness]?.exitPattern;
     const facts = play(fixture(harness), rules(exit ? { exit: new RegExp(exit) } : {}));
     const failures = facts.filter((fact) => fact.kind === "call-failed");
     assert.equal(failures.length, 1, `${harness}: ${JSON.stringify(facts)}`);
@@ -226,7 +228,7 @@ test("an edit that arrives as a unified diff is read for weakened tests too", ()
 });
 
 test("Devin's constant exit line is not a result, so repeating a command there is not the same result four times", () => {
-  const exit = new RegExp(kit.harnesses.devin!.exitPattern!);
+  const exit = new RegExp(DEVIN_EXIT);
   const ran = fixture("devin").find((message) => message.event.item?.type === "tool_call" && message.event.item?.status === "completed" && JSON.stringify(message).includes("Exited with code 0"))!;
   const four = [...opening(), ...["a", "b", "c", "d"].map((id, index) => again(ran, id, index + 2, (detail) => (detail.command = "git status")))];
   assert.deepEqual(kinds(play(four, rules({ exit }))).filter((kind) => kind === "stuck"), []);
@@ -285,7 +287,7 @@ test("a failure stretch ends when the same program passes, but a red gate is not
 });
 
 test("Devin's constant exit line is not a result, so alternating commands there are not stuck", () => {
-  const exit = new RegExp(kit.harnesses.devin!.exitPattern!);
+  const exit = new RegExp(DEVIN_EXIT);
   const ran = fixture("devin").find((message) => message.event.item?.type === "tool_call" && message.event.item?.status === "completed" && JSON.stringify(message).includes("Exited with code 0"))!;
   const cycle = [...opening(), ...Array.from({ length: 6 }, (_, index) => again(ran, `c${index}`, index + 2, (detail) => (detail.command = index % 2 ? "gh run view 123 --json status" : "sleep 30")))];
   assert.deepEqual(kinds(play(cycle, rules({ exit }))).filter((kind) => kind === "stuck"), []);

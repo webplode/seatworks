@@ -46,7 +46,7 @@
 <path class="edge" d="M272,391 L300,391" style="stroke:var(--violet)" marker-end="url(#a-violet)"/>
 <rect class="node dash" x="300" y="460" width="316" height="56" rx="10" style="fill:var(--slate-fill);stroke:var(--slate)"/>
 <text class="title mono" x="458" y="484.5" text-anchor="middle" style="fill:var(--slate-ink)">bin/seat-room</text>
-<text class="sub" x="458" y="503.5" text-anchor="middle">checks the launch, then execs Claude or Devin</text>
+<text class="sub" x="458" y="503.5" text-anchor="middle">checks the launch, then execs Claude</text>
 <path class="edge" d="M458,426 L458,460" style="stroke:var(--slate)" marker-end="url(#a-slate)"/>
 <rect class="group" x="652" y="100" width="284" height="436" rx="14"/>
 <text class="group-label" x="668" y="124">WHAT LANDS</text>

@@ -26,7 +26,7 @@ test("the shipped kit resolves to a complete team, and every role's seat builds 
   assert.deepEqual(team.errors, []);
   assert.deepEqual(kit.roles.map((role) => role.role).sort(), ["lead", "peer", "reviewer", "supervisor", "watcher"]);
   assert.deepEqual(Object.keys(kit.mcp).sort(), ["code-search", "context7", "intellij-index"]);
-  const every = kit.roles.flatMap((role) => ["claude", "codex", "devin", "pi"].map((harness) => `${role.role}-${harness}`)).sort();
+  const every = kit.roles.flatMap((role) => ["claude", "codex", "pi"].map((harness) => `${role.role}-${harness}`)).sort();
   assert.deepEqual(seatPairs(kit).map((pair) => `${pair.role.role}-${pair.harness.id}`).sort(), every, "every role can sit on every agent the kit ships");
   const home = tempDir("sw2-real-home-");
   const project = { slug: "demo-000000", state: "/state/demo" };
@@ -43,7 +43,9 @@ test("the shipped kit resolves to a complete team, and every role's seat builds 
       context = readFileSync(file, "utf-8");
     } else {
       assert.doesNotMatch(renderPrompt(kit, role, { guides: "/guides", state: "/state" }), /\{\{/, `${name} prompt has no placeholder left`);
-      context = readFileSync(join(dir, harness.contextFile!), "utf-8");
+      // A seat with no rules and no server writes no context file: its prompt goes by config.
+      const file = join(dir, harness.contextFile!);
+      context = existsSync(file) ? readFileSync(file, "utf-8") : "";
     }
     assert.doesNotMatch(context, /\{\{/, `${name} seat has no placeholder left`);
     if (seat.mcp.length === 0) {

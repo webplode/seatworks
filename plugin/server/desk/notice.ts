@@ -32,6 +32,7 @@ function judging(services: DeskServices, project: Project): Judging {
 }
 
 function holdFor(incident: Incident, incidents: Incidents, attention: Attention, waiting: Judging, now: number): Held | undefined {
+  if (incident.kind.startsWith("communication_")) return "shadow";
   if (!attention.watch) return "shadow";
   const judged = incident.level === "attend" && waiting.kinds.has(incident.kind);
   if (judged && incident.sensor?.says === "vetoes") return "vetoed";
@@ -136,7 +137,7 @@ async function deliver(services: DeskServices, project: Project, seat: Noticed, 
     });
     for (const incident of batch) {
       try {
-        await ctx.post(to, `incident:${project.slug}:${incident.id}:${incident.opened}:${incident.level}`, letters.incident(incident, place, shape, kept, as));
+        await ctx.post(to, `incident:${project.slug}:${incident.id}:${incident.opened}:${incident.level}`, letters.incident(incident, place, shape, kept, as), project);
       } catch (error) {
         ctx.event(project, { kind: "incident.post-failed", id: incident.id, error: errorText(error) });
       }

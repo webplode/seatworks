@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { errorText } from "../core/errors.ts";
 import { STATE_VERSION } from "../core/state.ts";
@@ -7,9 +7,16 @@ import { readJson, writeJson } from "../core/store.ts";
 /** Steps run in order at plugin start, which an update only does once every seat has stopped. */
 export type StateStep = { to: number; machine?: (root: string) => void; project?: (state: string) => void };
 
-export const STEPS: StateStep[] = [];
+export const STEPS: StateStep[] = [{ to: 2, machine(root) {
+  const file = join(root, "outbox.json");
+  if (existsSync(file)) {
+    const old = JSON.parse(readFileSync(file, "utf8"));
+    if (!Array.isArray(old) || old.some((l) => typeof l?.id !== "string" || typeof l?.to !== "string" || typeof l?.key !== "string" || typeof l?.text !== "string" || typeof l?.at !== "number")) throw new Error("Invalid version 1 outbox; nothing was migrated.");
+    writeJson(file, old.map((l) => ({ ...l, state: "queued" })));
+  }
+} }];
 
-const MACHINE_FILES = ["state.json", "settings.json", "outbox.json", "content.json"];
+const MACHINE_FILES = ["state.json", "settings.json", "outbox.json", "content.json", "supervision.json", "dependencies.json", "jev-budget.json"];
 const PROJECT_FILES = ["ledger.json", "incidents.json", "project.json", "meta.json", "settings.json"];
 
 export const STATE_BACKUP = /^backup-state-\d+-\d{8}-\d{6}$/;
@@ -49,6 +56,7 @@ function upgrade(where: string, dir: string, files: string[], from: number, curr
     finish();
     report.upgraded.push(`${where}: ${from} → ${current}`);
   } catch (error) {
+    for (const name of files.filter((name) => !kept.includes(name))) rmSync(join(dir, name), { force: true });
     for (const name of kept) copyFileSync(join(backup, name), join(dir, name));
     report.failed.push({ where, error: `could not go from state ${from} to ${current}: ${errorText(error)}; its files are as they were, and a copy is in ${backup}` });
   }

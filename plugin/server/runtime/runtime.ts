@@ -13,7 +13,7 @@ import { stampKit } from "../upkeep/migrate.ts";
 import { type StateReport, upgradeState } from "../upkeep/state.ts";
 import { type IndexedProxy, type Team, indexedProxies, jevOn, watchOn } from "../catalog/team.ts";
 import { guidesDir, home, nodeBin, outboxPath, spoolDir, stateRoot } from "../core/paths.ts";
-import { seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
+import { connectLocal, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
 import type { PaseoApi } from "../core/paseo.ts";
 import type { SeatView, Seats, Workspaces } from "../core/ports.ts";
 import type { CodeIndex } from "../desk/context.ts";
@@ -42,6 +42,11 @@ import { malformed } from "./timeline.ts";
 import { loadIncidents } from "../desk/incidents.ts";
 import type { WatchLean, WatchView } from "../../shared/views.ts";
 import { errorText } from "../core/errors.ts";
+import { Supervision } from "./supervision.ts";
+import { SupervisionControl } from "./supervision-control.ts";
+import { supervisionRpc, bindingRpc, adoptRpc, createSupervisorRpc } from "../../shared/rpc.ts";
+import { CommunicationWatch } from "./watch/jev/communication.ts";
+import { outputText } from "./timeline.ts";
 
 type EventName = keyof PluginLifecycleEvents;
 
@@ -56,6 +61,8 @@ export class Runtime {
   readonly outbox: Outbox;
   readonly desk: Desk;
   readonly control: SettingsControl;
+  readonly supervision: SupervisionControl;
+  private readonly communication: CommunicationWatch;
   private readonly spool = spoolDir();
   private readonly seats: Seats;
   private readonly workspaces: Workspaces;
@@ -72,7 +79,8 @@ export class Runtime {
   private readonly makeIndex: (proxy: IndexedProxy) => CodeIndex;
   private readonly reload: () => Promise<boolean>;
   private api: PaseoApi | undefined;
-  private modelsAsked = false;
+  private connection: Awaited<ReturnType<typeof connectLocal>> | undefined;
+  private disposed = false;
   private state: StateReport = { upgraded: [], failed: [] };
   private timers: ReturnType<typeof setInterval>[] = [];
   private tick: ReturnType<typeof setTimeout> | undefined;
@@ -86,6 +94,7 @@ export class Runtime {
     this.workspaces = workspacesOn(() => this.api);
     this.source = new TeamSource(kit);
     this.seating = new Seating(kit, this.source, { node: nodeBin(), spool: this.spool });
+    const supervision = new Supervision(stateRoot());
     this.outbox = new Outbox(
       options.outboxFile ?? outboxPath(),
       (to, list) => this.compose(to, list),
@@ -97,11 +106,17 @@ export class Runtime {
         const found = seatOf(kit, seat.provider);
         return found?.harness.steers === true && !can(found.role, "watch");
       },
+      (letter, seat) => letter.guard ? supervision.validate(letter.guard, seat) : undefined,
     );
+    this.supervision = new SupervisionControl({ store: supervision, kit, seats: this.seats, workspaces: this.workspaces,
+      outbox: this.outbox, inventory: () => inventoryOn(() => this.api), source: this.source,
+      communication: () => Object.fromEntries(this.communication?.coverage ?? []),
+      prepareProviders: async () => { const changed = applyReconcile(this.kit, this.source.teamFor()); if (changed.length && !await this.reload()) throw new Error("Provider configuration was saved but daemon reload failed. Resolve that before creating a Supervisor."); } });
     const log = (project: Project, line: string) => this.log(project, line);
     const remember = (project: Project) => this.remember(project);
     this.desk = new Desk({
       kit,
+      supervision: this.supervision,
       outbox: this.outbox,
       seats: this.seats,
       workspaces: this.workspaces,
@@ -111,6 +126,7 @@ export class Runtime {
       sent: (watcher, ref) => this.reader.sent(watcher, ref),
     });
     this.turns = new TurnRules({ kit, desk: this.desk, remember });
+    this.communication = new CommunicationWatch(supervision, this.outbox, this.desk, (project) => this.source.teamFor(project));
     this.assessor = new Assessor({
       sensing: (watch) => this.sensing(watch),
       done: (watch, reading) => this.assessed(watch, reading),
@@ -441,33 +457,41 @@ export class Runtime {
       mkdirSync(stateRoot(), { recursive: true });
       // Before anything reads a kept file: a seat opened on a half-read ledger would write it back wrong.
       this.state = upgradeState(stateRoot());
-      for (const failed of this.state.failed) console.error(`seatworks-v2: state of ${failed.where} ${failed.error}`);
+      if (this.state.failed.length) throw new Error(this.state.failed.map((failed) => `${failed.where}: ${failed.error}`).join("; "));
       spoolDirs(this.spool);
       placeGuides(this.kit);
       sweepSnapshots();
       stampKit(this.kit, home());
     } catch (error) {
       console.error("seatworks-v2: could not prepare the state directory:", error);
+      throw error;
     }
     const team = this.source.teamFor();
     for (const problem of team.errors) console.error(`seatworks-v2: settings: ${problem}`);
-    this.reconcileProviders(team);
+  }
+
+  async connect(): Promise<void> {
+    const connection = await connectLocal();
+    if (this.disposed) { await connection.close(); return; }
+    this.connection = connection;
+    this.api = connection;
+    for (const project of this.supervision.store.read().projects) this.remember(projectOf(project.root));
   }
 
   register(server: PluginServerContext): void {
+    server.handle(supervisionRpc, async () => await this.supervision.view() as never);
+    server.handle(bindingRpc, async (input) => await this.supervision.bind(input) as never);
+    server.handle(adoptRpc, async (input) => await this.supervision.adopt(input) as never);
+    server.handle(createSupervisorRpc, async (input) => await this.supervision.create(input.revision) as never);
     registerRpc(server, this.control, (paseo) => {
-      this.api = paseo;
-      if (!this.modelsAsked) {
-        this.modelsAsked = true;
-        this.refreshModels().catch((error) => console.error("seatworks-v2: could not list the agents' models:", error));
-      }
+      if (!this.connection) this.api = paseo;
     });
     server.before("agent.create", ({ request }, context) => {
-      this.api = context.paseo;
+      if (!this.connection) this.api = context.paseo;
       return { ...request, config: this.launchConfig(request.config) };
     });
     server.before("agent.session_open", ({ request }, context) => {
-      this.api = context.paseo;
+      if (!this.connection) this.api = context.paseo;
       return this.openSession(request);
     });
     this.on(server, "agent.turn_started", async ({ agent }) => this.turnStarted(agent.id));
@@ -483,7 +507,7 @@ export class Runtime {
     this.timers.push(setInterval(() => this.serveSpool(), 500));
     // The cadence is read every time round, so changing it in settings takes hold without a reload.
     const patrol = () => {
-      if (this.api) this.patrol.tick().then(() => this.offline.clear(), (error) => this.tickFailed(error));
+      if (this.api) this.patrol.tick().then(() => this.supervision.dependencies.recover()).then(() => this.communication.tick()).then(() => this.offline.clear(), (error) => this.tickFailed(error));
       this.tick = setTimeout(patrol, Math.max(5, this.source.teamFor().attention.tickSeconds) * 1000);
     };
     this.tick = setTimeout(patrol, this.source.teamFor().attention.tickSeconds * 1000);
@@ -500,9 +524,12 @@ export class Runtime {
   }
 
   dispose(): void {
+    this.disposed = true;
+    void this.connection?.close();
     this.watches.dispose();
     this.assessor.dispose();
     this.reader.dispose();
+    this.communication.dispose();
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
     if (this.tick) clearTimeout(this.tick);
@@ -512,16 +539,20 @@ export class Runtime {
   private launchConfig(config: AgentConfig): AgentConfig {
     const seat = seatOf(this.kit, config.provider);
     if (!seat) return config;
-    const project = projectOf(config.cwd);
-    this.remember(project);
+    const project = can(seat.role, "supervise") ? undefined : projectOf(config.cwd);
+    if (project) this.remember(project);
     const team = this.seating.ensure(seat.role.role, seat.harness, project);
-    const render = (role: Parameters<typeof renderPrompt>[1]) => renderPrompt(this.kit, role, { guides: guidesDir(), state: project.state });
-    return applyRole(this.kit, team, config, render, project.state, this.seating.servers(team, seat.role.role));
+    const render = (role: Parameters<typeof renderPrompt>[1]) => renderPrompt(this.kit, role, { guides: guidesDir(), state: project?.state ?? join(stateRoot(), "supervisor-home") });
+    return applyRole(this.kit, team, config, render, project?.state ?? join(stateRoot(), "supervisor-home"), this.seating.servers(team, seat.role.role));
   }
 
   private openSession(request: SessionOpen): SessionOpen {
     const seat = seatOf(this.kit, request.provider);
     if (!seat) return request;
+    if (can(seat.role, "supervise")) {
+      this.seating.ensure(seat.role.role, seat.harness);
+      return seatEnv(this.kit, request, seatDir(this.kit, seat.role, seat.harness, home()), { root: request.cwd, state: join(stateRoot(), "supervisor-home") });
+    }
     const project = projectOf(request.cwd);
     this.remember(project);
     try {
@@ -539,11 +570,13 @@ export class Runtime {
   }
 
   private turnStarted(agentId: string): void {
+    this.communication.started(agentId);
     this.turns.started(agentId);
     this.outbox.turnStarted(agentId);
   }
 
   private async turnEnded(event: PluginLifecycleEvents["agent.turn_ended"]): Promise<void> {
+    this.communication.ended(event.agent.id, outputText(event.timeline), event.outcome.kind === "completed");
     this.outbox.turnEnded(event.agent.id);
     this.malformedCalls(event);
     // Wrapped: a throw here left the seat's mail waiting until some unrelated event pumped it.
@@ -569,7 +602,7 @@ export class Runtime {
     }
     this.watches.urgent(agent.id);
     const owner = await this.turns.ownerOf(project, agent.id, role);
-    await this.desk.post(owner, `permission:${agent.id}:${request.id}`, letters.permission(`${role.label} ${agent.title ?? agent.id}`, request, this.addressOf(project, agent.id, role)));
+    await this.desk.post(owner, `permission:${agent.id}:${request.id}`, letters.permission(`${role.label} ${agent.title ?? agent.id}`, request, this.addressOf(project, agent.id, role)), project);
   }
 
   private addressOf(project: Project, agentId: string, role: RoleSpec): string | undefined {
@@ -627,7 +660,7 @@ export class Runtime {
   }
 
   private async compose(to: string, list: Letter[]): Promise<string> {
-    const items = list.map((letter) => letter.text);
+    const items = list.map((letter) => letter.guard ? `[Delivery ${letter.id}]\n${letter.text}` : letter.text);
     try {
       const seat = await this.seats.look(to);
       if (!seat.cwd) return letters.mailbox(items, []);
@@ -639,7 +672,7 @@ export class Runtime {
 
   private on<N extends EventName>(server: PluginServerContext, name: N, handler: (event: PluginLifecycleEvents[N], context: PluginHookContext) => Promise<void>): void {
     server.on(name, async (event, context) => {
-      this.api = context.paseo;
+      if (!this.connection) this.api = context.paseo;
       try {
         await handler(event, context);
       } catch (error) {

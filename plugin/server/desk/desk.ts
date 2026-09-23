@@ -21,6 +21,10 @@ import * as shared from "./tools/shared.ts";
 import * as supervisor from "./tools/supervisor.ts";
 import * as watcher from "./tools/watcher.ts";
 import * as worker from "./tools/worker.ts";
+import type { SupervisionControl } from "../runtime/supervision-control.ts";
+import { DependencyRequest, DependencyChange } from "../runtime/dependencies.ts";
+import type { Operation } from "../../shared/supervision.ts";
+import { firstOverlap } from "../core/scope.ts";
 
 const TOOLS: Record<string, Tool> = {
   open_lane: supervisor.openLane,
@@ -53,6 +57,7 @@ function toolFor(role: RoleSpec, name: string): Tool | undefined {
 
 export type DeskOptions = {
   kit: Kit;
+  supervision: SupervisionControl;
   outbox: Mailer;
   seats: Seats;
   workspaces: Workspaces;
@@ -70,6 +75,7 @@ export class Desk {
   readonly projects: Map<string, Project>;
   readonly pendingArchive: Set<string>;
   private readonly services: DeskServices;
+  private readonly supervision: SupervisionControl;
   /** Whether a call from this seat is still being worked on — which is not silence. */
   inFlight(agentId: string): boolean {
     for (const key of this.running.keys()) if (key.startsWith(`${agentId}\n`)) return true;
@@ -79,6 +85,7 @@ export class Desk {
   private readonly running = new Map<string, { reply: Promise<ToolReply>; started: number }>();
 
   constructor(options: DeskOptions) {
+    this.supervision = options.supervision;
     const ctx = new DeskContext({
       kit: options.kit,
       outbox: options.outbox,
@@ -86,8 +93,9 @@ export class Desk {
       teamFor: options.teamFor,
       indexesFor: options.indexesFor ?? (() => []),
       sent: options.sent,
+      supervision: options.supervision.store,
     });
-    const roster = new Roster(options.kit, options.seats);
+    const roster = new Roster(options.kit, options.seats, options.supervision.store);
     const slots = new Slots(ctx, options.workspaces);
     const agents = new Agents(ctx, roster, slots, options.workspaces);
     this.services = { ctx, roster, slots, agents, merges: new MergeQueue(ctx, agents) };
@@ -123,8 +131,8 @@ export class Desk {
     return closeIncidentsOf(this.services, project, seat);
   }
 
-  post(to: string | undefined, key: string, text: string): Promise<Posted | "nobody"> {
-    return this.services.ctx.post(to, key, text);
+  post(to: string | undefined, key: string, text: string, project?: Project): Promise<Posted | "nobody"> {
+    return this.services.ctx.post(to, key, text, project);
   }
 
   supervisorFor(project: Project, preferred?: string): Promise<string | undefined> {
@@ -166,7 +174,7 @@ export class Desk {
           if (left.length > 0) entry.landing.writers = left;
           else delete entry.landing;
         });
-        if (left.length === 0) await ctx.post(lane.landing!.by, `canland:${lane.id}:${Date.now()}`, letters.canLand(lane));
+        if (left.length === 0) await ctx.post(lane.landing!.by, `canland:${lane.id}:${Date.now()}`, letters.canLand(lane), project);
       }
     }
   }
@@ -237,6 +245,46 @@ export class Desk {
     const tool = schema ? toolFor(caller.role, request.tool) : undefined;
     const args = (request.args ?? {}) as Args;
     const problems = schema ? argsProblems(schema, args) : [];
+    if (schema && problems.length === 0) {
+      try {
+        if (request.tool === "coordinate") {
+          const result = args.id
+            ? await this.supervision.dependencies.change(caller.id, DependencyChange.parse(args))
+            : await this.supervision.dependencies.request(caller.id, DependencyRequest.parse(args));
+          return ok(JSON.stringify(result));
+        }
+        if (request.tool === "acknowledge") {
+          this.services.ctx.acknowledge(String(args.delivery), caller.id);
+          return ok("Receipt acknowledged. This does not mark the work accepted or compliant.");
+        }
+        if (can(caller.role, "supervise")) {
+          const binding = this.supervision.store.read();
+          if (!binding.active || binding.supervisor?.agent !== caller.id) return no("This agent is not the active overall Supervisor.");
+          if (request.tool === "status" && !args.project) {
+            const view = await this.supervision.view();
+            if (!view.binding.active || view.binding.supervisor?.agent !== caller.id) return no("The selected Supervisor changed during this read.");
+            const selected = new Set(view.binding.projects.filter((p) => p.grants.includes("observe")).map((p) => p.id));
+            const scoped = <T>(values: Record<string, T>) => Object.fromEntries(Object.entries(values).filter(([id]) => selected.has(id)));
+            return ok(JSON.stringify({ binding: { ...view.binding, projects: view.binding.projects.filter((p) => selected.has(p.id)) }, agents: view.agents.filter((a) => selected.has(a.project)), deliveries: view.deliveries.filter((d) => selected.has(d.project)), dependencies: view.dependencies.filter((d) => selected.has(d.producer.project) && selected.has(d.consumer.project)), communication: scoped(view.communication), problems: scoped(view.problems) }));
+          }
+          const operation = ({ status: "observe", incidents: "observe" } as Record<string, Operation>)[request.tool] ?? request.tool as Operation;
+          const scope = await this.supervision.verifyTarget(caller.id, String(args.project ?? ""), operation);
+          if (request.tool === "close_lane" && args.land) this.supervision.store.authorize(caller.id, scope.scope.id, "land");
+          caller.project = scope.project;
+          caller.deliveryGuard = { actor: caller.id, revision: scope.revision, project: scope.scope.id, operation };
+          caller.revalidate = () => {
+            const current = this.supervision.store.authorize(caller.id, scope.scope.id, operation);
+            if (current.revision !== scope.revision) throw new Error("Scope changed while this operation was pending.");
+          };
+          if (request.tool === "open_lane") {
+            const paths = Array.isArray(args.writeSet) ? args.writeSet as string[] : [];
+            const conflict = scope.scope.leads.find((lead) => lead.origin === "external" && (!paths.length || firstOverlap(paths, lead.ownership)));
+            if (conflict) return no(`Existing Lead ${conflict.agent} owns overlapping work. Reconcile ownership before creating another lane.`);
+          }
+          if (request.tool === "message") return ok(await this.supervision.message(caller.id, scope.scope.id, String(args.to), String(args.text), `intervention:${request.id}`));
+        }
+      } catch (error) { return no(errorText(error)); }
+    }
     let reply: ToolReply;
     try {
       reply = !tool
@@ -271,6 +319,7 @@ export class Desk {
     const role = seatOf(this.services.ctx.kit, seat.provider)?.role;
     if (!role?.tools) return { error: "This agent is not part of the team." };
     if (role.role !== request.role) return { error: `This agent is a ${role.label}, so ${request.role} tools are not available to it.` };
+    if (seat.archivedAt) return { error: "This agent was archived." };
     return { id: request.agent, role, title: seat.title ?? request.agent, project: projectOf(seat.cwd ?? request.cwd) };
   }
 }

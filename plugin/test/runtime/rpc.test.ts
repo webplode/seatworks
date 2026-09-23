@@ -99,8 +99,7 @@ test("a web app turns a server on for the machine and switches a role's harness 
   assert.deepEqual(team.roles.lead.mcp, ["docs"]);
   assert.match(team.roles.lead.rules, /List a server's tools once/);
   assert.equal((await call("seatworks.team.read")).roles.lead.harness, "claude");
-  const status = await call("seatworks.status.read", { project: "shop-abc123" });
-  assert.match(status.text, /No open lanes\./);
+  await assert.rejects(call("seatworks.status.read", { project: "shop-abc123" }), /coverage is unknown/);
 });
 
 test("settings a team can't run on are refused with the reason, and stale writes conflict", async () => {
@@ -145,14 +144,14 @@ test("attaching a project is undone by detaching it, unless work is still runnin
   await call("seatworks.settings.write", { project: added.slug, revision: read.revision, values: { roles: { peer: { harness: "devin" } } } });
 
   const state = join(HOME, ".local/share/seatworks-v2/projects", added.slug);
-  writeFileSync(join(state, "ledger.json"), JSON.stringify({ version: 1, lanes: { L1: { id: "L1", status: "open" } }, tasks: {} }));
+  writeFileSync(join(state, "ledger.json"), JSON.stringify({ version: 2, lanes: { L1: { id: "L1", status: "open" } }, tasks: {} }));
   const refused = await call("seatworks.projects.remove", { project: added.slug });
   assert.match(refused.error, /open lane\(s\)/);
 
   // Closed lanes and their cut tasks are provenance that nothing deletes, so they must not count as work.
   writeFileSync(
     join(state, "ledger.json"),
-    JSON.stringify({ version: 1, lanes: { L1: { id: "L1", status: "closed" } }, tasks: { "L1-T1": { id: "L1-T1", lane: "L1", status: "cut" } } }),
+    JSON.stringify({ version: 2, lanes: { L1: { id: "L1", status: "closed" } }, tasks: { "L1-T1": { id: "L1-T1", lane: "L1", status: "cut" } } }),
   );
   assert.deepEqual(await call("seatworks.projects.remove", { project: added.slug }), { removed: added.slug });
   const listed = await call("seatworks.projects.list");

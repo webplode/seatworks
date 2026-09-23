@@ -59,7 +59,7 @@ export class Patrol {
     this.deps.watches.sync(seats.values());
     this.deps.watches.round(now, (watch) => this.deps.source.teamFor(projectOf(watch.seat.cwd)).attention.longTurnMinutes);
     this.deps.reader.keep(new Set([...seats.values()].filter((seat) => !seat.archivedAt).map((seat) => seat.id)));
-    for (const seat of seats.values()) if (seatOf(kit, seat.provider)?.role.tools) this.deps.remember(projectOf(seat.cwd));
+    for (const seat of seats.values()) if (seatOf(kit, seat.provider)?.role.tools && !can(seatOf(kit, seat.provider)?.role, "supervise")) this.deps.remember(projectOf(seat.cwd));
     for (const project of desk.projects.values()) {
       await this.step(project, "idle lanes could not be read", () => this.idleLanes(project, loadLedger(project.state), seats, now));
       await this.step(project, "incidents held for nobody or for the sensor could not be told", async () => void (await desk.retell(project)));
@@ -156,7 +156,7 @@ export class Patrol {
       if (idle < leadIdleMinutes * 60_000 || this.idleFlag.get(lead.id) === lead.updatedAt) continue;
       if (activeTasks(ledger, lane.id).length > 0 || openAsksFrom(ledger, lead.id).length > 0) continue;
       const to = await desk.supervisorFor(project, lane.opener);
-      const posted = await desk.post(to, `idle:${project.slug}:${lane.id}:${lead.updatedAt}`, letters.laneIdle(lane, Math.round(idle / 60_000), turns.lastEnding.get(lead.id) ?? ""));
+      const posted = await desk.post(to, `idle:${project.slug}:${lane.id}:${lead.updatedAt}`, letters.laneIdle(lane, Math.round(idle / 60_000), turns.lastEnding.get(lead.id) ?? ""), project);
       // Noted as told only when somebody was: set first, a notice to nobody was never tried again.
       if (posted !== "nobody") this.idleFlag.set(lead.id, lead.updatedAt);
     }
@@ -172,7 +172,7 @@ export class Patrol {
         entry.status = "stalled";
         entry.peerGone = true;
       });
-      await desk.post(ledger.lanes[task.lane]?.lead, `gone:${project.slug}:${task.id}`, letters.failed(`the Peer on ${task.id} (${task.title})`, "its agent was closed or archived"));
+      await desk.post(ledger.lanes[task.lane]?.lead, `gone:${project.slug}:${task.id}`, letters.failed(`the Peer on ${task.id} (${task.title})`, "its agent was closed or archived"), project);
     }
   }
 
@@ -193,19 +193,19 @@ export class Patrol {
           entry.remindedAt = now;
           return { ...entry };
         });
-        if (moved) await desk.post(to, `ask:${moved.id}:${to}`, letters.askTo(moved, ask.task ? `the Peer on ${ask.task}, whose reader is gone` : `the Lead of ${ask.lane ?? "a lane"}, whose reader is gone`));
+        if (moved) await desk.post(to, `ask:${moved.id}:${to}`, letters.askTo(moved, ask.task ? `the Peer on ${ask.task}, whose reader is gone` : `the Lead of ${ask.lane ?? "a lane"}, whose reader is gone`), project);
         continue;
       }
       if (seats.get(ask.to)?.status !== "idle" || !waited(ask)) continue;
       const age = Math.round((now - ask.openedAt) / 60_000);
       const reminding = ask.reminders < maxReminders;
       if (reminding) {
-        await desk.post(ask.to, `remind:${project.slug}:${ask.id}:${ask.reminders}`, letters.reminder(ask, age));
+        await desk.post(ask.to, `remind:${project.slug}:${ask.id}:${ask.reminders}`, letters.reminder(ask, age), project);
         // Escalated only from a Lead: an ask already put to the supervisor has nowhere further up.
       } else if (ask.to === lane?.lead && !can(roleNamed(this.deps.kit, ask.fromRole), "lead") && !ask.escalated) {
         const to = await desk.supervisorFor(project, lane?.opener);
         // Marked escalated only once delivered; with nobody seated it is retried next round.
-        if ((await desk.post(to, `escalate:${project.slug}:${ask.id}`, letters.escalated(ask, age, ask.lane ?? "the project"))) === "nobody") continue;
+        if ((await desk.post(to, `escalate:${project.slug}:${ask.id}`, letters.escalated(ask, age, ask.lane ?? "the project"), project)) === "nobody") continue;
       } else continue;
       // Pinned to this round's count so overlapping rounds cannot push it past the owner's maximum.
       await desk.ledger(project, (current) => {

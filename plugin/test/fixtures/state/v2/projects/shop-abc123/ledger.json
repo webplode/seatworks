@@ -1,0 +1,89 @@
+{
+  "version": 2,
+  "seq": {
+    "lane": 1,
+    "ask": 1,
+    "slot": 1
+  },
+  "lanes": {
+    "L1": {
+      "id": "L1",
+      "title": "Checkout totals",
+      "outcome": "Totals include tax",
+      "acceptance": [
+        "tax shown"
+      ],
+      "outOfScope": [
+        "payments"
+      ],
+      "base": "main",
+      "branch": "lane/L1-checkout-totals",
+      "writeSet": [
+        "src/cart"
+      ],
+      "contracts": [],
+      "lead": "agent-lead-1",
+      "opener": "agent-sup-1",
+      "status": "closed",
+      "openedAt": 1790000000000,
+      "tasks": 1
+    }
+  },
+  "tasks": {
+    "L1-T1": {
+      "id": "L1-T1",
+      "lane": "L1",
+      "kind": "code",
+      "mode": "lane",
+      "title": "Add tax",
+      "goal": "Totals include tax",
+      "acceptance": [
+        "tax shown"
+      ],
+      "owned": [
+        "src/cart"
+      ],
+      "outOfScope": [],
+      "peer": "agent-peer-1",
+      "status": "merged",
+      "openedAt": 1790000000000,
+      "updatedAt": 1790000100000,
+      "handback": {
+        "file": "handbacks/L1-T1-1790000050000.md",
+        "outcome": "done",
+        "summary": "Tax added",
+        "at": 1790000050000
+      },
+      "silent": 0
+    }
+  },
+  "asks": {
+    "A1": {
+      "id": "A1",
+      "from": "agent-lead-1",
+      "fromRole": "lead",
+      "to": "supervisor",
+      "lane": "L1",
+      "kind": "question",
+      "text": "Round tax up?",
+      "status": "answered",
+      "openedAt": 1790000010000,
+      "reminders": 0,
+      "answer": "Round half up."
+    }
+  },
+  "agents": {
+    "agent-lead-1": {
+      "id": "agent-lead-1",
+      "role": "lead",
+      "lane": "L1"
+    },
+    "agent-peer-1": {
+      "id": "agent-peer-1",
+      "role": "peer",
+      "lane": "L1",
+      "task": "L1-T1"
+    }
+  },
+  "slots": {}
+}

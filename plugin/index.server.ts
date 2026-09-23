@@ -21,5 +21,6 @@ export default function contribute(server: PluginServerContext) {
   }
   runtime.prepare();
   runtime.register(server);
+  void runtime.connect().catch(() => console.error("seatworks-v2: startup connection failed; recovery waits for a host hook or panel request"));
   return () => runtime.dispose();
 }

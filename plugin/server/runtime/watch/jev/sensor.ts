@@ -61,7 +61,7 @@ function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /** One request to the sensor, retried as its settings say; what it answered, unread. */
-async function decide(spec: SensorSpec, key: string, state: unknown, questions: Record<string, unknown>, session: string, fetcher: Fetch, halt?: AbortSignal): Promise<unknown> {
+export async function decide(spec: SensorSpec, key: string, state: unknown, questions: Record<string, unknown>, session: string, fetcher: Fetch, halt?: AbortSignal): Promise<unknown> {
   const body = JSON.stringify({ model: spec.model, state, questions, session_id: session.slice(0, 256) });
   for (let attempt = 0; ; attempt++) {
     if (halt?.aborted) throw new SensorError("let go");

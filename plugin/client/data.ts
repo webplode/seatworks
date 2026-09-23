@@ -28,6 +28,7 @@ export type TeamView = {
 };
 
 export type AttentionChoice = {
+  communication?: "off" | "shadow";
   tickSeconds?: number; leadIdleMinutes?: number; askRemindMinutes?: number; maxReminders?: number;
   watch?: boolean; destructive?: string; testPath?: string; repeatsAt?: number; reworksAt?: number; reviewsAt?: number; suppressed?: string;
   longTurnMinutes?: number; incidentsPerDay?: number;

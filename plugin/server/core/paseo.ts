@@ -4,6 +4,7 @@ export type PaseoApi = PluginHookContext["paseo"];
 
 export type SeatView = {
   id: string;
+  workspaceId?: string | null;
   title?: string | null;
   provider: string;
   cwd: string;

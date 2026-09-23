@@ -274,7 +274,7 @@ export const accept: Tool = async ({ ctx, agents, merges }, caller, args) => {
   const updated = await ctx.setTask(project, task.id, (entry) => {
     entry.status = "merged";
   });
-  await ctx.post(lane.lead, `merge:${task.id}:merged:${Date.now()}`, letters.merged(task, counts, outsideOwned(counts?.files ?? [], task.owned), gate));
+  await ctx.post(lane.lead, `merge:${task.id}:merged:${Date.now()}`, letters.merged(task, counts, outsideOwned(counts?.files ?? [], task.owned), gate), caller.project);
   if (updated) await agents.retire(project, updated, lane.branch);
   ctx.event(project, { kind: "task.accepted", task: task.id, mode: "lane" });
   return ok(
@@ -304,7 +304,7 @@ export const rework: Tool = async ({ ctx, roster }, caller, args) => {
   const seat = await roster.look(result.peer);
   if (seat.archivedAt) return no(`The Peer on ${result.id} is gone; cut the task and start a new one.`);
   // Keyed by the task's clock, not the words: a repeated instruction is a second instruction, not a duplicate.
-  const posted = await ctx.post(result.peer, `rework:${result.id}:${result.reworks}`, letters.rework(text));
+  const posted = await ctx.post(result.peer, `rework:${result.id}:${result.reworks}`, letters.rework(text), caller.project);
   return posted === "duplicate"
     ? no(`That rework was already sent to the Peer on ${result.id} and it has not ended a turn since, so this would be the same letter twice. Wait for its hand-back, or cut it.`)
     : ok(`Rework sent to the Peer on ${result.id}; its next hand-back arrives as mail.`);
@@ -364,7 +364,7 @@ export const ask: Tool = async ({ ctx, roster }, caller, args) => {
     ledger.asks[created.id] = created;
     return { ...created };
   });
-  await ctx.post(to, `ask:${entry.id}`, letters.askTo(entry, `the Lead of ${lane.id} (${lane.title})`));
+  await ctx.post(to, `ask:${entry.id}`, letters.askTo(entry, `the Lead of ${lane.id} (${lane.title})`), caller.project);
   ctx.event(caller.project, { kind: "ask.opened", ask: entry.id, from: caller.id, to });
   return ok(`Asked as ${entry.id}. Keep working on your default where you can; the answer arrives as mail.`);
 };
@@ -376,7 +376,7 @@ export const report: Tool = async ({ ctx, roster }, caller, args) => {
   const gate = args.ready === true ? await laneGate(ctx, caller.project, lane) : undefined;
   const to = await roster.supervisorFor(caller.project, lane.opener);
   const letter = letters.report(lane, summary, args.ready === true, strs(args.carried), gate);
-  const posted = await ctx.post(to, `report:${lane.id}:${hash(summary)}`, letter);
+  const posted = await ctx.post(to, `report:${lane.id}:${hash(summary)}`, letter, caller.project);
   ctx.event(caller.project, { kind: "lane.report", lane: lane.id, ready: args.ready === true, gate: gate?.ok, to: to ?? null, text: posted === "nobody" ? letter : undefined });
   // With nobody supervising seated the post goes nowhere; it is kept in the event log and the Lead told so.
   if (posted === "nobody") {

@@ -49,7 +49,7 @@ export class MergeQueue {
       await this.ctx.setTask(project, taskId, (entry) => {
         entry.status = status;
       });
-      await this.ctx.post(lane.lead, `merge:${taskId}:${status}:${Date.now()}`, text);
+      await this.ctx.post(lane.lead, `merge:${taskId}:${status}:${Date.now()}`, text, project);
       this.ctx.event(project, { kind: `merge.${status}`, task: taskId });
     };
     const cwd = lane.worktree;

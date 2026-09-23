@@ -68,7 +68,7 @@ export const done: Tool = async ({ ctx, roster }, caller, args) => {
   // A Lead no longer seated would never read it; the level above is told instead and can seat one.
   const lead = ledger.lanes[task.lane]?.lead;
   const reader = lead && (await roster.seated(lead)) ? lead : await roster.supervisorFor(project, ledger.lanes[task.lane]?.opener);
-  await ctx.post(reader, `done:${task.id}:${hash(body)}`, letters.handback(heading, file, body, caller.id));
+  await ctx.post(reader, `done:${task.id}:${hash(body)}`, letters.handback(heading, file, body, caller.id), caller.project);
   ctx.event(project, { kind: review ? "review.done" : "task.done", task: task.id, outcome, commit });
   // A commit made off the branch (mid-bisect) belongs to no branch and goes with the copy; said while fixable.
   const branch = review ? undefined : ledger.lanes[task.lane]?.branch;
@@ -110,7 +110,7 @@ export const ask: Tool = async ({ ctx, roster }, caller, args) => {
     current.asks[created.id] = created;
     return { ...created };
   });
-  await ctx.post(to, `ask:${entry.id}`, letters.askTo(entry, `the Peer on ${task.id} (${task.title})`));
+  await ctx.post(to, `ask:${entry.id}`, letters.askTo(entry, `the Peer on ${task.id} (${task.title})`), caller.project);
   ctx.event(project, { kind: "ask.opened", ask: entry.id, from: caller.id, to });
   return ok(`Asked as ${entry.id}${to === lane.lead ? "" : ", of the owner, because your lead is not there"}. End your turn; the answer arrives as a message.`);
 };

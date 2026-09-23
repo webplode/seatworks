@@ -13,8 +13,9 @@ Only the Claude Code specifics are below; everything in `AGENTS.md` applies.
   and they cost money. The suite, your reading and `~/.paseo/daemon.log` are the evidence.
 - **Never print or cat a file that can hold a key:** `~/.local/share/seatworks-v2/settings.json`,
   any project `settings.json`, `~/.paseo/config.json`. Test fixtures use fake `sk-or-v1-…` keys.
-- **`plugin/content/**` is runtime content.** Check the KEEP list in `../REBUILD-TRACKER.md` (resolve
-  it by text; its line numbers are stale) before touching a role prompt.
+- **`plugin/content/**` is runtime content.** Read `docs/PRODUCT.md` and the affected role's
+  current source before changing a prompt. The upstream author's external rebuild tracker
+  is not a dependency of this fork.
 - **`hidesWords` fails the build** when a role's text uses a word it must not see: rephrase, don't
   remove the lint.
 - **Comments: one short docstring per function at most** (the rule is in `AGENTS.md`). A comment

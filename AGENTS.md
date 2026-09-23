@@ -4,8 +4,10 @@ A Paseo plugin that serves the **SLP** working concept (Supervisor / Lead / Peer
 and a Watcher). This file holds only what the code does not tell you.
 
 - **Nothing here has shipped.** No consumers, no versions, nothing to stay compatible with.
-- **Context anchor:** `../REBUILD-TRACKER.md` holds the concept, the recovered spec, audit evidence
-  and past decisions. Read the parts your change touches before changing it.
+- **Product baseline:** [docs/PRODUCT.md](docs/PRODUCT.md) owns the Human's current direction:
+  Seatworks is the sole product and foundation baseline, with one overall Supervisor across
+  multiple projects. Old adjacent Foundation/SLP decisions and the upstream author's external
+  rebuild tracker are not dependencies or authority for this fork.
 
 ## The governing rule
 

@@ -4,6 +4,9 @@ export type { PendingPermission, PermissionResponse, SeatView };
 
 export type SeatLook = {
   id: string;
+  projectId?: string | null;
+  workspaceId?: string | null;
+  labels?: Record<string, string>;
   provider?: string;
   title?: string | null;
   cwd?: string | null;
@@ -13,6 +16,7 @@ export type SeatLook = {
 };
 
 export type SeatSpec = {
+  idempotencyKey?: string;
   config: Record<string, unknown>;
   parent?: string;
   title: string;

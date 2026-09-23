@@ -86,6 +86,7 @@ export const ack: Tool = async ({ ctx }, caller, args) => {
   const allowed = mine(caller);
   if (typeof allowed === "string") return no(allowed);
   const done = await ctx.incidents(caller.project, (held) => {
+    caller.revalidate?.();
     const item = held.items[id];
     if (!item || !allowed(item)) return undefined;
     item.label = verdict;

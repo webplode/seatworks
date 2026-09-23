@@ -184,6 +184,7 @@ export type McpEntry = {
 };
 
 export type Attention = {
+  communication?: "off" | "shadow";
   tickSeconds: number;
   leadIdleMinutes: number;
   askRemindMinutes: number;

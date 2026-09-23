@@ -16,7 +16,7 @@ export function expandHome(value: string, homeDir = home()): string {
 }
 
 export function paseoConfigPath(homeDir = home()): string {
-  return join(homeDir, ".paseo", "config.json");
+  return join(process.env.PASEO_HOME || join(homeDir, ".paseo"), "config.json");
 }
 
 export function stateRoot(homeDir = home()): string {

@@ -7,7 +7,7 @@ import { type Team, resolveTeam, rulesFor, skillDirsFor, templateRoles, transpor
 import { gitCommonDir } from "../core/git.ts";
 import type { SeatView, Seats } from "../core/ports.ts";
 import { seatProblems } from "../catalog/seats.ts";
-import { guidesDir, home, stateRoot, worktreeRoot } from "../core/paths.ts";
+import { expandHome, guidesDir, home, stateRoot, worktreeRoot } from "../core/paths.ts";
 import { createHash } from "node:crypto";
 import { flowView } from "../desk/flow.ts";
 import type { CleanView, MigrateView, UpdateView, WatchView } from "../../shared/views.ts";
@@ -347,7 +347,7 @@ export class SettingsControl implements Control {
   }
 
   listPaths(path?: string): unknown {
-    const asked = path && path.trim() ? path.trim() : homedir();
+    const asked = path && path.trim() ? expandHome(path.trim()) : homedir();
     let here: string;
     try {
       here = realpathSync(asked);

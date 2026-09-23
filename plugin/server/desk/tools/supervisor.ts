@@ -45,6 +45,7 @@ async function readIssue(args: Args, project: Project): Promise<{ issue?: Issue;
 function recordLane(desk: DeskServices, caller: Caller, args: Args, base: string, issue: Issue | undefined): Promise<Lane> {
   const title = str(args.title);
   return desk.ctx.ledger(caller.project, (ledger) => {
+    caller.revalidate?.();
     const id = nextLaneId(ledger);
     const lane: Lane = {
       id,
@@ -96,6 +97,7 @@ export const openLane: Tool = async (desk, caller, args) => {
   if (!(await branchExists(project.root, base))) return no(`The base branch ${base} does not exist.`);
   // Seeded only when unanswered: `config.gate` is "" when the owner answered "no gate".
   if (!config.base || config.gate === undefined) {
+    caller.revalidate?.();
     const fault = configFault(configFile(project.state));
     if (fault) return no(`${fault}\nOnly the Human can repair it or move it aside — no seat may write the desk's own files — so tell them; the desk will not write its own defaults over a file it could not read.`);
     saveConfig(project.state, { ...config, base: config.base ?? base, gate: config.gate ?? detectGate(project.root) });
@@ -123,6 +125,7 @@ export const openLane: Tool = async (desk, caller, args) => {
   };
   let slot: { id?: string; path: string; workspaceId?: string };
   try {
+    caller.revalidate?.();
     slot = ownCopy ? await slots.acquire(project, lane.branch, base, { lane: lane.id }) : await slots.inPlace(project, lane.branch, base);
   } catch (error) {
     return fail(`The lane could not get a working copy: ${errorText(error)}`);
@@ -131,6 +134,7 @@ export const openLane: Tool = async (desk, caller, args) => {
     const askedLead = str(args.role);
     const leadRole = roleThatCan(ctx.kit, "lead", askedLead || undefined);
     if (!leadRole) return fail(namedOrNot(ctx.kit, "lead", askedLead, "lead a lane"), slot);
+    caller.revalidate?.();
     const lead = await agents.start(project, slot, leadRole.role, {
       parent: caller.id,
       title: `${lane.id} ${lane.title}`,
@@ -153,7 +157,7 @@ export const openLane: Tool = async (desk, caller, args) => {
 };
 
 /** Merges base into the lane in its own copy; never under a seat mid-turn there, and an unseen seat counts as writing. */
-async function bringBaseIn(roster: Roster, ledger: Ledger, lane: Lane): Promise<{ why: string; writers?: string[] } | undefined> {
+async function bringBaseIn(roster: Roster, ledger: Ledger, lane: Lane, revalidate?: () => void): Promise<{ why: string; writers?: string[] } | undefined> {
   if (!lane.worktree) return { why: `it has no working copy on record to merge ${lane.base} into.` };
   if (await isAncestor(lane.worktree, lane.base, lane.branch)) return undefined;
   const writers = [lane.lead, ...tasksOf(ledger, lane.id).filter((task) => task.mode !== "parallel").map((task) => task.peer)];
@@ -175,6 +179,7 @@ async function bringBaseIn(roster: Roster, ledger: Ledger, lane: Lane): Promise<
       writers: busy,
     };
   }
+  revalidate?.();
   const merged = await mergeBranch(lane.worktree, lane.base, `Bring ${lane.base} into ${lane.branch}`);
   if (merged.ok) return undefined;
   const why = merged.conflicts.length > 0 ? `conflicts in ${merged.conflicts.join(", ")}` : merged.message;
@@ -189,10 +194,11 @@ export const closeLane: Tool = async ({ ctx, roster, slots, agents, merges }, ca
   if (lane.status !== "open") return no(`Lane ${lane.id} is already closed.`);
   // Wait for queued merges: they run in the lane's copy, which closing gates, lands and removes.
   await merges.settled(project);
+  caller.revalidate?.();
   let landing = `the branch ${lane.branch} is kept for the Human`;
   if (args.land === true) {
     // Land before closing: a closed lane cannot be closed again, so a landing that cannot happen is refused while open.
-    const synced = await bringBaseIn(roster, ledger, lane);
+    const synced = await bringBaseIn(roster, ledger, lane, caller.revalidate);
     if (synced?.writers) {
       await ctx.ledger(project, (current) => {
         const entry = current.lanes[lane.id];
@@ -205,12 +211,14 @@ export const closeLane: Tool = async ({ ctx, roster, slots, agents, merges }, ca
     if (!gate.ok && args.overGate !== true) {
       return no(`Lane ${lane.id} was not closed: ${gate.text}\nMessage its Lead, close it with land false, or land it over the gate with overGate true — that is your call.`);
     }
+    caller.revalidate?.();
     const result = await landLane(project.root, lane.base, lane.branch);
     if (!result.landed) return no(`Lane ${lane.id} was not closed: it could not land, because ${result.how}. Close it again once that is cleared, or close it with land false.`);
     if (!gate.ok) ctx.event(project, { kind: "gate.overridden", lane: lane.id, by: caller.id });
     landing = `${result.how}${gate.ok ? "" : ", over a red gate"}`;
   }
   const retired = await ctx.ledger(project, (current) => {
+    caller.revalidate?.();
     const entry = current.lanes[lane.id];
     if (entry) entry.status = "closed";
     const tasks: Task[] = [];
@@ -236,7 +244,7 @@ export const closeLane: Tool = async ({ ctx, roster, slots, agents, merges }, ca
 
   if (lane.detourOf) {
     const waiting = loadLedger(project.state).lanes[lane.detourOf];
-    if (waiting?.status === "open" && waiting.lead) await ctx.post(waiting.lead, `detour:${lane.id}:${Date.now()}`, letters.detourLanded(lane, waiting, landing));
+    if (waiting?.status === "open" && waiting.lead) await ctx.post(waiting.lead, `detour:${lane.id}:${Date.now()}`, letters.detourLanded(lane, waiting, landing), caller.project);
   }
   ctx.event(project, { kind: "lane.closed", lane: lane.id, land: args.land === true, landing, reason: str(args.reason), writers });
   const copy =
@@ -263,6 +271,7 @@ export const setProject: Tool = async (_desk, caller, args) => {
     gateOn: args.gateOn === "task" ? "task" : args.gateOn === "lane" ? "lane" : config.gateOn,
     serialOnly: Array.isArray(args.serialOnly) ? strs(args.serialOnly) : config.serialOnly,
   };
+  caller.revalidate?.();
   saveConfig(caller.project.state, next);
   return ok(`Base ${next.base ?? "unset"}; gate ${next.gate || "none"}, run per ${next.gateOn}; gate timeout ${next.gateTimeoutMinutes} minutes.`);
 };

@@ -1,3 +1,9 @@
+import { createPaseoClient, type PaseoClientConfig } from "@getpaseo/client";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { dirname } from "node:path";
+import { paseoConfigPath } from "./paths.ts";
+import type { HostInventory } from "../../shared/supervision.ts";
 import type { PaseoApi, PendingPermission, PermissionResponse, SeatView } from "./paseo.ts";
 import type { SeatLook, SeatSpec, Seats, Workspace, Workspaces } from "./ports.ts";
 import { type TimelineHandle, follow } from "./stream.ts";
@@ -11,7 +17,7 @@ type Handle = {
   archivedAt?: string | null;
   pendingPermissions?: PendingPermission[];
   refresh(): Promise<unknown>;
-  current(): { id?: string; provider?: string; cwd?: string | null; title?: string | null } | null | undefined;
+  current(): { id?: string; workspaceId?: string | null; labels?: Record<string, string>; provider?: string; cwd?: string | null; title?: string | null } | null | undefined;
   send(text: string, options?: { activeTurnBehavior?: "steer" }): Promise<unknown>;
   respondToPermission(options: { requestId: string; response: PermissionResponse }): Promise<unknown>;
   archive(): Promise<unknown>;
@@ -28,6 +34,8 @@ function lookOf(handle: Handle): SeatLook {
   const snapshot = handle.current();
   return {
     id: handle.id,
+    workspaceId: snapshot?.workspaceId,
+    labels: snapshot?.labels,
     provider: snapshot?.provider,
     title: snapshot?.title ?? null,
     cwd: handle.cwd ?? snapshot?.cwd ?? null,
@@ -43,24 +51,34 @@ export function seatsOn(bound: Bound): Seats {
     /** Paged: an unpaged read is capped by the daemon, and a seat missing from this list is treated as gone. */
     async open(): Promise<SeatView[]> {
       const paseo = bound();
-      if (!paseo) return [];
+      if (!paseo) throw new Error("Paseo is not connected; agent coverage is unknown.");
       const found: SeatView[] = [];
       let cursor: string | undefined;
-      for (let page = 0; page < 20; page++) {
+      const visited = new Set<string>();
+      for (;;) {
         const result = await paseo.agents.list({ filter: { includeArchived: false }, page: cursor ? { limit: 200, cursor } : { limit: 200 } });
         for (const entry of result.entries) {
           const seat = entry.agent as unknown as SeatView;
           if (!seat.archivedAt) found.push(seat);
         }
-        if (!result.pageInfo?.hasMore || !result.pageInfo.nextCursor) break;
+        if (!result.pageInfo?.hasMore) break;
+        if (!result.pageInfo.nextCursor || visited.has(result.pageInfo.nextCursor)) throw new Error("Paseo returned incomplete agent pagination.");
         cursor = result.pageInfo.nextCursor;
+        visited.add(cursor);
       }
       return found;
     },
     async look(id: string): Promise<SeatLook> {
       const handle = ref(id);
       await handle.refresh();
-      return lookOf(handle);
+      if (!handle.current()) throw new Error(`Agent ${id} is unavailable.`);
+      const seat = lookOf(handle);
+      if (seat.workspaceId) {
+        const placement = await reach(bound).workspaces.ref(seat.workspaceId).refresh();
+        if (!placement || placement.archivingAt) throw new Error(`Workspace ${seat.workspaceId} is unavailable.`);
+        seat.projectId = placement.projectId;
+      }
+      return seat;
     },
     async send(id: string, text: string, steer = false): Promise<void> {
       // The daemon takes `activeTurnBehavior` though the SDK's type leaves it out.
@@ -87,6 +105,39 @@ export function seatsOn(bound: Bound): Seats {
       });
     },
   };
+}
+
+export async function inventoryOn(bound: Bound): Promise<HostInventory> {
+  const api = reach(bound);
+  const listed = await api.projects.list();
+  const projects = listed.projects.map((p) => ({ id: p.projectId, root: p.projectRootPath, name: p.projectDisplayName }));
+  const workspaces: HostInventory["workspaces"] = [];
+  let cursor: string | undefined;
+  const visited = new Set<string>();
+  for (;;) {
+    const page = await api.workspaces.list({ page: { limit: 200, ...(cursor ? { cursor } : {}) } });
+    for (const w of page.entries) if (!w.archivingAt) workspaces.push({ id: w.id, project: w.projectId, path: w.workspaceDirectory });
+    if (!page.pageInfo.hasMore) break;
+    cursor = page.pageInfo.nextCursor ?? undefined;
+    if (!cursor || visited.has(cursor)) throw new Error("Paseo returned incomplete workspace pagination.");
+    visited.add(cursor);
+  }
+  return { projects, workspaces };
+}
+
+export function startupConnection(config: PaseoClientConfig) {
+  return createPaseoClient({ ...config, reconnect: { enabled: true }, connectTimeoutMs: 10_000 });
+}
+
+export async function connectLocal() {
+  const { stdout } = await promisify(execFile)("paseo", ["daemon", "status", "--json"], { timeout: 10_000 });
+  const status = JSON.parse(stdout);
+  if (status.localDaemon !== "running" || status.home !== dirname(paseoConfigPath())) throw new Error("The local daemon's identity could not be verified for startup recovery.");
+  const address = status.listen;
+  if (typeof address !== "string" || !/^(127\.0\.0\.1|localhost):\d+$/.test(address)) throw new Error("Startup recovery requires a verified local loopback daemon.");
+  const client = startupConnection({ url: `ws://${address}/ws`, ...(process.env.SEATWORKS_PASEO_PASSWORD ? { password: process.env.SEATWORKS_PASEO_PASSWORD } : {}) });
+  try { await client.connect(); return client; }
+  catch (error) { await client.close(); throw error; }
 }
 
 export function workspacesOn(bound: Bound): Workspaces {
@@ -134,6 +185,7 @@ export function workspacesOn(bound: Bound): Workspaces {
       const handle = (await reach(bound)
         .workspaces.ref(workspace)
         .agents.create({
+          ...(spec.idempotencyKey ? { idempotencyKey: spec.idempotencyKey } : {}),
           config: spec.config as never,
           parent: spec.parent,
           title: spec.title.slice(0, 60),

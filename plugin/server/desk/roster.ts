@@ -2,15 +2,18 @@ import { type Kit, can, seatOf } from "../catalog/kit.ts";
 import { answerWith, questionsIn } from "../core/paseo.ts";
 import type { SeatLook, SeatView, Seats } from "../core/ports.ts";
 import { type Project, projectOf } from "./project.ts";
+import type { Supervision } from "../runtime/supervision.ts";
 
 export class Roster {
   readonly pendingArchive = new Set<string>();
   private readonly kit: Kit;
   private readonly seats: Seats;
+  private readonly supervision: Supervision;
 
-  constructor(kit: Kit, seats: Seats) {
+  constructor(kit: Kit, seats: Seats, supervision: Supervision) {
     this.kit = kit;
     this.seats = seats;
+    this.supervision = supervision;
   }
 
   open(): Promise<SeatView[]> {
@@ -48,20 +51,10 @@ export class Roster {
     }
   }
 
-  async supervisorFor(project: Project, preferred?: string): Promise<string | undefined> {
-    let gone = false;
-    if (preferred) {
-      try {
-        const seat = await this.seats.look(preferred);
-        if (!seat.archivedAt) return preferred;
-        gone = true;
-      } catch {}
-    }
-    const found = (await this.seats.open())
-      .filter((seat) => this.holds(seat, "supervise", project))
-      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-    // Not the preferred id: it may be the seat just read as archived, and every letter to it would be held forever.
-    return found[0]?.id ?? (gone ? undefined : preferred);
+  async supervisorFor(project: Project, _preferred?: string): Promise<string | undefined> {
+    const binding = this.supervision.read();
+    const selected = this.supervision.recipient(project);
+    return binding.active && selected && await this.seated(selected) ? selected : undefined;
   }
 
   /** The live seats watching this project, the most recently active first. */

@@ -1,5 +1,11 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
+import { BindingChange, LeadChange } from "./supervision.ts";
+
+export const supervisionRpc = defineRpc({ name: "seatworks.supervision.read", input: z.object({}), output: z.json() });
+export const bindingRpc = defineRpc({ name: "seatworks.supervision.bind", input: BindingChange, output: z.json() });
+export const adoptRpc = defineRpc({ name: "seatworks.supervision.adopt", input: LeadChange, output: z.json() });
+export const createSupervisorRpc = defineRpc({ name: "seatworks.supervision.create", input: z.object({ revision: z.number().int() }), output: z.json() });
 
 const project = z.string().min(1).optional();
 

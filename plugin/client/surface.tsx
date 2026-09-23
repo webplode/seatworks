@@ -14,8 +14,9 @@ import { ServersSection } from "./servers.tsx";
 import { SetupDialog } from "./setup-dialog.tsx";
 import { TeamSection } from "./team.tsx";
 import { UpkeepSection } from "./upkeep.tsx";
+import { SupervisionPanel } from "./supervision.tsx";
 
-export function SeatworksSurface({ theme, layout }: PluginSurfaceProps) {
+export function SeatworksSurface({ theme, layout, navigation }: PluginSurfaceProps) {
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>("team");
   const [chip, setChip] = useState<string | null>(null);
@@ -109,6 +110,7 @@ export function SeatworksSurface({ theme, layout }: PluginSurfaceProps) {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
         {trouble}
+        <SupervisionPanel theme={theme} onFlow={(slug) => { setOpen(slug); setTab("flow"); }} onAgent={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined} />
         <ProjectList
           projects={data.projects}
           nameOf={nameOf}

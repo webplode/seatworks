@@ -50,6 +50,7 @@ const Pattern = z.string().min(1).refine(
 );
 
 export const AttentionChoice = z.strictObject({
+  communication: z.enum(["off", "shadow"]).optional(),
   tickSeconds: z.number().int().min(5).optional(),
   leadIdleMinutes: z.number().int().min(1).optional(),
   askRemindMinutes: z.number().int().min(1).optional(),

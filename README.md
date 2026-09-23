@@ -1,5 +1,12 @@
 # Seatworks
 
+This is the `webplode/seatworks` fork of `sting9k/seatworks`, the sole product and foundation
+baseline for this project. The target is one overall Supervisor coordinating Leads across
+independent projects and workspaces. That cross-project capability is not implemented yet.
+See the [product baseline](docs/PRODUCT.md) and
+[supervision research](docs/research/supervision-and-multiproject.md). The documentation
+below describes the upstream implementation.
+
 A [Paseo](https://paseo.sh) plugin that runs a team of coding agents the **SLP** way. A
 **Supervisor** works with you, a **Lead** owns each line of work, and **Peers** each do one task. A
 **Reviewer** reads the work with clean context, and a **Watcher** reads how it is being done.

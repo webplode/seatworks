@@ -49,7 +49,7 @@ export class TurnRules {
   async ended(event: TurnEnded): Promise<void> {
     const { agent, outcome, timeline } = event;
     const role = seatOf(this.deps.kit, agent.provider)?.role;
-    if (!role?.tools) return;
+    if (!role?.tools || can(role, "supervise")) return;
     const project = projectOf(agent.cwd);
     this.deps.remember(project);
     const started = this.startedAt.get(agent.id) ?? Date.now() - 30 * 60_000;
@@ -59,7 +59,7 @@ export class TurnRules {
     this.lastEnding.set(agent.id, text);
     if (outcome.kind === "failed") {
       const owner = await this.ownerOf(project, agent.id, role);
-      await this.deps.desk.post(owner, `failed:${agent.id}:${event.turnId ?? Date.now()}`, letters.failed(`${role.label} ${agent.title ?? agent.id}`, outcome.error.message));
+      await this.deps.desk.post(owner, `failed:${agent.id}:${event.turnId ?? Date.now()}`, letters.failed(`${role.label} ${agent.title ?? agent.id}`, outcome.error.message), project);
       return;
     }
     const ledger = loadLedger(project.state);
@@ -94,10 +94,10 @@ export class TurnRules {
     });
     if (!updated) return;
     if (updated.status !== "stalled") {
-      await desk.post(agent.id, `nudge:${task.id}:${updated.silent}:${Date.now()}`, letters.nudge("done"));
+      await desk.post(agent.id, `nudge:${task.id}:${updated.silent}:${Date.now()}`, letters.nudge("done"), project);
       return;
     }
-    await desk.post(lane?.lead, `silent:${task.id}:${updated.silent}`, letters.stalled(task, text, updated.silent, denied));
+    await desk.post(lane?.lead, `silent:${task.id}:${updated.silent}`, letters.stalled(task, text, updated.silent, denied), project);
     desk.event(project, { kind: "task.silent", task: task.id, denied: denied?.what ?? null, refused: denied?.refused ?? false });
   }
 }

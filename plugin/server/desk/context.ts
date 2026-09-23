@@ -7,11 +7,13 @@ import { type Ledger, type Task, ledgerFault, loadLedger, saveLedger } from "./l
 import type { Project } from "./project.ts";
 import { type Incidents, incidentsFault, loadIncidents, saveIncidents } from "./incidents.ts";
 import type { Sent } from "../runtime/watch/seat/reader.ts";
+import type { Supervision } from "../runtime/supervision.ts";
+import type { DeliveryGuard } from "../../shared/supervision.ts";
 
 export type ToolRequest = { id: string; agent: string; role: string; tool: string; args: Record<string, unknown>; cwd: string; at: number };
 export type ToolReply = { ok: boolean; text: string };
 export type Args = Record<string, unknown>;
-export type Caller = { id: string; role: RoleSpec; title: string; project: Project };
+export type Caller = { id: string; role: RoleSpec; title: string; project: Project; revalidate?: () => void; deliveryGuard?: Omit<DeliveryGuard, "workspace"> };
 
 export const str = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 export const strs = (value: unknown): string[] =>
@@ -31,7 +33,7 @@ export type CodeIndex = {
 /** "duplicate": dropped as a repeat of a letter already sent. */
 export type Posted = "sent" | "held" | "duplicate";
 
-export type Mailer = { post(letter: { to: string; key: string; text: string }): Promise<Posted> };
+export type Mailer = { post(letter: { to: string; key: string; text: string; guard?: DeliveryGuard }): Promise<Posted>; acknowledge?(id: string, actor: string): void };
 
 export type DeskDeps = {
   kit: Kit;
@@ -40,6 +42,7 @@ export type DeskDeps = {
   teamFor: (project?: Project) => Team;
   indexesFor: (project: Project) => CodeIndex[];
   sent?: (watcher: string, ref: string) => Sent | undefined;
+  supervision?: Supervision;
 };
 
 export class DeskContext {
@@ -59,6 +62,11 @@ export class DeskContext {
 
   sent(watcher: string, ref: string): Sent | undefined {
     return this.deps.sent?.(watcher, ref);
+  }
+
+  acknowledge(id: string, actor: string): void {
+    if (!this.deps.outbox.acknowledge) throw new Error("Delivery receipts are unavailable.");
+    this.deps.outbox.acknowledge(id, actor);
   }
 
   indexes(project: Project): CodeIndex[] {
@@ -119,9 +127,13 @@ export class DeskContext {
     }
   }
 
-  async post(to: string | undefined, key: string, text: string): Promise<Posted | "nobody"> {
+  async post(to: string | undefined, key: string, text: string, project?: Project, authority?: DeliveryGuard): Promise<Posted | "nobody"> {
     if (!to) return "nobody";
-    return this.deps.outbox.post({ to, key, text });
+    const binding = this.deps.supervision?.read();
+    const scope = project && binding?.projects.find((p) => p.root === project.root);
+    const guard: DeliveryGuard | undefined = authority ?? (scope && binding?.supervisor?.agent === to
+      ? { actor: to, revision: binding.revision, project: scope.id, workspace: binding.supervisor.workspace, operation: "observe", recipient: "supervisor" } : undefined);
+    return this.deps.outbox.post({ to, key: project ? `${project.slug}:${key}` : key, text: project ? `[Project ${scope?.id ?? project.slug}]\n${text}` : text, ...(guard ? { guard } : {}) });
   }
 
   setTask(project: Project, taskId: string, change: (task: Task) => void): Promise<Task | undefined> {

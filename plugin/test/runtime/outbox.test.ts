@@ -41,6 +41,15 @@ test("a letter to an idle seat is sent at once and the same key is not sent twic
   assert.equal(await outbox.post({ to: "sup", key: "k1", text: "one" }), "duplicate");
 });
 
+test("confirmed delivery deduplication survives a process restart", async () => {
+  const agents = { lead: agent("idle") };
+  const file = join(tempDir(), "outbox.json");
+  const make = () => new Outbox(file, (_to, list) => list.map((l) => l.text).join("|"), fakeSeats(agents));
+  await make().post({ to: "lead", key: "correction-1", text: "Keep the existing API" });
+  assert.equal(await make().post({ to: "lead", key: "correction-1", text: "Keep the existing API" }), "duplicate");
+  assert.equal(agents.lead.sent.length, 1);
+});
+
 test("letters to a busy seat are held and go out together when its turn ends", async () => {
   const agents = { sup: agent("running") };
   const outbox = outboxOn(agents, (_to, list) => list.map((letter) => letter.text).join("|"));

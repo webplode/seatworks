@@ -25,6 +25,7 @@ type Pending = { id: string; kind: string; name: string; title?: string; input?:
 type Fake = {
   id: string;
   provider: string;
+  workspaceId: string;
   cwd: string;
   title: string;
   status: string;
@@ -60,7 +61,7 @@ function fakePaseo() {
       get archivedAt() { return agent?.archivedAt ?? null; },
       get pendingPermissions() { return agent?.pending ?? []; },
       async refresh() {},
-      current() { return agent ? { id: agent.id, provider: agent.provider, cwd: agent.cwd, title: agent.title } : null; },
+      current() { return agent ? { id: agent.id, provider: agent.provider, cwd: agent.cwd, title: agent.title, workspaceId: agent.workspaceId } : null; },
       async send(text: string, options?: { activeTurnBehavior?: string }) {
         agent?.sent.push(text);
         if (options?.activeTurnBehavior === "steer") agent?.steered.push(text);
@@ -76,12 +77,16 @@ function fakePaseo() {
   };
   const add = (provider: string, cwd: string, title: string, status = "idle", prompt?: string) => {
     const id = `agent-${++count}`;
-    agents.set(id, { id, provider, cwd, title, status, archivedAt: null, updatedAt: new Date().toISOString(), sent: [], steered: [], pending: [], answered: [], prompt });
+    agents.set(id, { id, provider, workspaceId: `workspace:${cwd}`, cwd, title, status, archivedAt: null, updatedAt: new Date().toISOString(), sent: [], steered: [], pending: [], answered: [], prompt });
     return id;
   };
   const workspace = (id: string) => ({
     id,
     projectId: workspaceProjects.get(id) ?? null,
+    async refresh() {
+      const path = id.startsWith("workspace:") ? id.slice("workspace:".length) : workspaces.get(id);
+      return path ? { id, projectId: projectOf(path).slug, workspaceDirectory: path, archivingAt: archivedWorkspaces.has(id) ? new Date().toISOString() : null } : null;
+    },
     agents: {
       async create(options: { config: { provider: string }; title: string; prompt: string }) {
         return ref(add(options.config.provider, workspaces.get(id)!, options.title, "running", options.prompt));
@@ -89,6 +94,12 @@ function fakePaseo() {
     },
   });
   const paseo = {
+    projects: {
+      async list() {
+        const roots = [...new Set([...agents.values()].map((a) => projectOf(a.cwd).root))];
+        return { projects: roots.map((root) => ({ projectId: projectOf(root).slug, projectRootPath: root, projectDisplayName: root })) };
+      },
+    },
     agents: {
       ref,
       // The daemon caps a page at 200 rows and reports the rest through pageInfo, so the fake does too.
@@ -173,13 +184,26 @@ function harness(outbox: string) {
   mkdirSync(state, { recursive: true });
   // By Jev with a key and an unreachable endpoint: the watch on, the sensor silent unless a test asks.
   writeFileSync(join(state, "settings.json"), JSON.stringify({ sensor: { key: "sk-or-harness" }, attention: { by: "jev" }, mcp: { "intellij-index": { enabled: true }, "code-search": { enabled: true }, context7: { enabled: true } } }));
-  const { paseo, agents, add, workspaces, workspaceNames, workspaceProjects, archivedWorkspaces, timelineOf } = fakePaseo();
+  const { paseo, agents, add: nativeAdd, workspaces, workspaceNames, workspaceProjects, archivedWorkspaces, timelineOf } = fakePaseo();
   const runtime = new Runtime(kit, { outboxFile: join(HOME, outbox), paseo, codeIndex: (proxy: { id: string; gitExclude?: string[] }) => ({ ...ide, id: proxy.id, gitExclude: proxy.gitExclude ?? [] }), reloadDaemon: async () => true });
   const project = projectOf(root);
+  runtime.supervision.store.change(runtime.supervision.store.read().revision, (binding) => { binding.active = false; binding.supervisor = null; binding.projects = []; });
+  const add: typeof nativeAdd = (...args) => {
+    const id = nativeAdd(...args);
+    if (args[0].includes("supervisor") && (!runtime.supervision.store.read().supervisor || agents.get(runtime.supervision.store.read().supervisor!.agent)?.archivedAt)) {
+      const selected = projectOf(args[1]);
+      runtime.supervision.store.change(runtime.supervision.store.read().revision, (binding) => {
+        binding.active = true;
+        binding.supervisor = { agent: id, workspace: `workspace:${args[1]}` };
+        if (!binding.projects.some((p) => p.id === selected.slug)) binding.projects.push({ id: selected.slug, slug: selected.slug, root: selected.root, name: selected.slug, grants: ["observe", "message", "answer", "open_lane", "set_project", "close_lane", "land", "ack", "coordinate"], leads: [] });
+      });
+    }
+    return id;
+  };
   let n = 0;
   // `where` is the calling working copy, since several desk keys turned out shared between projects.
   const call = async (agent: string, role: string, tool: string, args: Record<string, unknown>, where = root) =>
-    runtime.desk.handle({ id: `${outbox}-${++n}`, agent, role, tool, args, cwd: where, at: Date.now() });
+    runtime.desk.handle({ id: `${outbox}-${++n}`, agent, role, tool, args: role === "supervisor" ? { ...args, project: projectOf(where).slug } : args, cwd: where, at: Date.now() });
   const idle = async (id: string) => {
     agents.get(id)!.status = "idle";
     runtime.outbox.turnEnded(id);
@@ -1223,28 +1247,20 @@ test("a seat reaches only the tools its own role holds, whatever it asks for", a
   assert.match(borrowed.text, /lead tools are not available to it/);
 });
 
-test("two supervising seats hold one project, and each lane's mail goes to the seat that opened it", async () => {
+test("only the explicitly selected Supervisor receives reports, including lanes opened before replacement", async () => {
   const h = harness("outbox-two-sups.json");
-  const architecture = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "architecture");
-  const safety = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "safety");
-  const scope = { outOfScope: ["anything else"] };
-
-  await h.call(architecture, "supervisor", "open_lane", { title: "Schema", outcome: "the schema moves", acceptance: ["a"], ...scope });
-  // The hole found mid-lane gets its own Lead and its own copy, rather than the first lane widening to swallow it.
-  await h.call(safety, "supervisor", "open_lane", { title: "Permissions", outcome: "writes are checked", acceptance: ["a"], isolate: true, detourOf: "L1", ...scope });
-  const lanes = h.ledger().lanes;
-  assert.equal(lanes.L1!.opener, architecture);
-  assert.equal(lanes.L2!.opener, safety);
-  assert.equal(lanes.L2!.detourOf, "L1");
-  assert.match(h.agents.get(lanes.L2!.lead!)!.prompt ?? "", /clears the way for L1/, "the detour's Lead is told what it is unblocking");
-
-  await h.call(lanes.L1!.lead!, "lead", "report", { summary: "schema done", ready: false });
-  await h.call(lanes.L2!.lead!, "lead", "report", { summary: "permissions done", ready: false });
-  await h.idle(architecture);
-  await h.idle(safety);
-  assert.match(h.agents.get(architecture)!.sent.join("\n"), /schema done/);
-  assert.doesNotMatch(h.agents.get(architecture)!.sent.join("\n"), /permissions done/, "one supervising seat does not read another's lane");
-  assert.match(h.agents.get(safety)!.sent.join("\n"), /permissions done/);
+  const first = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "first");
+  const other = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "other");
+  const args = { title: "Schema", outcome: "the schema moves", acceptance: ["a"], outOfScope: ["anything else"] };
+  assert.equal((await h.call(first, "supervisor", "open_lane", args)).ok, true);
+  assert.equal((await h.call(other, "supervisor", "open_lane", args)).ok, false);
+  h.runtime.supervision.store.change(h.runtime.supervision.store.read().revision, (b) => { b.supervisor = { agent: other, workspace: `workspace:${h.root}` }; });
+  const lane = h.ledger().lanes.L1!;
+  await h.call(lane.lead!, "lead", "report", { summary: "schema done", ready: false });
+  await h.idle(first); await h.idle(other);
+  assert.doesNotMatch(h.agents.get(first)!.sent.join("\n"), /schema done/);
+  assert.match(h.agents.get(other)!.sent.join("\n"), /schema done/);
+  h.runtime.dispose();
 });
 
 test("reaching a Peer directly tells its Lead what reached it, and is refused when there is no Lead to tell", async () => {
@@ -1322,7 +1338,7 @@ test("an ask answered by the owner over a Lead's head is told to that Lead, not 
 test("a seat opening in a project writes the team's block there, and the first lane still takes the copy the Human left clean", async () => {
   const h = harness("outbox-team-file.json");
   const open = (h.runtime as unknown as { openSession(request: { provider: string; cwd: string; env: Record<string, string> }): unknown }).openSession.bind(h.runtime);
-  open({ provider: "sw2-supervisor-claude", cwd: h.root, env: {} });
+  open({ provider: "sw2-lead-claude", cwd: h.root, env: {} });
   assert.match(readFileSync(join(h.root, "AGENTS.md"), "utf-8"), /seatworks:begin[\s\S]*## Working here as a team/);
   assert.match(readFileSync(join(h.root, "CLAUDE.md"), "utf-8"), /^@AGENTS\.md$/m);
   const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
@@ -1348,7 +1364,7 @@ test("a seat opening in a project writes the team's block there, and the first l
 test("the team's block left uncommitted in the project's own copy does not hold up accepting or reporting the lane there", async () => {
   const h = harness("outbox-team-file-accept.json");
   const open = (h.runtime as unknown as { openSession(request: { provider: string; cwd: string; env: Record<string, string> }): unknown }).openSession.bind(h.runtime);
-  open({ provider: "sw2-supervisor-claude", cwd: h.root, env: {} });
+  open({ provider: "sw2-lead-claude", cwd: h.root, env: {} });
   const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { gate: "true" });
   assert.equal((await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "x", acceptance: ["y"], outOfScope: ["z"] })).ok, true);
@@ -1551,16 +1567,20 @@ test("two projects on one daemon both name their first task L1-T1, and both Lead
   const h = harness("outbox-twoprojects.json");
   const second = repo();
   const other = projectOf(second.root);
-
-  const open = async (where: string, name: string) => {
-    const sup = h.add("sw2-supervisor-claude/claude-opus-5", where, name);
-    await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", acceptance: ["four"], outOfScope: ["the rest"] }, where);
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "overall");
+  h.add("codex", second.root, "existing project agent");
+  h.runtime.supervision.store.change(h.runtime.supervision.store.read().revision, (binding) => {
+    binding.projects.push({ id: other.slug, slug: other.slug, root: other.root, name: other.slug, grants: ["observe", "open_lane", "message"], leads: [] });
+  });
+  const open = async (where: string) => {
+    const reply = await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", acceptance: ["four"], outOfScope: ["the rest"] }, where);
+    assert.equal(reply.ok, true, reply.text);
     const lane = h.ledger(where === h.root ? undefined : other).lanes.L1!;
     await h.call(lane.lead!, "lead", "start_task", { title: "Add four", goal: "g", acceptance: ["a"], owned: ["a.txt"], outOfScope: ["the rest"] }, where);
     return lane;
   };
-  const here = await open(h.root, "sup-a");
-  const there = await open(second.root, "sup-b");
+  const here = await open(h.root);
+  const there = await open(second.root);
 
   const mine = h.ledger().tasks.L1_T1 ?? h.ledger().tasks["L1-T1"]!;
   const theirs = h.ledger(other).tasks["L1-T1"]!;
@@ -1574,6 +1594,35 @@ test("two projects on one daemon both name their first task L1-T1, and both Lead
   assert.match(h.agents.get(here.lead!)!.sent.join("\n"), /the Peer on L1-T1/, "the first project's Lead is told");
   assert.match(h.agents.get(there.lead!)!.sent.join("\n"), /the Peer on L1-T1/, "and so is the second's — the letter key and the seen-it flag are per project");
   assert.equal(h.ledger(other).tasks["L1-T1"]!.status, "stalled", "and the second project's task is recorded stalled, not skipped");
+  h.runtime.dispose();
+});
+
+test("an overall Supervisor answer held for a busy Lead is revoked when that project's grant is removed", async () => {
+  const h = harness("outbox-answer-revoked.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "overall");
+  await h.call(sup, "supervisor", "open_lane", { title: "API", outcome: "Specify API", acceptance: ["schema"], outOfScope: ["UI"] });
+  const lead = h.ledger().lanes.L1!.lead!;
+  const asked = await h.call(lead, "lead", "ask", { kind: "question", text: "Which contract version?", default: "v1" });
+  assert.equal(asked.ok, true, asked.text);
+  const ask = Object.values(h.ledger().asks)[0]!;
+  assert.ok(ask);
+  const answer = await h.call(sup, "supervisor", "answer", { ask: ask.id, text: "Use v2" });
+  assert.equal(answer.ok, true, answer.text);
+  h.runtime.supervision.store.change(h.runtime.supervision.store.read().revision, (binding) => { binding.projects = []; });
+  await h.idle(lead);
+  const delivery = h.runtime.outbox.records().find((l) => l.key.endsWith(`answer:${ask.id}`))!;
+  assert.equal(delivery.state, "revoked");
+  assert.equal(h.agents.get(lead)!.sent.length, 0);
+  h.runtime.dispose();
+});
+
+test("observation alone does not grant incident feedback mutations", async () => {
+  const h = harness("observe-only.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "overall");
+  h.runtime.supervision.store.change(h.runtime.supervision.store.read().revision, (binding) => { binding.projects[0]!.grants = ["observe"]; });
+  const answer = await h.call(sup, "supervisor", "ack", { id: "I1", verdict: "noise" });
+  assert.equal(answer.ok, false);
+  assert.match(answer.text, /does not grant ack/);
   h.runtime.dispose();
 });
 
@@ -1639,13 +1688,13 @@ test("mail reaches a running seat inside its turn where its harness can take it 
     h.beginTurn(lane.lead!);
     h.beginTurn(peer);
     const early = await h.call(sup, "supervisor", "message", { to: "L1", text: "Is the premise right?" });
-    assert.match(early.text, /Queued for the Lead of L1/);
+    assert.match(early.text, /Intervention .*: queued/);
     mock.timers.tick(2 * 60_000);
     await h.tick();
     assert.match(h.agents.get(lane.lead!)!.steered.join("\n"), /Is the premise right\?/, "the round delivers it once the turn has settled");
 
     const toLead = await h.call(sup, "supervisor", "message", { to: "L1", text: "Stop: the premise is wrong." });
-    assert.match(toLead.text, /Delivered to the Lead of L1/);
+    assert.match(toLead.text, /Intervention .*: delivered/);
     assert.match(h.agents.get(lane.lead!)!.steered.join("\n"), /the premise is wrong/, "the Lead's harness takes it mid-turn");
 
     const toPeer = await h.call(lane.lead!, "lead", "message", { to: "L1-T1", text: "Stop: the premise is wrong." });
@@ -2461,20 +2510,19 @@ test("a day's budget holds back what is only worth attention, however many arriv
   h.runtime.dispose();
 });
 
-test("two projects each hear about their own seats, though their incidents carry the same number", async () => {
+test("one overall Supervisor receives project-qualified incidents even when both are I1", async () => {
   const { h, sup } = await laneWithPeer("outbox-two-projects.json", { attention: { watch: true } });
-  const second = repo();
-  const other = projectOf(second.root);
+  const second = repo(); const other = projectOf(second.root);
   mkdirSync(other.state, { recursive: true });
   writeFileSync(join(other.state, "settings.json"), JSON.stringify({ attention: { watch: true } }));
-  const supB = h.add("sw2-supervisor-claude/claude-opus-5", second.root, "sup-b");
+  h.runtime.supervision.store.change(h.runtime.supervision.store.read().revision, (b) => { b.projects.push({ id: other.slug, root: other.root, slug: other.slug, name: "second", grants: ["observe"], leads: [] }); });
   const page = [{ kind: "destructive", level: "page" as const, quote: "rm -rf build", facts: ["destructive"] }];
   await h.runtime.desk.notice(h.project, { id: "p-a", provider: "sw2-peer-devin/swe-2-max" }, page);
   await h.runtime.desk.notice(other, { id: "p-b", provider: "sw2-peer-devin/swe-2-max" }, page);
   await h.idle(sup);
-  await h.idle(supB);
-  assert.match(h.agents.get(sup)!.sent.join("\n"), /INCIDENT I1 \(destructive, page\)/);
-  assert.match(h.agents.get(supB)!.sent.join("\n"), /INCIDENT I1 \(destructive, page\)/, "the second project's owner is told too, not dropped as a repeat of the first");
+  const mail = h.agents.get(sup)!.sent.join("\n");
+  assert.equal(mail.split("INCIDENT I1 (destructive, page)").length - 1, 2);
+  assert.ok(mail.includes(h.project.slug)); assert.ok(mail.includes(other.slug));
   h.runtime.dispose();
 });
 

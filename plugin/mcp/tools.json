@@ -69,33 +69,43 @@
           "role": {
             "type": "string",
             "description": "Optional role to lead it, when the kit has more than one that can lead. Left out, the kit's first. A detour's lane is where a different lead usually belongs."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
         },
         "required": [
           "title",
           "outcome",
           "acceptance",
-          "outOfScope"
+          "outOfScope",
+          "project"
         ]
       }
     },
     {
       "name": "message",
-      "description": "Send a Lead (by lane id) or, for a recovery, a Peer (by task id) one message. It reaches the recipient as soon as it can take it and never interrupts it; one stopped on a question gets it as the answer. A message to a Peer is copied to its Lead.",
+      "description": "Send a correction to an exact associated Lead ID or a lane in the addressed project. Does not answer pending questions or permissions. Returns a durable delivery receipt, not proof of compliance.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "to": {
             "type": "string",
-            "description": "Lane id (L1) or task id (L1-T2)."
+            "description": "Exact associated Lead agent ID, or project-local lane/task ID."
           },
           "text": {
             "type": "string"
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
         },
         "required": [
           "to",
-          "text"
+          "text",
+          "project"
         ]
       }
     },
@@ -110,17 +120,22 @@
           },
           "text": {
             "type": "string"
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
         },
         "required": [
           "ask",
-          "text"
+          "text",
+          "project"
         ]
       }
     },
     {
       "name": "close_lane",
-      "description": "Close a lane and archive its agents. With land true the desk first merges the base branch into the lane in the lane's own copy when the base has moved, runs the project's gate there, then moves the base branch up to the lane. If any of that cannot happen the lane stays open and the reason comes back; a conflict with the base is its Lead's to settle in the lane. A landed lane branch is deleted once its copy is put away; one closed without landing is kept. A red gate stops the landing unless you land over it with overGate true — the verdict is evidence, and landing over it is your call.",
+      "description": "Close a lane and archive its agents. With land true the desk first merges the base branch into the lane in the lane's own copy when the base has moved, runs the project's gate there, then moves the base branch up to the lane. If any of that cannot happen the lane stays open and the reason comes back; a conflict with the base is its Lead's to settle in the lane. A landed lane branch is deleted once its copy is put away; one closed without landing is kept. A red gate stops the landing unless you land over it with overGate true \u2014 the verdict is evidence, and landing over it is your call.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -136,11 +151,16 @@
           "overGate": {
             "type": "boolean",
             "description": "Land even though the gate is red. The verdict still comes back in the reply."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
         },
         "required": [
           "lane",
-          "land"
+          "land",
+          "project"
         ]
       }
     },
@@ -173,8 +193,15 @@
               "type": "string"
             },
             "description": "Globs no parallel lane or task may write: lockfiles, migrations, registries, project settings, scenes and assets."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
-        }
+        },
+        "required": [
+          "project"
+        ]
       }
     },
     {
@@ -182,7 +209,12 @@
       "description": "The current status of every lane, task and open ask in this project.",
       "inputSchema": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
+          }
+        }
       }
     },
     {
@@ -194,8 +226,15 @@
           "closed": {
             "type": "boolean",
             "description": "Also list the last twenty incidents already marked, with how each was marked."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
-        }
+        },
+        "required": [
+          "project"
+        ]
       }
     },
     {
@@ -220,12 +259,103 @@
           "note": {
             "type": "string",
             "description": "Why: for noise, start with wrong (it did not happen) or expected (it was asked for or needed), then the command or path that settles it; for unknown, what the record lacks. Never a secret."
+          },
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
           }
         },
         "required": [
           "id",
-          "verdict"
+          "verdict",
+          "project"
         ]
+      }
+    },
+    {
+      "name": "acknowledge",
+      "description": "Acknowledge a delivery addressed to you. This records receipt, not acceptance of its instruction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delivery": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coordinate",
+      "description": "Request a cross-project dependency as Supervisor, or update it as its exact owner. Producer accepts/delivers; only consumer confirms. Supply id/revision/state/checkpoint to update; producer/consumer/request/checkpoint to request.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "delivered",
+              "confirmed",
+              "blocked",
+              "canceled"
+            ]
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "artifact": {
+            "type": "string"
+          },
+          "request": {
+            "type": "string"
+          },
+          "producer": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "project",
+              "agent"
+            ],
+            "additionalProperties": false
+          },
+          "consumer": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "project",
+              "agent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "checkpoint"
+        ],
+        "additionalProperties": false
       }
     }
   ],
@@ -517,6 +647,92 @@
           "verdict"
         ]
       }
+    },
+    {
+      "name": "acknowledge",
+      "description": "Acknowledge a delivery addressed to you. This records receipt, not acceptance of its instruction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delivery": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coordinate",
+      "description": "Request a cross-project dependency as Supervisor, or update it as its exact owner. Producer accepts/delivers; only consumer confirms. Supply id/revision/state/checkpoint to update; producer/consumer/request/checkpoint to request.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "delivered",
+              "confirmed",
+              "blocked",
+              "canceled"
+            ]
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "artifact": {
+            "type": "string"
+          },
+          "request": {
+            "type": "string"
+          },
+          "producer": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "project",
+              "agent"
+            ],
+            "additionalProperties": false
+          },
+          "consumer": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "project",
+              "agent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "checkpoint"
+        ],
+        "additionalProperties": false
+      }
     }
   ],
   "peer": [
@@ -578,6 +794,22 @@
           "question"
         ]
       }
+    },
+    {
+      "name": "acknowledge",
+      "description": "Acknowledge a delivery addressed to you. This records receipt, not acceptance of its instruction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delivery": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery"
+        ],
+        "additionalProperties": false
+      }
     }
   ],
   "reviewer": [
@@ -626,6 +858,22 @@
         "required": [
           "question"
         ]
+      }
+    },
+    {
+      "name": "acknowledge",
+      "description": "Acknowledge a delivery addressed to you. This records receipt, not acceptance of its instruction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "delivery": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery"
+        ],
+        "additionalProperties": false
       }
     }
   ],

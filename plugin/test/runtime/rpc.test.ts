@@ -14,9 +14,9 @@ const { registerRpc } = await import("../../server/runtime/rpc.ts");
 const { makeKit } = await import("../kit.ts");
 const { KEPT } = await import("../../shared/rpc.ts");
 
-function served(paseo?: unknown) {
+function served(paseo?: unknown, folders?: (query: string) => Promise<string[]>) {
   const kit = makeKit();
-  const runtime = new Runtime(kit, { outboxFile: join(HOME, "outbox.json"), reloadDaemon: async () => true });
+  const runtime = new Runtime(kit, { outboxFile: join(HOME, "outbox.json"), reloadDaemon: async () => true, folders });
   const handlers = new Map<string, (input: any) => any>();
   const bound: unknown[] = [];
   // The host hands every handler the live daemon handle beside the input.
@@ -60,6 +60,7 @@ test("the plugin serves the catalog, settings, projects, team and status over RP
     "seatworks.flow.read",
     "seatworks.mcp.parse",
     "seatworks.models.refresh",
+    "seatworks.paths.find",
     "seatworks.paths.list",
     "seatworks.projects.add",
     "seatworks.projects.candidates",
@@ -308,6 +309,25 @@ test("the setup screen can walk this machine's folders to find a repository", as
   const inside = await call("seatworks.paths.list", { path: join(root, "repo") });
   assert.equal(inside.repository, true);
   assert.match((await call("seatworks.paths.list", { path: join(root, "nowhere") })).error, /is not a directory/);
+});
+
+test("the setup screen finds folders the way Paseo's Add project does, with a typed path first", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "sw2-rpc-find-")));
+  execFileSync("git", ["init", "-q", join(root, "repo")]);
+  mkdirSync(join(root, "plain"));
+  const asked: string[] = [];
+  const { call } = served(undefined, async (query) => { asked.push(query); return [join(root, "plain"), join(root, "repo")]; });
+
+  const found = await call("seatworks.paths.find", { query: "repo" });
+  assert.deepEqual(asked, ["repo"]);
+  assert.deepEqual(found.folders.map((folder: { path: string; repository: boolean }) => [folder.path, folder.repository]), [[join(root, "plain"), false], [join(root, "repo"), true]]);
+
+  const typed = await call("seatworks.paths.find", { query: join(root, "repo") });
+  assert.deepEqual(typed.folders.map((folder: { path: string }) => folder.path), [join(root, "repo"), join(root, "plain")], "a typed path that exists comes first, once");
+
+  const down = served(undefined, async () => { throw new Error("daemon away"); });
+  assert.match((await down.call("seatworks.paths.find", { query: "repo" })).error, /daemon away/);
+  assert.deepEqual((await down.call("seatworks.paths.find", { query: root })).folders.map((folder: { path: string }) => folder.path), [root], "a typed path still answers when the search cannot");
 });
 
 test("the sensor's key is written from the panel, never read back into it, and forgotten only when asked", async () => {

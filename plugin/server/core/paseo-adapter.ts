@@ -1,4 +1,5 @@
 import { createPaseoClient, type PaseoClientConfig } from "@getpaseo/client";
+import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname } from "node:path";
@@ -142,15 +143,36 @@ export function startupConnection(config: PaseoClientConfig) {
   return createPaseoClient({ ...config, reconnect: { enabled: true }, connectTimeoutMs: 10_000 });
 }
 
-export async function connectLocal() {
+async function localDaemon(): Promise<{ url: string; password?: string }> {
   const { stdout } = await promisify(execFile)("paseo", ["daemon", "status", "--json"], { timeout: 10_000 });
   const status = JSON.parse(stdout);
   if (status.localDaemon !== "running" || status.home !== dirname(paseoConfigPath())) throw new Error("The local daemon's identity could not be verified for startup recovery.");
   const address = status.listen;
   if (typeof address !== "string" || !/^(127\.0\.0\.1|localhost):\d+$/.test(address)) throw new Error("Startup recovery requires a verified local loopback daemon.");
-  const client = startupConnection({ url: `ws://${address}/ws`, ...(process.env.SEATWORKS_PASEO_PASSWORD ? { password: process.env.SEATWORKS_PASEO_PASSWORD } : {}) });
+  return { url: `ws://${address}/ws`, ...(process.env.SEATWORKS_PASEO_PASSWORD ? { password: process.env.SEATWORKS_PASEO_PASSWORD } : {}) };
+}
+
+export async function connectLocal() {
+  const client = startupConnection(await localDaemon());
   try { await client.connect(); return client; }
   catch (error) { await client.close(); throw error; }
+}
+
+export type FolderSearch = (query: string) => Promise<string[]>;
+
+/** The same fuzzy directory search as Paseo's own Add project; the public SDK has no call for it, so this reaches the daemon client under it. */
+export function folderSearch(): FolderSearch {
+  let client: Promise<DaemonClient> | undefined;
+  const connect = async () => {
+    const found = new DaemonClient({ ...(await localDaemon()), clientId: "seatworks-folders", clientType: "cli", connectTimeoutMs: 10_000, reconnect: { enabled: true } });
+    try { await found.connect(); return found; }
+    catch (error) { await found.close(); throw error; }
+  };
+  return async (query) => {
+    client ??= connect().catch((error) => { client = undefined; throw error; });
+    const found = await (await client).getDirectorySuggestions({ query, includeDirectories: true, includeFiles: false, limit: 30 });
+    return found.entries?.filter((entry) => entry.kind === "directory").map((entry) => entry.path) ?? found.directories ?? [];
+  };
 }
 
 export function workspacesOn(bound: Bound): Workspaces {

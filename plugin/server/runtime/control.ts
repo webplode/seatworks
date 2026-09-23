@@ -172,6 +172,7 @@ export type ControlDeps = {
   seats: Seats;
   held: () => { to: string; text: string; at: number }[];
   watch: (project: Project, seats: Iterable<SeatView>) => WatchView;
+  folders: (query: string) => Promise<string[]>;
 };
 
 export class SettingsControl implements Control {
@@ -346,6 +347,31 @@ export class SettingsControl implements Control {
     const watch = this.deps.watch(project, seats.values());
     const revision = createHash("sha1").update(`${view.revision}${JSON.stringify(watch)}`).digest("hex").slice(0, 16);
     return since && since === revision ? { unchanged: true, revision } : { ...view, watch, revision };
+  }
+
+  /** Paseo's own fuzzy search, with a typed path that exists put first so pasting one still works. */
+  async findPaths(query: string): Promise<unknown> {
+    const typed = query.trim();
+    const found: string[] = [];
+    if (/^[~/]/.test(typed)) {
+      try {
+        const here = realpathSync(expandHome(typed));
+        if (statSync(here).isDirectory()) found.push(here);
+      } catch {}
+    }
+    try {
+      for (const path of await this.deps.folders(typed)) if (!found.includes(path)) found.push(path);
+    } catch (error) {
+      if (found.length === 0) return { error: `Paseo's folder search did not answer: ${errorText(error)}` };
+    }
+    const homeDir = homedir();
+    return {
+      folders: found.slice(0, 30).map((path) => ({
+        path,
+        label: path === homeDir ? "~" : path.startsWith(`${homeDir}/`) ? `~${path.slice(homeDir.length)}` : path,
+        repository: existsSync(join(path, ".git")),
+      })),
+    };
   }
 
   listPaths(path?: string): unknown {

@@ -13,7 +13,7 @@ import { stampKit } from "../upkeep/migrate.ts";
 import { type StateReport, upgradeState } from "../upkeep/state.ts";
 import { type IndexedProxy, type Team, indexedProxies, jevOn, watchOn } from "../catalog/team.ts";
 import { guidesDir, home, nodeBin, outboxPath, spoolDir, stateRoot } from "../core/paths.ts";
-import { activityOn, connectLocal, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
+import { type FolderSearch, activityOn, connectLocal, folderSearch, inventoryOn, seatsOn, workspacesOn } from "../core/paseo-adapter.ts";
 import type { PaseoApi } from "../core/paseo.ts";
 import type { SeatView, Seats, Workspaces } from "../core/ports.ts";
 import type { CodeIndex } from "../desk/context.ts";
@@ -56,7 +56,7 @@ const TROUBLES = 10;
 
 const INCIDENTS_SHOWN = 200;
 
-export type RuntimeOptions = { outboxFile?: string; paseo?: PaseoApi; codeIndex?: (proxy: IndexedProxy) => CodeIndex; reloadDaemon?: () => Promise<boolean> };
+export type RuntimeOptions = { outboxFile?: string; paseo?: PaseoApi; codeIndex?: (proxy: IndexedProxy) => CodeIndex; reloadDaemon?: () => Promise<boolean>; folders?: FolderSearch };
 
 export class Runtime {
   readonly kit: Kit;
@@ -175,6 +175,7 @@ export class Runtime {
       seats: this.seats,
       held: () => this.outbox.letters(),
       watch: (project, seats) => this.watchView(project, seats),
+      folders: options.folders ?? folderSearch(),
     });
   }
 

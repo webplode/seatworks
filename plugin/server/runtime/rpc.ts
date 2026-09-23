@@ -20,6 +20,7 @@ export interface Control {
   status(project: string): Promise<unknown>;
   flow(project: string, since?: string, open?: string[]): Promise<unknown>;
   listPaths(path?: string): unknown;
+  findPaths(query: string): Promise<unknown>;
   refreshModels(): Promise<unknown>;
   decide(unit: string, choice: "new" | "mine" | "seen"): Promise<unknown>;
   clean(remove?: string[]): Promise<unknown>;
@@ -52,6 +53,7 @@ export function registerRpc(server: { handle: unknown }, control: Control, bind:
   handle(contracts.status, (input) => control.status(input.project));
   handle(contracts.flow, (input) => control.flow(input.project, input.since, input.open));
   handle(contracts.paths, (input) => control.listPaths(input.path));
+  handle(contracts.pathsFind, (input) => control.findPaths(input.query));
   handle(contracts.models, () => control.refreshModels());
   handle(contracts.decide, (input) => control.decide(input.unit, input.choice));
   handle(contracts.clean, (input) => control.clean(input.remove));

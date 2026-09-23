@@ -29,6 +29,7 @@ export const cleanRpc = defineRpc({ name: "seatworks.upkeep.clean", input: z.obj
 export const updateRpc = defineRpc({ name: "seatworks.upkeep.update", input: z.object({ apply: z.boolean(), fetch: z.boolean().optional() }), output: z.json() });
 export const migrateRpc = defineRpc({ name: "seatworks.upkeep.migrate", input: z.object({ apply: z.boolean() }), output: z.json() });
 export const pathsRpc = defineRpc({ name: "seatworks.paths.list", input: z.object({ path: z.string().optional() }), output: z.json() });
+export const pathsFindRpc = defineRpc({ name: "seatworks.paths.find", input: z.object({ query: z.string() }), output: z.json() });
 
 export const contracts = {
   catalog: catalogRpc,
@@ -44,6 +45,7 @@ export const contracts = {
   status: statusRpc,
   flow: flowRpc,
   paths: pathsRpc,
+  pathsFind: pathsFindRpc,
   models: modelsRpc,
   decide: decideRpc,
   clean: cleanRpc,

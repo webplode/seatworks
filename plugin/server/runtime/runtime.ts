@@ -183,6 +183,11 @@ export class Runtime {
       held: () => this.outbox.letters(),
       watch: (project, seats) => this.watchView(project, seats),
       folders: options.folders ?? folderSearch(),
+      unbind: (root) => {
+        const binding = this.supervision.store.read();
+        if (!binding.projects.some((p) => p.root === root)) return;
+        this.supervision.store.change(binding.revision, (next) => { next.projects = next.projects.filter((p) => p.root !== root); });
+      },
     });
   }
 

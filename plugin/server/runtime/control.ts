@@ -173,6 +173,8 @@ export type ControlDeps = {
   held: () => { to: string; text: string; at: number }[];
   watch: (project: Project, seats: Iterable<SeatView>) => WatchView;
   folders: (query: string) => Promise<string[]>;
+  /** Takes a detached project out of the Supervisor's scope too, so no agent keeps rights to it. */
+  unbind?: (root: string) => void;
 };
 
 export class SettingsControl implements Control {
@@ -306,6 +308,7 @@ export class SettingsControl implements Control {
     } catch {}
     this.deps.source.forget(slug);
     this.deps.seating.forget();
+    this.deps.unbind?.(project.root);
     return { removed: slug };
   }
 

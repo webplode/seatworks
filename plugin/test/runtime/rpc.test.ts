@@ -408,3 +408,15 @@ test("the word that stands for the key is never itself written, and a refused or
   const { sensor: _gone, ...without } = last.values as { sensor?: unknown };
   assert.equal((await call("seatworks.settings.write", { revision: last.revision, values: without })).status, "saved");
 });
+
+test("detaching a project also takes it out of the Supervisor's scope", async () => {
+  const { call, runtime } = served();
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "sw2-rpc-unbind-")));
+  execFileSync("git", ["init", "-q", root]);
+  const added = await call("seatworks.projects.add", { root });
+  const store = (runtime as unknown as { supervision: { store: { read(): any; change(r: number, e: (b: any) => void): any } } }).supervision.store;
+  const before = store.read();
+  store.change(before.revision, (b) => { b.projects.push({ id: "prj_unbind", root, slug: added.slug, name: "unbind", grants: ["observe"], leads: [] }); });
+  assert.deepEqual(await call("seatworks.projects.remove", { project: added.slug }), { removed: added.slug });
+  assert.equal(store.read().projects.some((p: { root: string }) => p.root === root), false);
+});

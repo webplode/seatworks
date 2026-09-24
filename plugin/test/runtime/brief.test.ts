@@ -63,3 +63,20 @@ test("each open work stream reads as one line: its title and how far it got", ()
   const view = teamBrief(binding(), [], () => ledger, []);
   assert.deepEqual(view.projects[0]!.streams, [{ id: "L1", title: "Checkout", state: "1 of 2 tasks done", agent: "lead-1" }]);
 });
+test("a lane that carried on the Human's branch is offered to finish, not to merge, and shows no diff against itself", () => {
+  const ledger = emptyLedger();
+  ledger.lanes.L1 = { id: "L1", title: "Fix totals", status: "open", branch: "fix/totals", base: "fix/totals", onBranch: true, lead: "lead-1" } as never;
+  let asked = false;
+  const view = teamBrief(binding(), [], () => ledger, [], { reports: () => new Map([["L1", { ready: true, gate: true }]]), diff: () => { asked = true; return "0 files"; }, teamFiles: () => [] });
+  const item = view.items.find(i => i.kind === "land")!;
+  assert.deepEqual([item.stays, item.diff, item.title, asked], [true, "Stays on fix/totals · nothing is merged", "Ready to finish · tests passed", false]);
+});
+test("a lane waiting for others is listed after the open ones, with what it waits for", () => {
+  const ledger = emptyLedger();
+  ledger.lanes.L1 = { id: "L1", title: "Checkout", status: "open", branch: "b", base: "main", lead: "lead-1" } as never;
+  ledger.lanes.L2 = { id: "L2", title: "Receipts", status: "waiting", branch: "c", base: "main", after: ["L1"] } as never;
+  const view = teamBrief(binding(), [], () => ledger, []);
+  assert.deepEqual(view.projects[0]!.streams!.map(s => [s.id, s.state]), [["L1", "waiting"], ["L2", "starts after L1 lands"]]);
+  ledger.lanes.L1!.status = "closed";
+  assert.equal(teamBrief(binding(), [], () => ledger, []).projects[0]!.status, "1 work stream waiting to start");
+});

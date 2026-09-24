@@ -51,6 +51,8 @@ test("without a git identity nothing is staged and the Human is told what to set
   const env = { ...process.env };
   for (const key of ["GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL", "EMAIL"]) delete process.env[key];
   process.env.GIT_CONFIG_GLOBAL = "/dev/null"; process.env.GIT_CONFIG_NOSYSTEM = "1";
+  // Without this git makes up user@host when the host name has a domain, which depends on the network.
+  Object.assign(process.env, { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "user.useConfigOnly", GIT_CONFIG_VALUE_0: "true" });
   try {
     assert.throws(() => commitTeamFiles(dir), /user\.name and user\.email/);
     assert.match(git(dir, "status", "--porcelain"), /^\?\? AGENTS\.md/m);

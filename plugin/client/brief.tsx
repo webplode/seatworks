@@ -26,7 +26,7 @@ function useCardActions(supervisor: string | null) {
       const scope = view.binding.projects.find((p) => p.id === item.scope);
       if (!scope) throw new Error("This project is no longer supervised.");
       if (!scope.grants.includes("land")) await bind({ ...bindingInput(view.binding, view.binding.active), projects: view.binding.projects.map((p) => ({ id: p.id, grants: p.id === scope.id ? [...new Set([...p.grants, "land" as const, "close_lane" as const])] : p.grants })) });
-      await paseo.agents.ref(supervisor).send(`The Human approved landing ${item.lane} in project ${scope.id} (${item.diff ?? "its branch"}). Close that lane with land: true now. If the tests fail or the branch cannot merge cleanly, stop and tell the Human why instead of retrying.`);
+      await paseo.agents.ref(supervisor).send(`The Human approved landing ${item.lane} in project ${scope.id} (${item.diff ?? "its branch"}). Close that lane with land: true now. ${item.stays ? " It carried on its own branch, so this runs its gate and merges nothing." : ""} If the tests fail or the branch cannot merge cleanly, stop and tell the Human why instead of retrying.`);
     },
     commit: async (item: Item) => { if (!item.scope) throw new Error("Unknown project."); return await commit({ scope: item.scope }); },
   };
@@ -49,14 +49,16 @@ function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: Plu
     <Text selectable numberOfLines={4} style={{ color: c.foregroundMuted, lineHeight: 20 }}>{item.detail}</Text>
     {trouble ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{trouble}</Text> : null}
     {done ? <Text style={{ color: c.foregroundMuted }}>{done}</Text> : confirming ? <View style={{ gap: 8 }}>
-      <Text style={{ color: c.foreground }}>Land this work on {item.diff?.split(" · ")[0]?.split(" → ")[1] ?? "your branch"}? Your Supervisor merges it and closes this line of work. This also lets the Supervisor land in {item.project} from now on.</Text>
+      <Text style={{ color: c.foreground }}>{item.stays
+        ? `Finish this work? It stays on ${item.diff?.split(" · ")[0]?.replace("Stays on ", "") ?? "your branch"}: your Supervisor runs its tests and closes this line of work, and nothing is merged.`
+        : `Land this work on ${item.diff?.split(" · ")[0]?.split(" → ")[1] ?? "your branch"}? Your Supervisor merges it and closes this line of work.`} This also lets the Supervisor land in {item.project} from now on.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <Button theme={theme} tone="accent" label={busy ? "Asking…" : "Land it"} disabled={busy} onPress={() => void run(async () => { await actions.land(item); return "Your Supervisor is landing it. Follow along in chat."; })} />
+        <Button theme={theme} tone="accent" label={busy ? "Asking…" : item.stays ? "Finish it" : "Land it"} disabled={busy} onPress={() => void run(async () => { await actions.land(item); return item.stays ? "Your Supervisor is finishing it. Follow along in chat." : "Your Supervisor is landing it. Follow along in chat."; })} />
         <Button theme={theme} label="Cancel" disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     </View> : <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {item.action === "reload" ? <Button theme={theme} tone="accent" label={busy ? "Reloading…" : "Reload Supervisor"} disabled={busy} onPress={() => void run(async () => { await actions.reload(); return "Reloaded. Send your last message again."; })} /> : null}
-      {item.kind === "land" && supervisor ? <Button theme={theme} tone="accent" label="Land…" onPress={() => setConfirming(true)} /> : null}
+      {item.kind === "land" && supervisor ? <Button theme={theme} tone="accent" label={item.stays ? "Finish…" : "Land…"} onPress={() => setConfirming(true)} /> : null}
       {item.kind === "commit" ? <Button theme={theme} tone="accent" label={busy ? "Committing…" : `Commit ${item.files?.join(" & ") ?? "files"}`} disabled={busy} onPress={() => void run(async () => { const r = await actions.commit(item); return r.committed.length ? `Committed ${r.committed.join(" and ")}.` : "Nothing left to commit."; })} /> : null}
       {open}
     </View>}

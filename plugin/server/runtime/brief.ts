@@ -45,8 +45,10 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
         const report = reports.get(lane.id);
         if (!report?.ready) continue;
         const detail = `${lane.title}${report.summary ? `\n${report.summary}` : ""}`.slice(0, 600);
-        const diff = look.diff(scope.root, lane) ?? undefined;
+        // A lane that carried on the Human's own branch merges nowhere: finishing it runs its gate and closes it.
+        const diff = lane.onBranch ? undefined : look.diff(scope.root, lane) ?? undefined;
         if (report.gate === false) result.items.push({ id: `${scope.id}:${lane.id}:gate`, project: scope.name, kind: "tests", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, diff, title: "Tests must pass before this can land", detail });
+        else if (lane.onBranch) result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, stays: true, diff: `Stays on ${lane.branch} · nothing is merged`, title: report.gate ? "Ready to finish · tests passed" : "Ready to finish · no tests set", detail });
         else result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, diff: diff ? `${lane.branch} → ${lane.base} · ${diff}` : `${lane.branch} → ${lane.base}`, title: report.gate ? "Ready to land · tests passed" : "Ready to land · no tests set", detail });
       }
       const teamFiles = look.teamFiles(scope.root);
@@ -60,7 +62,8 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       const running = [...ids].filter(id => ["running","starting"].includes(byId.get(id)?.status ?? "")).length;
       const human = result.items.slice(start).filter(i => i.kind === "permission").length;
       const landing = result.items.slice(start).filter(i => i.kind === "land").length;
-      const streams = lanes.slice(0, 6).map((lane) => {
+      const waiting = Object.values(ledger.lanes).filter(l => l.status === "waiting");
+      const streams = [...lanes.slice(0, 6).map((lane) => {
         const tasks = Object.values(ledger.tasks).filter(t => t.lane === lane.id && t.status !== "cut");
         const merged = tasks.filter(t => t.status === "merged").length;
         const report = reports.get(lane.id);
@@ -68,8 +71,8 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
         const state = report?.ready ? (report.gate === false ? "tests failed" : "ready to land")
           : tasks.length ? `${merged} of ${count(tasks.length, "task")} done` : lead && ["running", "starting"].includes(lead.status ?? "") ? "planning" : "waiting";
         return { id: lane.id, title: lane.title.slice(0, 120), state, agent: lane.lead ?? null };
-      });
-      result.projects.push({ id: scope.id, name: scope.name, streams, status: human ? `Waiting on you: ${count(human, "request")}` : landing ? `${landing} ready to land` : questions.length ? count(questions.length, "team question") : queued ? `${count(queued, "message")} waiting for agents` : running ? `${count(running, "agent")} working` : lanes.length ? "Team idle · open work remains" : "No active work" });
+      }), ...waiting.slice(0, Math.max(0, 6 - lanes.length)).map((lane) => ({ id: lane.id, title: lane.title.slice(0, 120), state: lane.after?.length ? `starts after ${lane.after.join(", ")} lands` : "waiting to start", agent: null }))];
+      result.projects.push({ id: scope.id, name: scope.name, streams, status: human ? `Waiting on you: ${count(human, "request")}` : landing ? `${landing} ready to land` : questions.length ? count(questions.length, "team question") : queued ? `${count(queued, "message")} waiting for agents` : running ? `${count(running, "agent")} working` : lanes.length ? "Team idle · open work remains" : waiting.length ? `${count(waiting.length, "work stream")} waiting to start` : "No active work" });
     } catch {
       result.projects.push({ id: scope.id, name: scope.name, status: "Status unavailable" });
       result.items.push({ id: `${scope.id}:error`, project: scope.name, kind: "error", agent: null, title: "Could not read project status", detail: "Open project settings to inspect its ledger and setup. No empty or successful state was inferred." });

@@ -9,6 +9,7 @@ import { type Ask, type Ledger, activeTasks, loadLedger, openAsksFrom } from "..
 import { letters } from "../desk/letters.ts";
 import { type Project, loadConfig, projectOf } from "../desk/project.ts";
 import { statusText } from "../desk/status.ts";
+import { laneReports } from "./landing.ts";
 import { type Outbox, busy } from "./outbox.ts";
 import type { TeamSource } from "./team-source.ts";
 import type { TurnRules } from "./turns.ts";
@@ -158,12 +159,15 @@ export class Patrol {
   private async idleLanes(project: Project, ledger: Ledger, seats: SeatMap, now: number): Promise<void> {
     const { desk, turns } = this.deps;
     const { leadIdleMinutes } = this.deps.source.teamFor(project).attention;
+    let reports: Map<string, { ready: boolean }> | undefined;
     for (const lane of Object.values(ledger.lanes).filter((entry) => entry.status === "open" && entry.lead)) {
       const lead = seats.get(lane.lead!);
       if (!lead || lead.status !== "idle") continue;
       const idle = now - Date.parse(lead.updatedAt);
       if (idle < leadIdleMinutes * 60_000 || this.idleFlag.get(lead.id) === lead.updatedAt) continue;
       if (activeTasks(ledger, lane.id).length > 0 || openAsksFrom(ledger, lead.id).length > 0) continue;
+      // A Lead that reported its lane ready is waiting for the Human's approval, not stalled.
+      if ((reports ??= laneReports(project.state)).get(lane.id)?.ready) continue;
       const to = await desk.supervisorFor(project, lane.opener);
       const posted = await desk.post(to, `idle:${project.slug}:${lane.id}:${lead.updatedAt}`, letters.laneIdle(lane, Math.round(idle / 60_000), turns.lastEnding.get(lead.id) ?? ""), project);
       // Noted as told only when somebody was: set first, a notice to nobody was never tried again.

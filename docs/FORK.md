@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.7, state format 4, 526 tests.
+- Plugin version: 2.5.7, state format 4, 527 tests.
 
 ## Areas the fork adds
 
@@ -189,6 +189,9 @@ Manus). Changes:
   work here", "Models for all projects", "✓ Ready to start");
 - the Supervisor prompt maps its words to the screen's and forbids revision numbers, paths, hashes
   and IDs.
+- a card's approval count and its rows agree: saving the team's instructions has its own row;
+- a Lead that reported its work ready no longer reads as "Work has stalled" while it waits for the
+  Human.
 
 **Rollback points:**
 - branch `backup/pre-upstream-merge-20260924`;

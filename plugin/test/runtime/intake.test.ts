@@ -531,3 +531,21 @@ test("a task whose turn comes while another holds the lane's copy is held with w
   assert.equal(h.ledger().tasks["L1-T3"]!.held, undefined);
   h.runtime.dispose();
 });
+
+test("an idle Lead is flagged to its Supervisor, unless it reported its lane ready and waits for the Human", async () => {
+  const h = harness("outbox-idle-ready.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const scope = { acceptance: ["a"], outOfScope: ["anything else in the repository"] };
+  await h.call(sup, "supervisor", "open_lane", { title: "Quiet", outcome: "q", ...scope, writeSet: ["q.txt"], isolate: true });
+  await h.call(sup, "supervisor", "open_lane", { title: "Done", outcome: "d", ...scope, writeSet: ["d.txt"], isolate: true });
+  const [quiet, done] = [h.ledger().lanes.L1!, h.ledger().lanes.L2!];
+  assert.equal((await h.call(done.lead!, "lead", "report", { summary: "done", ready: true })).ok, true);
+  const long = new Date(Date.now() - 3 * 3600_000).toISOString();
+  for (const lane of [quiet, done]) Object.assign(h.agents.get(lane.lead!)!, { status: "idle", updatedAt: long });
+  await h.tick();
+  await h.idle(sup);
+  const told = h.agents.get(sup)!.sent.join("\n");
+  assert.match(told, /LANE IDLE L1 \(Quiet\)/);
+  assert.doesNotMatch(told, /LANE IDLE L2/, "ready for the Human is not stalled");
+  h.runtime.dispose();
+});

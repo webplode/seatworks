@@ -96,7 +96,7 @@ const Lane = memo(function Lane({ lane, theme, onOpen, onAgent }: { lane: FlowLa
   if (lane.status === "waiting") {
     return (
       <View style={styles.lane}>
-        <Node theme={theme} title={`Waiting · ${lane.id} ${lane.title}`} hint={`after ${(lane.after ?? []).join(", ")}`} state={lane.held ? `not open: ${lane.held}` : "opens once those land"} alive={false} />
+        <Node theme={theme} title={`Waiting · ${lane.id} ${lane.title}`} hint={`after ${(lane.after ?? []).join(", ")}`} state={lane.held ? `not open: ${lane.held}` : "starts once that work is merged"} alive={false} />
       </View>
     );
   }

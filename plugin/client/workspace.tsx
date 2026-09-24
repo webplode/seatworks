@@ -80,11 +80,11 @@ function WorkspaceBody({ theme, layout, navigation, workspace, project, machine,
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{(home ? [['machine','Team & models'],['supervisor','Overall Supervisor']] as const : [['models','Team & models'],['work','New work'],['supervisor','Overall Supervisor']] as const).map(([id,label]) => <Button key={id} label={label} theme={theme} tone={tab === id ? "accent" : "plain"} onPress={() => setTab(id)} />)}</View>
     {error || local.saveError || machine.saveError || data.settingsError || global.settingsError ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{error ?? local.saveError ?? machine.saveError ?? data.settingsError ?? global.settingsError}</Text> : null}
     {tab === "supervisor" ? <View style={{ gap: 16 }}>
-      <Text style={{ color: c.foregroundMuted, lineHeight: 21 }}>One shared Supervisor coordinates all enrolled projects. Open its existing conversation, or create it with the model below. Opening resumes the currently enrolled scope. Adding projects and granting access is separate.</Text>
+      <Text style={{ color: c.foregroundMuted, lineHeight: 21 }}>One Supervisor looks after all your projects. Open its chat, or create it with the model below. Choosing which projects it looks after is done in Seatworks.</Text>
       <Button label={busy ? "Opening…" : "Open Overall Supervisor"} theme={theme} tone="accent" disabled={busy || !navigation} onPress={() => void openSupervisor()} />
       <Text style={{ color: c.foreground, fontWeight: "600" }}>Model for a new Supervisor</Text>
       {supervisor ? <RoleChoice catalog={catalog} role={supervisor} values={global.values} machine={{}} theme={theme} disabled={machine.saving || Boolean(global.settingsError)} onChange={(values) => void machine.save(() => values)} /> : null}
-      <Text style={{ color: c.foregroundMuted }}>Changes apply to a new session. Use Paseo's model control in chat to change an existing session.</Text>
+      <Text style={{ color: c.foregroundMuted }}>This applies when a new Supervisor starts. To change the running one, use the model menu in its chat.</Text>
     </View> : tab === "machine" ? <TeamSection catalog={catalog} team={global.team} values={global.values} machine={{}} layer="machine" theme={theme} disabled={machine.saving || Boolean(global.settingsError)} active={roleId} onActive={setRoleId} save={machine.save} reload={machine.reload} /> : !project ? <View style={{ paddingVertical: 16, gap: 16 }}>
       <Text style={{ color: c.foreground, fontSize: 18, fontWeight: "600" }}>Set up this project's team</Text><Text style={{ color: c.foregroundMuted, lineHeight: 21 }}>Choose its models and Supervisor access here. The current folder is already selected.</Text>
       <Button label="Set up Seatworks here" theme={theme} tone="accent" onPress={() => setSetup(true)} />
@@ -103,7 +103,7 @@ function WorkspaceBody({ theme, layout, navigation, workspace, project, machine,
     <SetupDialog open={setup} initialRoot={workspace.root} catalog={catalog} available={data.candidates} projects={data.projects} readSettings={local.readSettings} machine={global.values} theme={theme} disabled={local.saving} onOpenChange={setSetup} attach={local.attach} listFolders={local.listFolders} onAttached={() => { local.reload(); machine.reload(); setTab("models"); }} />
     <Modal title="Create Overall Supervisor" open={confirm} onOpenChange={(value) => { if (!busy) setConfirm(value); }}><Modal.Content>
       <Text style={{ color: c.foreground }}>Start {choice?.harness?.label ?? "configured provider"} · {choice?.model || "provider default"}{choice?.thinking ? ` · ${choice.thinking}` : ""} in the shared Supervisor workspace?</Text>
-      <Text style={{ color: c.foregroundMuted }}>It will await your objective and resume the currently enrolled scope, using its existing permissions. No new projects are enrolled.</Text>
+      <Text style={{ color: c.foregroundMuted }}>It waits for your first request and looks after the projects you already chose, with what you already allowed. No project is added.</Text>
       {error ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{error}</Text> : null}
       <Button label={busy ? "Creating…" : "Create & open Supervisor"} theme={theme} tone="accent" disabled={busy} onPress={() => void openSupervisor(true)} />
     </Modal.Content></Modal>

@@ -111,7 +111,7 @@ export function SetupDialog({ open, initialRoot, catalog, available, projects, r
                 style={{ padding: 12, gap: 4, borderRadius: 8, borderWidth: 1, borderColor: mode === value ? c.accent : c.border, backgroundColor: c.surface1 }}>
                 <Text style={{ ...text, fontWeight: "600" }}>{mode === value ? "●" : "○"} {label}</Text><Text style={muted}>{detail}</Text>
               </Pressable>)}
-          </View> : <Text style={{ ...muted, fontSize: 12 }}>Your Supervisor can coordinate work here. Landing work on your branch stays your call.</Text>}
+          </View> : <Text style={{ ...muted, fontSize: 12 }}>Your Supervisor can run the team here. Merging finished work into your branch is always your call.</Text>}
         </>}
       </View>
       {step === 1 ? <View style={{ ...row, justifyContent: "flex-end", padding: 16, borderTopWidth: 1, borderColor: c.border }}>

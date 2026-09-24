@@ -2,7 +2,7 @@ import type { Team } from "../catalog/team.ts";
 import { type Kit, type RoleSpec, can, roleThatCan, schemaOf, seatOf, worksTasks } from "../catalog/kit.ts";
 import type { SeatView, Seats, Workspaces } from "../core/ports.ts";
 import { Agents } from "./agents.ts";
-import { argsProblems, shapeOf } from "./args.ts";
+import { argsProblems, shapeOf, typedArgs } from "./args.ts";
 import { sortKeys } from "../core/store.ts";
 import { type Args, type Caller, type CodeIndex, DeskContext, type DeskDeps, type Mailer, type Posted, type ToolReply, type ToolRequest, hash, no, ok } from "./context.ts";
 import { errorText } from "../core/errors.ts";
@@ -272,7 +272,7 @@ export class Desk {
     const { ctx } = this.services;
     const schema = schemaOf(ctx.kit, caller.role, request.tool);
     const tool = schema ? toolFor(caller.role, request.tool) : undefined;
-    const args = (request.args ?? {}) as Args;
+    const args = (schema ? typedArgs(schema, request.args ?? {}) : request.args ?? {}) as Args;
     const problems = schema ? argsProblems(schema, args) : [];
     if (schema && problems.length === 0) {
       try {

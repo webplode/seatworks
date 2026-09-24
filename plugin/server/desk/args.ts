@@ -16,6 +16,29 @@ function fits(name: string, schema: ArgSchema, value: unknown): string | undefin
   return undefined;
 }
 
+/** A value some harnesses send as text, read as the type the schema asks for: "true", "3" or "[\"a\"]". Anything else is left as sent. */
+function asTyped(schema: ArgSchema, value: unknown): unknown {
+  if (typeof value !== "string" || !schema.type || schema.type === "string") return value;
+  const text = value.trim();
+  if (schema.type === "boolean") return text === "true" ? true : text === "false" ? false : value;
+  if (schema.type === "number" || schema.type === "integer") return text !== "" && Number.isFinite(Number(text)) ? Number(text) : value;
+  if (schema.type === "array" || schema.type === "object") {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return typeOf(parsed) === schema.type ? parsed : value;
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+/** `args` with each value a harness sent as text read as its schema's type. */
+export function typedArgs(schema: ArgSchema, args: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema.properties ?? {};
+  return Object.fromEntries(Object.entries(args).map(([name, value]) => [name, properties[name] ? asTyped(properties[name]!, value) : value]));
+}
+
 /** Why `args` miss the schema the seat was shown; empty when they fit. Some harnesses never validate their own tool calls. */
 export function argsProblems(schema: ArgSchema, args: Record<string, unknown>): string[] {
   const properties = schema.properties ?? {};

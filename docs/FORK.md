@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.5, state format 4, 523 tests.
+- Plugin version: 2.5.6, state format 4, 525 tests.
 
 ## Areas the fork adds
 
@@ -116,6 +116,9 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
   found".
 - **Git identity check.** The doctor reports a missing git identity. Commits made by agents need
   `user.name` and `user.email` even when SSH and `gh` are set up.
+- **Tool values sent as text.** Claude Code sometimes sends a boolean, number or list as text
+  (`onBranch: "true"`). The desk reads such text as the type the tool asks for before it checks
+  the call (`server/desk/args.ts`); text that is not that type is still refused.
 
 ## Upstream syncs
 

@@ -17,11 +17,13 @@ import { SupervisionPanel } from "./supervision.tsx";
 
 const MACHINE = "machine";
 
-export function SeatworksSurface({ theme, layout, navigation }: PluginSurfaceProps) {
+export function SeatworksSurface({ theme, layout, navigation, openActivity }: PluginSurfaceProps & { openActivity?: (workspace: string) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>("team");
   const [chip, setChip] = useState<string | null>(null);
   const [dialog, setDialog] = useState(false);
+  // The project just added, so the home screen can point the next step at it.
+  const [added, setAdded] = useState<{ slug: string; at: number } | null>(null);
   // Tagged with the screen they ran on, or another project's results showed as this one's.
   const [checks, setChecks] = useState<{ of: string; at: string; rows: Check[] } | null>(null);
   // Tagged by project: lane ids repeat across projects, every first lane is L1.
@@ -100,7 +102,7 @@ export function SeatworksSurface({ theme, layout, navigation }: PluginSurfacePro
       onOpenChange={setDialog}
       attach={attach}
       listFolders={listFolders}
-      onAttached={() => { setOpen(null); reload(); }}
+      onAttached={(slug) => { setOpen(null); setAdded({ slug, at: Date.now() }); reload(); }}
     />
   );
 
@@ -109,9 +111,10 @@ export function SeatworksSurface({ theme, layout, navigation }: PluginSurfacePro
       <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
         {trouble}
         <SupervisionPanel theme={theme} compact={layout.compact} catalog={data.catalog} machine={data.values} projects={data.projects}
-          available={data.candidates} listFolders={listFolders} attach={attach} onChanged={reload}
+          available={data.candidates} listFolders={listFolders} attach={attach} onChanged={reload} added={added}
           onAdd={() => setDialog(true)} onSettings={(slug) => { setOpen(slug); setTab("team"); setChip(data.catalog.roles.find((r) => r.can.includes(slug === MACHINE ? "supervise" : "lead"))?.id ?? null); }}
-          onFlow={(slug) => { setOpen(slug); setTab("flow"); }} onAgent={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined} />
+          onFlow={(slug) => { setOpen(slug); setTab("flow"); }} onAgent={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+          onReview={navigation ? (agentId, workspace) => { navigation.openAgent({ agentId }); if (workspace && openActivity) setTimeout(() => openActivity(workspace), 400); } : undefined} />
         {dialogNode}
       </ScrollView>
     );

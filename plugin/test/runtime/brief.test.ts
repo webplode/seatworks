@@ -79,7 +79,7 @@ test("a lane waiting for others is listed after the open ones, with what it wait
   const view = teamBrief(binding(), [], () => ledger, []);
   assert.deepEqual(view.projects[0]!.streams!.map(s => [s.id, s.state]), [["L1", "waiting"], ["L2", "starts when earlier work is merged"]]);
   ledger.lanes.L1!.status = "closed";
-  assert.equal(teamBrief(binding(), [], () => ledger, []).projects[0]!.status, "1 work stream waiting to start");
+  assert.equal(teamBrief(binding(), [], () => ledger, []).projects[0]!.status, "1 piece of work waiting to start");
 });
 test("every card says in plain words what the Human approves, and Approve all takes only what a plain yes settles", () => {
   const ledger = emptyLedger();

@@ -119,7 +119,7 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
       let next = await read({}) as unknown as SupervisionView;
       const project = next.binding.projects.find((p) => p.slug === at);
       if (!project) throw new Error("The project is not connected to your Supervisor yet. Refresh and try again.");
-      if (!WORKS.every((op) => project.grants.includes(op))) throw new Error(`${project.name} is set to observe only. Allow coordination to start work there.`);
+      if (!WORKS.every((op) => project.grants.includes(op))) throw new Error(`${project.name} can only be watched right now. Choose “Let the Supervisor work here” to start work there.`);
       if (!next.binding.supervisor) { await create({ revision: next.binding.revision }); next = await read({}) as unknown as SupervisionView; }
       const supervisor = next.binding.supervisor?.agent;
       if (!supervisor) throw new Error("Your Supervisor did not start. Refresh and try again.");
@@ -162,13 +162,13 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
     </View>
     <View style={{ gap: 4, paddingHorizontal: 4 }}>
       {target && !target.connected ? <Text style={muted}>{target.label} joins Seatworks when you start. Your files stay where they are.</Text> : null}
-      {observeOnly ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}><Text style={{ ...muted, color: c.statusWarning }}>{scope!.name} is set to observe only.</Text><Button label="Allow coordination" theme={theme} onPress={() => onAccess(scope!.id)} /></View> : null}
+      {observeOnly ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}><Text style={{ ...muted, color: c.statusWarning }}>{scope!.name} can only be watched right now.</Text><Button label="Let the Supervisor work here" theme={theme} onPress={() => onAccess(scope!.id)} /></View> : null}
       {target && failing === null ? <Text style={muted}>Checking setup…</Text> : null}
       {failing?.length ? failing.map((row) => <Text key={row.id} selectable style={{ ...muted, color: c.statusWarning }}>⚠ {row.detail}</Text>) : null}
       {signIn ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
         <Text selectable style={{ ...muted, color: c.statusWarning, flexShrink: 1 }}>⚠ Your Supervisor can't sign in (“{signIn}”). Reload it before you start.</Text>
         {onReload ? <Button label={busy ? "Reloading…" : "Reload Supervisor"} tone="accent" theme={theme} disabled={busy} onPress={() => void reloadNow()} /> : null}
-      </View> : failing && !failing.length ? <Text style={muted}>✓ Setup checked · {supervisorLine}</Text> : null}
+      </View> : failing && !failing.length ? <Text style={muted}>✓ Ready to start · Supervisor {supervisorLine.replace(/^Runs on/, "runs on")}</Text> : null}
       {error ? <Text accessibilityRole="alert" selectable style={{ ...muted, color: c.statusDanger }}>{error}</Text> : null}
       {uncertain ? <Button label="Open Supervisor" theme={theme} disabled={!onAgent} onPress={() => onAgent?.(uncertain)} /> : null}
     </View>

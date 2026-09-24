@@ -14,8 +14,8 @@ export type TeamBrief = z.infer<typeof BriefSchema>;
 /** Cards one Approve all click may act on: landing or finishing work whose tests did not fail, and committing team files. */
 export const approvable = (item: TeamBrief["items"][number]) => (item.kind === "land" && Boolean(item.scope && item.lane)) || (item.kind === "commit" && Boolean(item.scope));
 export const briefRpc = defineRpc({ name: "seatworks.team.brief", input: z.object({}), output: BriefSchema });
-/** "1 work stream", "2 work streams". */
+/** "1 question", "2 questions". */
 export const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-export const briefLabel = (brief: TeamBrief) => !brief.active ? "Team · paused" : `${brief.lines ? count(brief.lines, "work stream") : "Team"} · ${brief.needsYou ? `${brief.needsYou} need${brief.needsYou === 1 ? "s" : ""} you` : brief.questions ? count(brief.questions, "question") : brief.items.length ? "needs attention" : "ready"}`;
+export const briefLabel = (brief: TeamBrief) => !brief.active ? "Paused" : `${brief.lines ? count(brief.lines, "piece of work", "pieces of work") : "No work yet"} · ${brief.needsYou ? `${brief.needsYou} waiting for you` : brief.questions ? count(brief.questions, "team question") : brief.items.length ? "something to check" : "all good"}`;
 export const commitTeamFilesRpc = defineRpc({ name: "seatworks.team.commit-files", input: z.object({ scope: z.string() }), output: z.object({ committed: z.array(z.string()) }) });
 export const reloadSupervisorRpc = defineRpc({ name: "seatworks.supervision.reload", input: z.object({}), output: z.object({ agent: z.string() }) });

@@ -112,7 +112,7 @@ const Lane = memo(function Lane({ lane, theme, onOpen, onAgent }: { lane: FlowLa
         caret={lane.taskCount === 0 ? undefined : lane.open ? "▾" : "▸"}
         onPress={lane.taskCount === 0 ? undefined : () => onOpen(lane.id)}
       />
-      {onAgent && lane.lead && lane.lead.status !== "gone" ? <Button label="Open Lead" theme={theme} onPress={() => onAgent(lane.lead!.id)} /> : null}
+      {onAgent && lane.lead && lane.lead.status !== "gone" ? <Button label="Open work chat" theme={theme} onPress={() => onAgent(lane.lead!.id)} /> : null}
       </View>
       {lane.open && lane.tasks.length > 0 ? (
         <>

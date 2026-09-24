@@ -503,7 +503,7 @@ export function jevHeader(watch: WatchView): JevHeader {
   const tally = `${watch.read.turns.toLocaleString("en-US")} turns read · ${spent(watch.read.cost)} spent so far`;
   const running = watch.seats.filter((seat) => seat.running).length;
   if (running > 0) {
-    return { title: `Jev is watching ${plural(running, "agent")}${watch.lanes > 1 ? ` in ${watch.lanes} work streams` : ""}`, sub: `Last check ${watch.lastRead === null ? "not yet" : since(watch.lastRead)} · ${tally}`, word, tone: "success" };
+    return { title: `Jev is watching ${plural(running, "agent")}${watch.lanes > 1 ? ` in ${watch.lanes} pieces of work` : ""}`, sub: `Last check ${watch.lastRead === null ? "not yet" : since(watch.lastRead)} · ${tally}`, word, tone: "success" };
   }
   return { title: "Nothing is running", sub: watch.lastRead === null ? "Jev has not checked a turn here yet." : `Jev last checked a turn here ${since(watch.lastRead)} · ${tally}`, word, tone: "muted" };
 }
@@ -548,7 +548,7 @@ export function trackRecord(marks: WatchView["marks"]): { title: string; percent
 
 /** The Watcher seat as the Flow canvas draws it, beside the Supervisor. */
 export function watcherState(watcher: WatchView["watcher"]): { state: string; alive: boolean } {
-  if (!watcher) return { state: "not started · starts once a work stream is open", alive: false };
+  if (!watcher) return { state: "not started · starts once work begins", alive: false };
   const waiting = watcher.queued > 0 ? ` · ${plural(watcher.queued, "check")} waiting` : "";
   return { state: `${watcher.status}${waiting}`, alive: watcher.status !== "closed" };
 }

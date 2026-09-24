@@ -335,6 +335,11 @@ test("the setup screen finds folders the way Paseo's Add project does, with a ty
   process.env.HOME = root;
   try {
     assert.deepEqual((await down.call("seatworks.paths.find", { query: "repo/" })).folders.map((folder: { path: string }) => folder.path), [join(root, "repo")], "a path without ~ is read from the home folder");
+    mkdirSync(join(root, "code", "my-repo"), { recursive: true });
+    execFileSync("git", ["init", "-q", join(root, "code", "repo-two")]);
+    const unseen = served(undefined, async () => []);
+    assert.deepEqual((await unseen.call("seatworks.paths.find", { query: "REPO" })).folders.map((folder: { path: string }) => folder.path),
+      [join(root, "repo"), join(root, "code", "repo-two"), join(root, "code", "my-repo")], "a bare name Paseo has not seen is looked for in the home folder and each folder in it, repositories first");
   } finally { process.env.HOME = home; }
 });
 

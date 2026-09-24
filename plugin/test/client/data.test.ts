@@ -192,7 +192,7 @@ const incident = (over: Partial<WatchIncident> = {}): WatchIncident => ({
 
 test("the Jev card's header says the one thing to know first: reading, idle, not answering, or no key", () => {
   const reading = jevHeader(watching({ telling: true, lanes: 2, lastRead: 0, read: { turns: 128, cost: 0.015 }, seats: [seatOf("a"), seatOf("b"), seatOf("c", { running: false })] }));
-  assert.deepEqual([reading.title, reading.word, reading.tone], ["Jev is watching 2 agents in 2 work streams", "sending notices", "success"]);
+  assert.deepEqual([reading.title, reading.word, reading.tone], ["Jev is watching 2 agents in 2 pieces of work", "sending notices", "success"]);
   assert.equal(reading.sub, "Last check just now · 128 turns read · $0.015 spent so far");
   const idle = jevHeader(watching({ lastRead: 660, read: { turns: 365, cost: 0.047 } }));
   assert.deepEqual([idle.title, idle.word, idle.tone], ["Nothing is running", "recording only", "muted"]);
@@ -239,7 +239,7 @@ test("the track record counts useful against noise, and says when there are mark
 test("the Watcher seat on the canvas says whether it runs and how many readings wait for it", () => {
   assert.deepEqual(watcherState({ id: "w", status: "running", minutes: 0, queued: 2 }), { state: "running · 2 checks waiting", alive: true });
   assert.deepEqual(watcherState({ id: "w", status: "idle", minutes: 3, queued: 0 }), { state: "idle", alive: true });
-  assert.deepEqual(watcherState(null), { state: "not started · starts once a work stream is open", alive: false });
+  assert.deepEqual(watcherState(null), { state: "not started · starts once work begins", alive: false });
 });
 
 test("money is shown in dollars, with enough places that a few cents do not read as nothing", () => {

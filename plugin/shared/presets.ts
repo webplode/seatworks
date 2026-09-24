@@ -5,16 +5,16 @@ export type Preset = { id: PresetId; label: string; hint: string; roles: Record<
 
 export const PRESETS: Preset[] = [
   {
-    id: "cheap", label: "Cheap", hint: "Smaller models and less thinking, for routine work",
+    id: "cheap", label: "Cheap", hint: "Faster and cheaper. For small, simple changes.",
     roles: {
       lead: { harness: "claude", model: "claude-sonnet-5", thinking: "medium" },
       peer: { harness: "codex", model: "gpt-5.6-luna", thinking: "low" },
       reviewer: { harness: "codex", model: "gpt-5.6-luna", thinking: "medium" },
     },
   },
-  { id: "balanced", label: "Balanced", hint: "Your team defaults", roles: {} },
+  { id: "balanced", label: "Balanced", hint: "Your usual team. Right for most work.", roles: {} },
   {
-    id: "max", label: "Max", hint: "The strongest models and the most thinking, for hard work",
+    id: "max", label: "Max", hint: "The most capable models, slower and costlier. For hard or risky changes.",
     roles: {
       lead: { harness: "claude", model: "claude-opus-5-5", thinking: "xhigh" },
       peer: { harness: "codex", model: "gpt-6-astra", thinking: "high" },

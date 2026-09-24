@@ -44,7 +44,7 @@ function ItemCard({ item, theme, supervisor, onAgent, onModels }: { item: Item; 
   const tone = item.kind === "permission" ? c.statusWarning : item.kind === "land" ? c.statusSuccess : item.kind === "tests" || item.kind === "error" ? c.statusDanger : c.foreground;
   const mark = item.kind === "land" ? "✓ " : item.kind === "tests" ? "✗ " : item.kind === "question" ? "? " : "";
   const [more, setMore] = useState(false);
-  const open = onAgent && item.agent && !item.action ? <Button theme={theme} label={item.kind === "permission" ? "Open agent to answer" : item.kind === "question" ? "Answer" : item.kind === "land" || item.kind === "tests" ? "Open Lead" : "Open conversation"} onPress={() => onAgent(item.agent!)} /> : null;
+  const open = onAgent && item.agent && !item.action ? <Button theme={theme} label={item.kind === "permission" ? "Open agent to answer" : item.kind === "question" ? "Answer" : item.kind === "land" || item.kind === "tests" ? "Open work chat" : "Open conversation"} onPress={() => onAgent(item.agent!)} /> : null;
   return <View style={{ gap: 8, padding: 12, borderWidth: 1, borderRadius: 8, borderColor: item.kind === "land" ? c.statusSuccess : item.kind === "tests" ? c.statusDanger : c.border, backgroundColor: c.surface1 }}>
     <Text style={{ color: tone, fontWeight: "600" }}>{mark}{item.title} <Text style={{ color: c.foregroundMuted, fontWeight: "400" }}>· {item.project}</Text></Text>
     {item.plain ? <>
@@ -132,7 +132,7 @@ function BriefContent({ data, error, theme, onAgent, onModels }: { data: TeamBri
     {!data.active ? <Text style={{ color: c.foregroundMuted }}>Your Supervisor is paused. Open Overall Supervisor to carry on.</Text> : <>
       {data.projects.map(p => <View key={p.id} style={{ gap: 3 }}>
         <Text style={{ color: c.foreground, fontWeight: "600" }}>{p.name} <Text style={{ color: c.foregroundMuted, fontWeight: "400" }}>· {p.status}</Text></Text>
-        {(p.streams ?? []).map(s => <Pressable key={s.id} accessibilityRole="button" accessibilityLabel={`Open the Lead of ${s.title}`} disabled={!onAgent || !s.agent} onPress={() => s.agent && onAgent?.(s.agent)}
+        {(p.streams ?? []).map(s => <Pressable key={s.id} accessibilityRole="button" accessibilityLabel={`Open the work chat for ${s.title}`} disabled={!onAgent || !s.agent} onPress={() => s.agent && onAgent?.(s.agent)}
           style={{ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 2 }}>
           <Text style={{ color: s.state === "ready for you" ? c.statusSuccess : s.state === "tests failed" ? c.statusDanger : c.accent }}>●</Text>
           <Text numberOfLines={1} style={{ color: c.foreground, flexShrink: 1 }}>{s.title}</Text>
@@ -165,7 +165,7 @@ export function TeamStatusCard({ agentId, theme, openActivity, openTeam }: Plugi
   const selected = data?.supervisor === agentId;
   return <View style={{ padding: 16, gap: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, backgroundColor: theme.colors.surface1 }}>
     {data && !selected ? <Text style={{ color: theme.colors.foregroundMuted }}>This conversation is no longer the selected Overall Supervisor.</Text> : <BriefContent data={data} error={error} theme={theme} onModels={data?.workspace ? () => openTeam(data.workspace!) : undefined} />}
-    {selected && data?.workspace ? <Button label="View team & open agents" theme={theme} onPress={() => openActivity(data.workspace!)} /> : null}
+    {selected && data?.workspace ? <Button label="See the team's work" theme={theme} onPress={() => openActivity(data.workspace!)} /> : null}
     <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>Live team status. Reply to your Supervisor in this chat.</Text>
   </View>;
 }

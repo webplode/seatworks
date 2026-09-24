@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.6, state format 4, 526 tests.
+- Plugin version: 2.5.7, state format 4, 526 tests.
 
 ## Areas the fork adds
 
@@ -175,6 +175,20 @@ archived (`replace_lead`). It showed three gaps, now fixed:
 - Claude Code sent `onBranch` as text (the typed-values fix above);
 - the "Lead gone", "opened" and "half-open" letters did not name their project, so their chat
   card could not either.
+
+**Onboarding walk (2.5.7).** Adding a project and starting its first work was walked in the WebUI
+against Mobbin's import, setup-checklist and agent-step patterns (Vercel, Cursor, Intercom, Lindy,
+Manus). Changes:
+- a bare folder name Paseo has not seen is looked for in the home folder and the folders in it,
+  and the palette says "Searching…" until the answer arrives;
+- team presets say what each choice is for, recommend Balanced and keep model names behind a toggle;
+- after adding, a banner says what to do next and selects the new project;
+- project cards show a short path, each piece of work with its plain state, and a
+  "Review & approve" button that opens the Supervisor chat and the Team activity panel;
+- labels drop Lead, lane, coordination and thinking levels ("Open work chat", "Let the Supervisor
+  work here", "Models for all projects", "✓ Ready to start");
+- the Supervisor prompt maps its words to the screen's and forbids revision numbers, paths, hashes
+  and IDs.
 
 **Rollback points:**
 - branch `backup/pre-upstream-merge-20260924`;

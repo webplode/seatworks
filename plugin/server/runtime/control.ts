@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type Kit, can, providerId, reloadTeam, rolesThatCan, seatOf, supportsRole } from "../catalog/kit.ts";
@@ -27,6 +27,30 @@ import { seatPairs, labelFor } from "../catalog/providers.ts";
 import { errorText } from "../core/errors.ts";
 
 type Target = { file: string; schema: typeof MachineLayerSchema | typeof ProjectLayerSchema; project?: Project };
+
+/** The folders in `dir`, leaving out hidden ones and macOS's Library. */
+function foldersIn(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "Library").map((entry) => join(dir, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+/** Folders named like `typed` where people keep projects: the home folder, each folder in it, and the folders holding projects Seatworks has seen. Git repositories first, then names that start with it. */
+function named(typed: string): string[] {
+  const want = typed.toLowerCase();
+  const places = new Set([homedir(), ...foldersIn(homedir())]);
+  for (const state of foldersIn(join(stateRoot(), "projects"))) {
+    try {
+      const root = (JSON.parse(readFileSync(join(state, "meta.json"), "utf-8")) as { root?: unknown }).root;
+      if (typeof root === "string") places.add(dirname(root));
+    } catch {}
+  }
+  const hits = [...places].flatMap(foldersIn).filter((path, i, all) => all.indexOf(path) === i && basename(path).toLowerCase().includes(want));
+  const rank = (path: string) => (existsSync(join(path, ".git")) ? 0 : 2) + (basename(path).toLowerCase().startsWith(want) ? 0 : 1);
+  return hits.sort((a, b) => rank(a) - rank(b) || basename(a).length - basename(b).length).slice(0, 20);
+}
 
 const unknownProject = (slug: string) => `No project named ${slug} has been seen on this machine.`;
 
@@ -375,7 +399,9 @@ export class SettingsControl implements Control {
       }
     }
     try {
-      for (const path of await this.deps.folders(typed)) if (!found.includes(path)) found.push(path);
+      const searched = await this.deps.folders(typed);
+      // Paseo's search knows only folders it has seen; a bare name it has not seen is looked for where projects usually live.
+      for (const path of searched.length || typed.length < 2 || /[~/]/.test(typed) ? searched : named(typed)) if (!found.includes(path)) found.push(path);
     } catch (error) {
       if (found.length === 0) return { error: `Paseo's folder search did not answer: ${errorText(error)}` };
     }

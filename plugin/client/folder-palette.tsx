@@ -16,6 +16,7 @@ export function FolderPalette({ theme, connected, busy, onPick, placeholder = "S
   const [found, setFound] = useState<Found[]>([]);
   const [cursor, setCursor] = useState(0);
   const [trouble, setTrouble] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const asked = useRef(0);
   const c = theme.colors;
   const text = { color: c.foreground, fontSize: 14 };
@@ -24,15 +25,16 @@ export function FolderPalette({ theme, connected, busy, onPick, placeholder = "S
   const mine = connected.filter((f) => !typed || `${f.label} ${f.path}`.toLowerCase().includes(typed));
   const shown = [...mine, ...found.filter((f) => !mine.some((m) => m.path === f.path)).map((f) => ({ ...f, connected: connected.some((m) => m.path === f.path) }))];
   useEffect(() => {
-    if (!typed) { setFound([]); setTrouble(null); return; }
+    if (!typed) { setFound([]); setTrouble(null); setSearching(false); return; }
     const ticket = ++asked.current;
+    setSearching(true);
     const timer = setTimeout(() => {
       void (async () => {
         try {
           const result = await find({ query }) as { folders?: Found[]; error?: string };
           if (ticket !== asked.current) return;
-          setTrouble(result.error ?? null); setFound(result.folders ?? []); setCursor(0);
-        } catch (e) { if (ticket === asked.current) setTrouble(message(e)); }
+          setTrouble(result.error ?? null); setFound(result.folders ?? []); setCursor(0); setSearching(false);
+        } catch (e) { if (ticket === asked.current) { setTrouble(message(e)); setSearching(false); } }
       })();
     }, 120);
     return () => clearTimeout(timer);
@@ -58,7 +60,8 @@ export function FolderPalette({ theme, connected, busy, onPick, placeholder = "S
           <Text numberOfLines={1} ellipsizeMode="head" style={{ ...muted, fontSize: 12 }}>{f.path}</Text>
         </Pressable>
       </View>)}
-      {typed && !shown.length && !trouble ? <Text style={{ ...muted, paddingHorizontal: 12 }}>No folder matches “{query.trim()}”.</Text> : null}
+      {typed && searching && !shown.length ? <Text style={{ ...muted, paddingHorizontal: 12 }}>Searching…</Text> : null}
+      {typed && !searching && !shown.length && !trouble ? <Text style={{ ...muted, paddingHorizontal: 12 }}>No folder named “{query.trim()}” in your home folder or the folders in it. Paste the folder's full path, like ~/code/my-app.</Text> : null}
     </ScrollView>
     <Text style={{ ...muted, fontSize: 12 }}>{busy ? "Opening…" : "↑↓ Navigate · ↵ Select · Esc Close"}</Text>
   </View>;

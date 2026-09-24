@@ -23,7 +23,7 @@ export default function contribute(client: PluginClientContext) {
       return step ? { items: [{ type: "plugin", id: item.callId, kind: "team-step", version: 1, data: step }] } : undefined;
     } }),
     client.addWorkspacePanel({ id: "activity", title: "Team activity", icon: "Activity", context: "workspace", locations: ["workspace", "explorer"], Component: props => <TeamActivity {...props} openTeam={openTeam} /> }),
-    client.addSurface("seatworks", SeatworksSurface),
+    client.addSurface("seatworks", props => <SeatworksSurface {...props} openActivity={workspaceId => client.openPanel("activity", { workspaceId, location: "explorer" })} />),
     client.addSidebarItem({ id: "seatworks", title: "Seatworks", icon: "Users", surface: "seatworks" }),
     client.addSettingsScreen({ id: "seatworks", title: "Seatworks", icon: "Users", Component: SeatworksSettings }),
     client.addWorkspacePanel({ id: "team", title: "Team & models", icon: "SlidersHorizontal", context: "workspace", locations: ["workspace", "explorer"], Component: WorkspaceTeam }),

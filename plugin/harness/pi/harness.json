@@ -24,7 +24,13 @@
   "settings": {
     "file": "settings.json",
     "source": "settings.json",
-    "roleSource": "settings/ROLE.settings.json"
+    "roleSource": "settings/ROLE.settings.json",
+    "inherits": {
+      "from": "HOME/.pi/agent/settings.json",
+      "keys": [
+        "packages"
+      ]
+    }
   },
   "links": [
     {

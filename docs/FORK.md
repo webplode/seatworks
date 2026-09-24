@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.2, state format 4, 516 tests.
+- Plugin version: 2.5.3, state format 4, 517 tests.
 
 ## Areas the fork adds
 
@@ -84,6 +84,10 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
 - **Codex Peers can commit in lane copies.** Seats that `work` or `write` get the repository's git
   common directory in `sandbox_workspace_write.writable_roots`, because `.git/worktrees/<slot>/`
   lives there.
+- **Pi seats load the owner's Pi packages.** Providers such as `antigravity` and `cursor` come from
+  Pi packages. A seat's `settings.json` now takes `packages` from `~/.pi/agent/settings.json` beside
+  `pi-mcp-adapter`; without them a Peer on `antigravity/gemini-3.8-flash` failed with "Model not
+  found".
 - **Git identity check.** The doctor reports a missing git identity. Commits made by agents need
   `user.name` and `user.email` even when SSH and `gh` are set up.
 

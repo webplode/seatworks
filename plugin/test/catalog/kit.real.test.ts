@@ -147,6 +147,22 @@ test("a Codex seat runs on the model provider the owner's own Codex names, and o
   assert.equal(seat.approval_policy, "never", "and the kit's own settings still hold");
 });
 
+// Providers like antigravity and cursor come from Pi packages; a seat without them cannot find its model.
+test("a Pi seat loads the owner's own Pi packages beside the adapter, and nothing else of the owner's settings", () => {
+  const kit = loadKit(pluginRoot);
+  const pair = seatPairs(kit).find((entry) => entry.harness.id === "pi" && entry.role.role === "peer")!;
+  const team = withHarness(resolveTeam(kit), "peer", pair.harness);
+  const project = { slug: "demo-000000", state: "/state/demo" };
+  const home = tempDir("sw2-pi-home-");
+  mkdirSync(join(home, ".pi", "agent"), { recursive: true });
+  writeFileSync(join(home, ".pi", "agent", "settings.json"), JSON.stringify({ packages: ["npm:pi-antigravity", "npm:pi-mcp-adapter"], defaultModel: "gemini-3.8-flash", defaultProjectTrust: "always" }));
+  materialize(kit, team, "peer", home, project);
+  const seat = readConfig<Record<string, any>>(join(seatDir(kit, pair.role, pair.harness, home, project), "settings.json"), {});
+  assert.deepEqual(seat.packages, ["npm:pi-antigravity", "npm:pi-mcp-adapter"]);
+  assert.equal(seat.defaultModel, undefined, "the model is the role's, set at launch");
+  assert.equal(seat.defaultProjectTrust, "never", "and the kit's own settings still hold");
+});
+
 // Codex under approval_policy "never" refuses every MCP call not approved ahead.
 test("a Codex seat has every desk and proxy tool it is given approved ahead, and other agents get no such list", () => {
   const kit = loadKit(pluginRoot);

@@ -17,6 +17,7 @@ export interface Control {
   parseMcp(text: string): unknown;
   team(project?: string): unknown;
   doctor(project?: string): Promise<Check[]>;
+  setGitIdentity(project: string, name: string, email: string): Check;
   status(project: string): Promise<unknown>;
   flow(project: string, since?: string, open?: string[]): Promise<unknown>;
   listPaths(path?: string): unknown;
@@ -50,6 +51,7 @@ export function registerRpc(server: { handle: unknown }, control: Control, bind:
   handle(contracts.mcpParse, (input) => control.parseMcp(input.text));
   handle(contracts.team, (input) => control.team(input.project));
   handle(contracts.doctor, (input) => control.doctor(input.project));
+  handle(contracts.gitIdentity, (input) => control.setGitIdentity(input.project, input.name, input.email));
   handle(contracts.status, (input) => control.status(input.project));
   handle(contracts.flow, (input) => control.flow(input.project, input.since, input.open));
   handle(contracts.paths, (input) => control.listPaths(input.path));

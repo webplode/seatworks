@@ -58,6 +58,7 @@ test("the plugin serves the catalog, settings, projects, team and status over RP
     "seatworks.catalog.read",
     "seatworks.doctor.run",
     "seatworks.flow.read",
+    "seatworks.git.identity",
     "seatworks.mcp.parse",
     "seatworks.models.refresh",
     "seatworks.paths.find",
@@ -148,6 +149,10 @@ test("a project can be registered by its path before any agent has run in it", a
   const saved = await call("seatworks.settings.write", { project: added.slug, revision: read.revision, values: { roles: { peer: { harness: "devin" } } } });
   assert.equal(saved.status, "saved");
   assert.equal((await call("seatworks.team.read", { project: added.slug })).roles.peer.harness, "devin");
+  const signed = await call("seatworks.git.identity", { project: added.slug, name: " Ana ", email: "ana@example.com" });
+  assert.deepEqual([signed.id, signed.ok], ["git:identity", true], "the name and email the team's commits are signed with are set from the screen");
+  assert.equal(execFileSync("git", ["-C", root, "config", "--local", "user.name"], { encoding: "utf-8" }).trim(), "Ana", "in this project alone");
+  await assert.rejects(call("seatworks.git.identity", { project: added.slug, name: "Ana", email: "not an email" }));
 
   const missing = await call("seatworks.projects.add", { root: join(root, "nowhere") });
   assert.match(missing.error, /is not a directory/);

@@ -192,6 +192,8 @@ Manus). Changes:
 - a card's approval count and its rows agree: saving the team's instructions has its own row;
 - a Lead that reported its work ready no longer reads as "Work has stalled" while it waits for the
   Human.
+- a project whose Git has no name and email asks for them in a small form beside Start and saves
+  them in that project only, instead of telling the Human to run git config.
 
 **Rollback points:**
 - branch `backup/pre-upstream-merge-20260924`;

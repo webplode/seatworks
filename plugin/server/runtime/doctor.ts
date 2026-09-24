@@ -34,7 +34,7 @@ export function gitIdentityCheck(root: string): Check {
     execFileSync("git", ["-C", root, "var", "GIT_AUTHOR_IDENT"], { stdio: "ignore", timeout: 5000 });
     return { id: "git:identity", ok: true, detail: "Git can sign commits in this project." };
   } catch {
-    return { id: "git:identity", ok: false, detail: `Git doesn't know who you are in ${root}, so Peers can't commit their work. Run git config user.name and git config user.email there (or --global).` };
+    return { id: "git:identity", ok: false, detail: "Git needs your name and email before the team can save its work in this project." };
   }
 }
 

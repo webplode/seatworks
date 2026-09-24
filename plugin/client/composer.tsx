@@ -8,6 +8,7 @@ import { bindingRpc, createSupervisorRpc, doctorRpc, settingsReadRpc, settingsWr
 import type { SupervisionView } from "../shared/supervision.ts";
 import type { Check } from "../shared/views.ts";
 import { Button } from "./bits.tsx";
+import { GitIdentity } from "./git-identity.tsx";
 import type { Catalog, Folders, Layer, PaseoProject, ProjectRow } from "./data.ts";
 import { message } from "./data.ts";
 import { FolderPalette, type Found } from "./folder-palette.tsx";
@@ -164,7 +165,9 @@ export function Composer({ theme, compact, catalog, machine, view, projects, ava
       {target && !target.connected ? <Text style={muted}>{target.label} joins Seatworks when you start. Your files stay where they are.</Text> : null}
       {observeOnly ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}><Text style={{ ...muted, color: c.statusWarning }}>{scope!.name} can only be watched right now.</Text><Button label="Let the Supervisor work here" theme={theme} onPress={() => onAccess(scope!.id)} /></View> : null}
       {target && failing === null ? <Text style={muted}>Checking setup…</Text> : null}
-      {failing?.length ? failing.map((row) => <Text key={row.id} selectable style={{ ...muted, color: c.statusWarning }}>⚠ {row.detail}</Text>) : null}
+      {failing?.length ? failing.map((row) => row.id === "git:identity" && slug
+        ? <GitIdentity key={row.id} theme={theme} project={slug} onSaved={(rows) => setChecks((now) => now && now.of === target?.path ? { ...now, rows: now.rows?.map((r) => r.id === rows.id ? rows : r) ?? null } : now)} />
+        : <Text key={row.id} selectable style={{ ...muted, color: c.statusWarning }}>⚠ {row.detail}</Text>) : null}
       {signIn ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
         <Text selectable style={{ ...muted, color: c.statusWarning, flexShrink: 1 }}>⚠ Your Supervisor can't sign in (“{signIn}”). Reload it before you start.</Text>
         {onReload ? <Button label={busy ? "Reloading…" : "Reload Supervisor"} tone="accent" theme={theme} disabled={busy} onPress={() => void reloadNow()} /> : null}

@@ -21,6 +21,7 @@ export const projectsCandidatesRpc = defineRpc({ name: "seatworks.projects.candi
 export const mcpParseRpc = defineRpc({ name: "seatworks.mcp.parse", input: z.object({ text: z.string().min(1) }), output: z.json() });
 export const teamRpc = defineRpc({ name: "seatworks.team.read", input: z.object({ project }), output: z.json() });
 export const doctorRpc = defineRpc({ name: "seatworks.doctor.run", input: z.object({ project }), output: z.json() });
+export const gitIdentityRpc = defineRpc({ name: "seatworks.git.identity", input: z.object({ project: z.string().min(1), name: z.string().trim().min(1), email: z.string().trim().email() }), output: z.json() });
 export const statusRpc = defineRpc({ name: "seatworks.status.read", input: z.object({ project: z.string().min(1) }), output: z.json() });
 export const flowRpc = defineRpc({ name: "seatworks.flow.read", input: z.object({ project: z.string().min(1), since: z.string().optional(), open: z.array(z.string()).optional() }), output: z.json() });
 export const modelsRpc = defineRpc({ name: "seatworks.models.refresh", input: z.object({}), output: z.json() });
@@ -42,6 +43,7 @@ export const contracts = {
   mcpParse: mcpParseRpc,
   team: teamRpc,
   doctor: doctorRpc,
+  gitIdentity: gitIdentityRpc,
   status: statusRpc,
   flow: flowRpc,
   paths: pathsRpc,

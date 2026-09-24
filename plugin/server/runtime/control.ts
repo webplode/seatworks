@@ -8,6 +8,7 @@ import { gitCommonDir } from "../core/git.ts";
 import type { SeatView, Seats } from "../core/ports.ts";
 import { seatProblems } from "../catalog/seats.ts";
 import { expandHome, guidesDir, home, stateRoot, worktreeRoot } from "../core/paths.ts";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { flowView } from "../desk/flow.ts";
 import type { CleanView, MigrateView, UpdateView, WatchView } from "../../shared/views.ts";
@@ -349,6 +350,19 @@ export class SettingsControl implements Control {
     const checks = await doctor(this.deps.kit, this.deps.source.teamFor(project));
     if (project) checks.push(gitIdentityCheck(project.root));
     return checks;
+  }
+
+  /** The name and email this project's commits are signed with, set in the project alone. */
+  setGitIdentity(slug: string, name: string, email: string): Check {
+    const project = this.deps.source.named(slug);
+    if (!project) return { id: "git:identity", ok: false, detail: unknownProject(slug) };
+    try {
+      execFileSync("git", ["-C", project.root, "config", "user.name", name.trim()], { stdio: "ignore", timeout: 5000 });
+      execFileSync("git", ["-C", project.root, "config", "user.email", email.trim()], { stdio: "ignore", timeout: 5000 });
+    } catch (error) {
+      return { id: "git:identity", ok: false, detail: `Git could not save your name and email: ${errorText(error)}` };
+    }
+    return gitIdentityCheck(project.root);
   }
 
   async status(slug: string): Promise<unknown> {

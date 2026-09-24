@@ -8,7 +8,7 @@ import { PRESETS, presetOf, withPreset } from "../shared/presets.ts";
 import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
 import type { Catalog, Folders, Layer, PaseoProject, ProjectRow } from "./data.ts";
-import { message } from "./data.ts";
+import { message, shortPath } from "./data.ts";
 import { FolderPalette, type Found } from "./folder-palette.tsx";
 import { PresetPicker, projectRoles } from "./preset-picker.tsx";
 import { RoleChoice, roleChoice } from "./role-choice.tsx";
@@ -95,7 +95,7 @@ export function SetupDialog({ open, initialRoot, catalog, available, projects, r
       <View style={{ padding: 24, gap: 16 }}>
         {trouble || error ? <Text accessibilityRole="alert" style={{ ...text, color: c.statusDanger }}>{trouble ?? error}</Text> : null}
         {step === 0 ? <FolderPalette theme={theme} connected={connected} busy={locked} onPick={(f) => void choose(f.path)} /> : <>
-          <Text selectable numberOfLines={1} ellipsizeMode="head" style={muted}>{root}</Text>
+          <Text selectable numberOfLines={1} ellipsizeMode="head" style={muted}>{shortPath(root)}</Text>
           {folder && !(folder.repository || folder.root) ? <Text style={{ ...muted, color: c.statusWarning }}>Not a Git repository yet. Run git init and make a first commit before the team starts work here.</Text> : null}
           <Text style={{ ...text, fontWeight: "600" }}>Team</Text>
           <PresetPicker catalog={catalog} machine={machine} selected={presetOf(draft.roles)} theme={theme} disabled={locked}

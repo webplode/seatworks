@@ -584,3 +584,6 @@ export function countsInstead(lane: { taskCount: number; open: boolean; lead: { 
   if (lane.taskCount === 0 || lane.open) return false;
   return Boolean(lane.lead) && lane.lead!.status !== "gone" && lane.lead!.waiting.length === 0;
 }
+
+/** A folder as a person reads it: the home folder as ~. */
+export const shortPath = (root: string) => root.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~");

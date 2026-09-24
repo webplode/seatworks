@@ -10,7 +10,7 @@ import { Button } from "./bits.tsx";
 import { useBrief } from "./brief.tsx";
 import { Composer } from "./composer.tsx";
 import type { Catalog, Folders, Layer, PaseoProject, ProjectRow } from "./data.ts";
-import { message } from "./data.ts";
+import { message, shortPath } from "./data.ts";
 import { roleChoice } from "./role-choice.tsx";
 import { bindingInput, workGrants } from "./project-setup.ts";
 import { SupervisionSettings } from "./supervision-settings.tsx";
@@ -167,6 +167,5 @@ export function SupervisionPanel({ theme, compact, catalog, machine, projects, a
 
 const nameOfRoot = (root: string) => root.split("/").filter(Boolean).pop() ?? root;
 /** "/Users/me/code/app" → "~/code/app". */
-const shortPath = (root: string) => root.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~");
 /** An agent's state, as a person says it. */
 const plainState = (status?: string) => status === "running" || status === "starting" ? "working" : status === "idle" ? "not working right now" : status === "error" ? "stopped with an error" : status === "closed" ? "finished" : "can't be reached";

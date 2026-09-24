@@ -89,7 +89,7 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       result.held += queued;
       const running = [...ids].filter(id => ["running","starting"].includes(byId.get(id)?.status ?? "")).length;
       const human = result.items.slice(start).filter(i => i.kind === "permission").length;
-      const landing = result.items.slice(start).filter(i => i.kind === "land").length;
+      const landing = result.items.slice(start).filter(i => i.kind === "land" || i.kind === "commit").length;
       const waiting = Object.values(ledger.lanes).filter(l => l.status === "waiting");
       const streams = [...lanes.slice(0, 6).map((lane) => {
         const tasks = Object.values(ledger.tasks).filter(t => t.lane === lane.id && t.status !== "cut");

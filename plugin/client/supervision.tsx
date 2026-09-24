@@ -135,6 +135,12 @@ export function SupervisionPanel({ theme, compact, catalog, machine, projects, a
             </View>
             <Text style={{ ...muted, fontSize: 13, color: ready || waiting ? c.statusWarning : c.foregroundMuted }}>{!scope ? "Your Supervisor doesn't look after this project yet" : !writable ? "Your Supervisor can only watch this project" : status ?? (leads.length ? "Checking…" : "No work yet · use New work to give the team a task")}{waiting ? ` · ${waiting} more ${waiting === 1 ? "thing" : "things"} to check` : ""}</Text>
             {scope && view.problems[scope.id] ? <Text selectable style={{ ...text, color: c.statusDanger }}>{view.problems[scope.id]}</Text> : null}
+            {scope ? brief?.items.filter((item) => item.project === scope.name && item.kind === "commit").map((item) => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Review: ${item.title}`} disabled={!review} onPress={review}
+              style={({ pressed }) => ({ flexDirection: "row", gap: 8, alignItems: "center", padding: 10, borderRadius: 8, backgroundColor: pressed ? c.surface2 : c.surface0 })}>
+              <Text style={{ color: c.statusSuccess }}>●</Text>
+              <Text numberOfLines={1} style={{ ...text, flexShrink: 1 }}>{item.title.replace(/\?$/, "")}</Text>
+              <Text style={{ ...muted, fontSize: 13 }}>· ready for you</Text>
+            </Pressable>) : null}
             {streams.map((stream) => <Pressable key={stream.id} accessibilityRole="button" accessibilityLabel={`Open the work chat for ${stream.title}`} disabled={!onAgent || !stream.agent} onPress={() => stream.agent && onAgent?.(stream.agent)}
               style={({ pressed }) => ({ flexDirection: "row", gap: 8, alignItems: "center", padding: 10, borderRadius: 8, backgroundColor: pressed ? c.surface2 : c.surface0 })}>
               <Text style={{ color: stream.state === "ready for you" ? c.statusSuccess : stream.state === "tests failed" ? c.statusDanger : c.accent }}>●</Text>

@@ -43,7 +43,7 @@ test("a Lead's ready report becomes a land card, and a red gate a tests card, ne
   assert.equal(land.lane, "L1"); assert.equal(land.diff, "sw/L1 → main · 2 files · +10 −1"); assert.equal(land.agent, "lead-1");
   assert.equal(view.items.filter(i => i.kind === "tests").map(i => i.lane).join(), "L2");
   assert.equal(view.items.some(i => i.lane === "L3"), false);
-  assert.equal(view.projects[0]!.status, "1 ready to land");
+  assert.equal(view.projects[0]!.status, "1 ready for your approval");
 });
 test("uncommitted team instructions are offered for commit, naming only those files", () => {
   const view = teamBrief(binding(), [], () => emptyLedger(), [], { reports: () => new Map(), diff: () => null, teamFiles: () => ["AGENTS.md"] });
@@ -77,7 +77,7 @@ test("a lane waiting for others is listed after the open ones, with what it wait
   ledger.lanes.L1 = { id: "L1", title: "Checkout", status: "open", branch: "b", base: "main", lead: "lead-1" } as never;
   ledger.lanes.L2 = { id: "L2", title: "Receipts", status: "waiting", branch: "c", base: "main", after: ["L1"] } as never;
   const view = teamBrief(binding(), [], () => ledger, []);
-  assert.deepEqual(view.projects[0]!.streams!.map(s => [s.id, s.state]), [["L1", "waiting"], ["L2", "starts after L1 lands"]]);
+  assert.deepEqual(view.projects[0]!.streams!.map(s => [s.id, s.state]), [["L1", "waiting"], ["L2", "starts when earlier work is merged"]]);
   ledger.lanes.L1!.status = "closed";
   assert.equal(teamBrief(binding(), [], () => ledger, []).projects[0]!.status, "1 work stream waiting to start");
 });
@@ -89,9 +89,27 @@ test("every card says in plain words what the Human approves, and Approve all ta
   const reports = new Map([["L1", { ready: true, gate: true, summary: "Commit abc adds src/x.js" }], ["L2", { ready: true, gate: false }]]);
   const view = teamBrief(binding(), [], () => ledger, [], { reports: () => reports, diff: () => "2 files · +10 −1", teamFiles: () => ["AGENTS.md"] });
   const byKind = (kind: string) => view.items.filter((item) => item.kind === kind);
-  assert.equal(byKind("land")[0]!.plain, 'Approve to merge "Checkout" into main (2 files · +10 −1). Its tests passed. Your Supervisor merges it and closes this work stream.');
-  assert.match(byKind("commit")[0]!.plain!, /^Approve to commit AGENTS\.md in Project\./);
+  assert.equal(byKind("land")[0]!.plain, 'Approve to add "Checkout" to main (2 files · +10 −1). Its tests passed. Your Supervisor merges it and wraps it up.');
+  assert.match(byKind("commit")[0]!.plain!, /^Approve to save AGENTS\.md in the project's history \(a git commit\)\./);
   assert.match(byKind("tests")[0]!.plain!, /^Nothing to approve yet\./);
   assert.ok(view.items.every((item) => item.plain), "no card leaves the Human to decode an agent's report");
   assert.deepEqual(view.items.filter(approvable).map((item) => item.kind).sort(), ["commit", "land"], "red tests and questions are never approved in bulk");
+});
+
+test("agents failing on one model make one card with the way out, and the Leads' questions about it fold into it", () => {
+  const ledger = emptyLedger();
+  ledger.lanes.L1 = { id: "L1", title: "Project: Checkout", status: "open", branch: "sw/L1", base: "main", lead: "lead-1" } as never;
+  ledger.tasks["L1-T1"] = { id: "L1-T1", lane: "L1", title: "a", status: "working", peer: "peer-1" } as never;
+  ledger.tasks["L1-T2"] = { id: "L1-T2", lane: "L1", title: "b", status: "working", peer: "peer-2" } as never;
+  ledger.asks.q = { id: "q", from: "lead-1", fromRole: "lead", to: "sup", kind: "blocked", text: "My Peer fails: Model not found: cursor/luna. Switch it?", status: "open", openedAt: 0, reminders: 0 };
+  ledger.asks.r = { id: "r", from: "lead-1", fromRole: "lead", to: "sup", kind: "scope", text: "Which module?", status: "open", openedAt: 0, reminders: 0 };
+  const seat = (id: string) => ({ id, provider: "sw2-peer-pi", model: "cursor/luna", cwd: "/project", status: "idle", updatedAt: "" });
+  const failures = new Map([["peer-1", { role: "Peer", message: "Model not found: cursor/luna" }], ["peer-2", { role: "Peer", message: "Model not found: cursor/luna" }]]);
+  const view = teamBrief(binding(), [seat("peer-1"), seat("peer-2")], () => ledger, [], { reports: () => new Map(), diff: () => null, teamFiles: () => [], failures: () => failures });
+  const card = view.items[0]!;
+  assert.deepEqual([card.kind, card.action, card.title], ["error", "models", "An AI model isn't working"]);
+  assert.equal(card.plain, "2 Peers in Project stopped because the model cursor/luna gave an error. Pick another model in Team & models, then ask your Supervisor to start the work again. 1 team question about this is folded into this card.");
+  assert.deepEqual(view.items.filter((i) => i.kind === "question").map((i) => i.detail), ["Which module?"], "a question about something else stays");
+  assert.equal(view.items.filter((i) => i.action === "models").length, 1);
+  assert.equal(view.projects[0]!.streams![0]!.title, "Checkout", "the project's name is not repeated in its own work");
 });

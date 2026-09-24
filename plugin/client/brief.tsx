@@ -33,7 +33,7 @@ function useCardActions(supervisor: string | null) {
   };
 }
 
-function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: PluginTheme; supervisor: string | null; onAgent?: (id: string) => void }) {
+function ItemCard({ item, theme, supervisor, onAgent, onModels }: { item: Item; theme: PluginTheme; supervisor: string | null; onAgent?: (id: string) => void; onModels?: () => void }) {
   const c = theme.colors;
   const actions = useCardActions(supervisor);
   const [confirming, setConfirming] = useState(false);
@@ -60,16 +60,17 @@ function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: Plu
     {trouble ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{trouble}</Text> : null}
     {done ? <Text style={{ color: c.foregroundMuted }}>{done}</Text> : confirming ? <View style={{ gap: 8 }}>
       <Text style={{ color: c.foreground }}>{item.stays
-        ? `Finish this work? It stays on ${item.diff?.split(" · ")[0]?.replace("Stays on ", "") ?? "your branch"}: your Supervisor runs its tests and closes this line of work, and nothing is merged.`
-        : `Land this work on ${item.diff?.split(" · ")[0]?.split(" → ")[1] ?? "your branch"}? Your Supervisor merges it and closes this line of work.`} This also lets the Supervisor land in {item.project} from now on.</Text>
+        ? `Finish this work? It stays on ${item.diff?.split(" · ")[0]?.replace("Stays on ", "") ?? "your branch"}: your Supervisor runs its tests and wraps it up, and nothing is merged.`
+        : `Merge this work into ${item.diff?.split(" · ")[0]?.split(" → ")[1] ?? "your branch"}? Your Supervisor merges it and wraps it up.`} From now on your Supervisor may also merge work you approve in {item.project}.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <Button theme={theme} tone="accent" label={busy ? "Asking…" : item.stays ? "Finish it" : "Land it"} disabled={busy} onPress={() => void run(async () => { await actions.land([item]); return item.stays ? "Your Supervisor is finishing it. Follow along in chat." : "Your Supervisor is landing it. Follow along in chat."; })} />
+        <Button theme={theme} tone="accent" label={busy ? "Asking…" : item.stays ? "Finish it" : "Merge it"} disabled={busy} onPress={() => void run(async () => { await actions.land([item]); return item.stays ? "Your Supervisor is finishing it. Follow along in chat." : "Your Supervisor is merging it. Follow along in chat."; })} />
         <Button theme={theme} label="Cancel" disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     </View> : <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {item.action === "reload" ? <Button theme={theme} tone="accent" label={busy ? "Reloading…" : "Reload Supervisor"} disabled={busy} onPress={() => void run(async () => { await actions.reload(); return "Reloaded. Send your last message again."; })} /> : null}
-      {item.kind === "land" && supervisor ? <Button theme={theme} tone="accent" label={item.stays ? "Finish…" : "Land…"} onPress={() => setConfirming(true)} /> : null}
-      {item.kind === "commit" ? <Button theme={theme} tone="accent" label={busy ? "Committing…" : `Commit ${item.files?.join(" & ") ?? "files"}`} disabled={busy} onPress={() => void run(async () => { const r = await actions.commit(item); return r.committed.length ? `Committed ${r.committed.join(" and ")}.` : "Nothing left to commit."; })} /> : null}
+      {item.action === "models" && onModels ? <Button theme={theme} tone="accent" label="Change models" onPress={onModels} /> : null}
+      {item.kind === "land" && supervisor ? <Button theme={theme} tone="accent" label={item.stays ? "Finish…" : "Merge…"} onPress={() => setConfirming(true)} /> : null}
+      {item.kind === "commit" ? <Button theme={theme} tone="accent" label={busy ? "Saving…" : "Save them"} disabled={busy} onPress={() => void run(async () => { const r = await actions.commit(item); return r.committed.length ? `Saved ${r.committed.join(" and ")}.` : "Nothing left to save."; })} /> : null}
       {open}
     </View>}
   </View>;
@@ -91,7 +92,7 @@ function ApproveAll({ items, others, theme, supervisor }: { items: Item[]; other
     try { if (lands.length) await actions.land(lands); } catch (e) { failed.push(message(e)); }
     setBusy(false); setConfirming(false);
     if (failed.length) setTrouble(`Not everything went through. ${failed.join(" ")}`);
-    else setDone(lands.length ? "Approved. Your Supervisor is landing the work; follow along in chat." : "Approved and committed.");
+    else setDone(lands.length ? "Approved. Your Supervisor is merging the work; follow along in chat." : "Approved and saved.");
   };
   if (done) return <Text style={{ color: c.foregroundMuted }}>{done}</Text>;
   return <View style={{ gap: 8, padding: 12, borderWidth: 1, borderRadius: 8, borderColor: c.accent, backgroundColor: c.surface1 }}>
@@ -99,13 +100,13 @@ function ApproveAll({ items, others, theme, supervisor }: { items: Item[]; other
     {confirming ? <>
       <Text style={{ color: c.foreground, fontWeight: "600" }}>You approve all of this:</Text>
       {items.map((item) => <Text key={item.id} style={{ color: c.foreground, lineHeight: 20 }}>• {item.project}: {item.plain ?? item.title}</Text>)}
-      <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{lands.length ? "Your Supervisor may land in these projects from now on. " : ""}{others ? `${count(others, "other card")} still ${others === 1 ? "needs" : "need"} your own answer.` : ""}</Text>
+      <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{lands.length ? "From now on your Supervisor may also merge work you approve in these projects. " : ""}{others ? `${count(others, "other card")} still ${others === 1 ? "needs" : "need"} your own answer.` : ""}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         <Button theme={theme} tone="accent" label={busy ? "Approving…" : "Approve all"} disabled={busy} onPress={() => void approve()} />
         <Button theme={theme} label="Cancel" disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     </> : <>
-      <Text style={{ color: c.foreground }}>{[lands.length ? `${count(lands.length, "work stream")} ready to land` : "", commits.length ? `team files to commit in ${count(commits.length, "project")}` : ""].filter(Boolean).join(" and ")}. Check them in one go.</Text>
+      <Text style={{ color: c.foreground }}>{[lands.length ? `${count(lands.length, "piece", "pieces")} of work ready for you` : "", commits.length ? `team instructions to save in ${count(commits.length, "project")}` : ""].filter(Boolean).join(" and ")}. Check them in one go.</Text>
       <View style={{ flexDirection: "row" }}><Button theme={theme} tone="accent" label={`Approve all (${items.length})…`} onPress={() => setConfirming(true)} /></View>
     </>}
   </View>;
@@ -123,44 +124,47 @@ export function useBrief() {
   return { data, error };
 }
 
-function BriefContent({ data, error, theme, onAgent }: { data: TeamBrief | null; error: string | null; theme: PluginTheme; onAgent?: (id: string) => void }) {
+function BriefContent({ data, error, theme, onAgent, onModels }: { data: TeamBrief | null; error: string | null; theme: PluginTheme; onAgent?: (id: string) => void; onModels?: () => void }) {
   const c = theme.colors;
   if (error || !data) return <Text accessibilityRole={error ? "alert" : "text"} style={{ color: error ? c.statusDanger : c.foregroundMuted }}>{error ?? "Reading team status…"}</Text>;
   return <View style={{ gap: 14 }}>
     <Text style={{ color: c.foreground, fontSize: 18, fontWeight: "600" }}>{briefLabel(data)}</Text>
-    {!data.active ? <Text style={{ color: c.foregroundMuted }}>Supervision is paused. Open Overall Supervisor to resume your selected projects.</Text> : <>
+    {!data.active ? <Text style={{ color: c.foregroundMuted }}>Your Supervisor is paused. Open Overall Supervisor to carry on.</Text> : <>
       {data.projects.map(p => <View key={p.id} style={{ gap: 3 }}>
         <Text style={{ color: c.foreground, fontWeight: "600" }}>{p.name} <Text style={{ color: c.foregroundMuted, fontWeight: "400" }}>· {p.status}</Text></Text>
         {(p.streams ?? []).map(s => <Pressable key={s.id} accessibilityRole="button" accessibilityLabel={`Open the Lead of ${s.title}`} disabled={!onAgent || !s.agent} onPress={() => s.agent && onAgent?.(s.agent)}
           style={{ flexDirection: "row", gap: 8, alignItems: "center", paddingVertical: 2 }}>
-          <Text style={{ color: s.state === "ready to land" ? c.statusSuccess : s.state === "tests failed" ? c.statusDanger : c.accent }}>●</Text>
+          <Text style={{ color: s.state === "ready for you" ? c.statusSuccess : s.state === "tests failed" ? c.statusDanger : c.accent }}>●</Text>
           <Text numberOfLines={1} style={{ color: c.foreground, flexShrink: 1 }}>{s.title}</Text>
           <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{s.state}</Text>
         </Pressable>)}
       </View>)}
       {data.supervisor && data.items.some(approvable) ? <ApproveAll key={data.items.filter(approvable).map((item) => item.id).join()} items={data.items.filter(approvable)} others={data.items.filter((item) => !approvable(item)).length} theme={theme} supervisor={data.supervisor} /> : null}
-      {data.items.map(item => <ItemCard key={item.id} item={item} theme={theme} supervisor={data.supervisor} onAgent={onAgent} />)}
-      {data.omitted ? <Text style={{ color: c.foregroundMuted }}>{data.omitted} more updates. Open the project's Activity view for details.</Text> : null}
+      {data.items.map(item => <ItemCard key={item.id} item={item} theme={theme} supervisor={data.supervisor} onAgent={onAgent} onModels={onModels} />)}
+      {data.omitted ? <Text style={{ color: c.foregroundMuted }}>{count(data.omitted, "more update")}. Open the project to see them.</Text> : null}
       {!data.items.length ? <Text style={{ color: c.foregroundMuted }}>{data.lines ? "Nothing needs you right now. The team keeps going and asks here when it does." : "Nothing is running. Tell your Supervisor what to work on next."}</Text> : null}
-      {data.held ? <Text style={{ color: c.foregroundMuted }}>{data.held} messages are waiting for their recipients. Delivery is not an answer or completion.</Text> : null}
+      {data.held ? <Text style={{ color: c.foregroundMuted }}>{count(data.held, "message")} {data.held === 1 ? "is" : "are"} waiting for busy teammates to read {data.held === 1 ? "it" : "them"}.</Text> : null}
     </>}
   </View>;
 }
 
-export function TeamActivity({ theme, layout, navigation }: PluginWorkspacePanelProps) {
+export function TeamActivity({ theme, layout, navigation, workspaceId, openTeam }: PluginWorkspacePanelProps & { openTeam(workspace: string): void }) {
   const { data, error } = useBrief();
   return <ScrollView contentContainerStyle={{ padding: layout.compact ? 16 : 24, gap: 16 }}>
     <Text style={{ color: theme.colors.foreground, fontSize: 24, fontWeight: "600" }}>Team activity</Text>
-    {data?.supervisor && navigation ? <Button theme={theme} label="Back to Supervisor chat" tone="accent" onPress={() => navigation.openAgent({ agentId: data.supervisor! })} /> : null}
-    <BriefContent data={data} error={error} theme={theme} onAgent={navigation ? id => navigation.openAgent({ agentId: id }) : undefined} />
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {data?.supervisor && navigation ? <Button theme={theme} label="Back to Supervisor chat" tone="accent" onPress={() => navigation.openAgent({ agentId: data.supervisor! })} /> : null}
+      <Button theme={theme} label="Team & models" onPress={() => openTeam(workspaceId)} />
+    </View>
+    <BriefContent data={data} error={error} theme={theme} onAgent={navigation ? id => navigation.openAgent({ agentId: id }) : undefined} onModels={() => openTeam(workspaceId)} />
   </ScrollView>;
 }
 
-export function TeamStatusCard({ agentId, theme, openActivity }: PluginTimelineItemProps<TeamBrief> & { openActivity(workspace: string): void }) {
+export function TeamStatusCard({ agentId, theme, openActivity, openTeam }: PluginTimelineItemProps<TeamBrief> & { openActivity(workspace: string): void; openTeam(workspace: string): void }) {
   const { data, error } = useBrief();
   const selected = data?.supervisor === agentId;
   return <View style={{ padding: 16, gap: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, backgroundColor: theme.colors.surface1 }}>
-    {data && !selected ? <Text style={{ color: theme.colors.foregroundMuted }}>This conversation is no longer the selected Overall Supervisor.</Text> : <BriefContent data={data} error={error} theme={theme} />}
+    {data && !selected ? <Text style={{ color: theme.colors.foregroundMuted }}>This conversation is no longer the selected Overall Supervisor.</Text> : <BriefContent data={data} error={error} theme={theme} onModels={data?.workspace ? () => openTeam(data.workspace!) : undefined} />}
     {selected && data?.workspace ? <Button label="View team & open agents" theme={theme} onPress={() => openActivity(data.workspace!)} /> : null}
     <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>Live team status. Reply to your Supervisor in this chat.</Text>
   </View>;

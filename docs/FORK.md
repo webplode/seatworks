@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.4, state format 4, 518 tests.
+- Plugin version: 2.5.5, state format 4, 523 tests.
 
 ## Areas the fork adds
 
@@ -71,7 +71,27 @@ Commits `75fb7cd`, `5da8e43`, `b3fab38` and `26f0a3c`.
     it runs the gate and merges nothing.
 - **Commit team files.** Commits only the team files. It checks the git identity first and puts the
   index back if git refuses.
+- **The chat in plain words** (`shared/chat-words.ts`, `client/chat-words.tsx`). Paseo's
+  timeline transformers replace, for display only, what the desk and the UI write for agents:
+  - a letter (`[Delivery …]`, `ASK A1 …`, `REPORT L1 …`, `INCIDENT …` and the rest, batched or
+    not) shows as a "Team update · <project>" card with one plain line each;
+  - "Human objective for project prj_…" shows as "You asked the team", with only the objective;
+  - a call to a team tool (`mcp__team__status`, `team.open_lane`, …) shows as one quiet line such
+    as "✓ Checked on the team";
+  - the original text stays one click away, and what agents receive is unchanged.
+  `SUPERVISOR.md` also asks the Supervisor to write to the Human without IDs, branches, paths and
+  tool names.
+- **A failing model is one card.** When agents' turns fail, the brief groups them by model into
+  one "An AI model isn't working" card with **Change models**, and folds the Leads' questions
+  about the same error into it. A turn that ends well clears it.
+- **Team & models in the Supervisor workspace** shows the models for every project ("Your team"),
+  not the Supervisor home's own project settings. Team activity has a **Team & models** button, and
+  a project's Team & models links to the models for all projects.
+- **Detach asks first**, and says what stays. Its refusal names unfinished work in plain words.
+- **Folder search** reads `a/b` from the home folder and completes a last part still being typed.
 - **Plain wording.**
+  - "Merge" for landing, "Save" for committing team files, and no project name repeated in its
+    own work titles.
   - Correct plurals.
   - RPC errors without the `requestType=… code=…` tail.
   - An update refusal that names the running agents.
@@ -164,5 +184,7 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
   onBranch and newBranch lanes, waiting lanes, amendments and Lead replacement.
 - The brief reads lane reports from the tail of the live `events.log`. A report rolled into
   `events.0000000N.log` before the Human looks no longer yields a Land card.
-- Paseo core shows raw `mcp__team__*` tool names. Incident letters appear verbatim in the
-  Supervisor chat. The card list reflows as items resolve.
+- The card list reflows as items resolve.
+- The plain chat lines are matched on the letters' current head lines. A new letter kind shows
+  verbatim until `shared/chat-words.ts` learns it; `test/client/chat-words.test.ts` covers the
+  kinds the desk writes today.

@@ -15,7 +15,7 @@ export function sourceLabel(source: Source, layer: "machine" | "project", follow
 export function Button({ label, theme, tone = "plain", disabled, onPress }: {
   label: string;
   theme: PluginTheme;
-  tone?: "plain" | "accent";
+  tone?: "plain" | "accent" | "danger";
   disabled?: boolean;
   onPress(): void;
 }) {
@@ -30,13 +30,13 @@ export function Button({ label, theme, tone = "plain", disabled, onPress }: {
         paddingHorizontal: CONTROL.padding,
         borderRadius: CONTROL.radius,
         borderWidth: 1,
-        borderColor: tone === "accent" ? theme.colors.accent : theme.colors.border,
+        borderColor: tone === "accent" ? theme.colors.accent : tone === "danger" ? theme.colors.statusDanger : theme.colors.border,
         backgroundColor: tone === "accent" ? theme.colors.accent : "transparent",
       },
       label: {
         fontSize: CONTROL.font,
         fontWeight: "normal" as const,
-        color: tone === "accent" ? theme.colors.accentForeground : theme.colors.foreground,
+        color: tone === "accent" ? theme.colors.accentForeground : tone === "danger" ? theme.colors.statusDanger : theme.colors.foreground,
       },
     }),
     [theme, tone],

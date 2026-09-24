@@ -7,7 +7,7 @@ export const BriefSchema = z.object({
   projects: z.array(z.object({ id: z.string(), name: z.string(), status: z.string(),
     streams: z.array(z.object({ id: z.string(), title: z.string(), state: z.string(), agent: z.string().nullable() })).optional() })),
   items: z.array(z.object({ id: z.string(), project: z.string(), title: z.string(), detail: z.string(), plain: z.string().optional(), agent: z.string().nullable(), kind: z.enum(["permission", "question", "land", "tests", "review", "commit", "error"]),
-    scope: z.string().optional(), lane: z.string().optional(), diff: z.string().optional(), stays: z.boolean().optional(), files: z.array(z.string()).optional(), action: z.enum(["reload"]).optional() })),
+    scope: z.string().optional(), lane: z.string().optional(), diff: z.string().optional(), stays: z.boolean().optional(), files: z.array(z.string()).optional(), action: z.enum(["reload", "models"]).optional() })),
   omitted: z.number(),
 });
 export type TeamBrief = z.infer<typeof BriefSchema>;

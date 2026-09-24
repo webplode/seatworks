@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Button } from "./bits.tsx";
 import { TabBar } from "./tabs.tsx";
@@ -20,6 +20,7 @@ type Props = {
 };
 
 export function Detail({ title, subtitle, tab, theme, disabled, onBack, onTab, onDetach, children }: Props) {
+  const [detaching, setDetaching] = useState(false);
   const styles = useMemo(
     () => ({
       header: { flexDirection: "row" as const, alignItems: "center" as const, gap: 12 },
@@ -43,8 +44,18 @@ export function Detail({ title, subtitle, tab, theme, disabled, onBack, onTab, o
             {subtitle}
           </Text>
         </View>
-        {onDetach ? <Button label="Detach" theme={theme} disabled={disabled} onPress={onDetach} /> : null}
+        {onDetach && !detaching ? <Button label="Detach…" theme={theme} disabled={disabled} onPress={() => setDetaching(true)} /> : null}
       </View>
+      {onDetach && detaching ? (
+        <View accessibilityRole="alert" style={{ gap: 8, padding: 12, borderWidth: 1, borderRadius: 8, borderColor: theme.colors.statusDanger, backgroundColor: theme.colors.surface1 }}>
+          <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>Stop the team working on {title}?</Text>
+          <Text style={{ color: theme.colors.foregroundMuted, lineHeight: 20 }}>Seatworks forgets this project's team settings and your Supervisor stops looking after it. Your files and their history stay as they are, and you can add the project again later.</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <Button label="Detach project" tone="danger" theme={theme} disabled={disabled} onPress={() => { setDetaching(false); onDetach(); }} />
+            <Button label="Keep it" theme={theme} disabled={disabled} onPress={() => setDetaching(false)} />
+          </View>
+        </View>
+      ) : null}
       <TabBar
         theme={theme}
         active={tab}

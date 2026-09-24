@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { type Kit, can, providerId, reloadTeam, rolesThatCan, seatOf, supportsRole } from "../catalog/kit.ts";
 import { type Connect, type Layer, MachineLayerSchema, ProjectLayerSchema, type SettingsView, type WriteResult, layerValues, readLayer, withKey, withoutKey, writeLayer } from "../catalog/settings.ts";
 import { type Team, resolveTeam, rulesFor, skillDirsFor, templateRoles, transportOf } from "../catalog/team.ts";
@@ -296,11 +296,12 @@ export class SettingsControl implements Control {
     const copies = Object.values(ledger.slots).filter((slot) => slot.lane || slot.task || slot.releasing).length;
     if (open > 0 || copies > 0 || restoring > 0) {
       const held = [
-        open > 0 ? `${open} open or waiting lane(s)` : "",
-        restoring > 0 ? `${restoring} closed lane(s) whose working copy — the project's own — is not back on its base branch yet: a seat is still writing there, or the copy has changes that stop the switch (see restore.held in events.log)` : "",
-        copies > 0 ? `${copies} working cop${copies === 1 ? "y" : "ies"} still checked out` : "",
+        open > 0 ? `${open} unfinished piece${open === 1 ? "" : "s"} of work` : "",
+        // restore.held in events.log says why: a seat still writing there, or changes that stop the switch.
+        restoring > 0 ? "a folder the team is still putting back on its main branch" : "",
+        copies > 0 ? `${copies} team cop${copies === 1 ? "y" : "ies"} of the project still in use` : "",
       ].filter(Boolean);
-      return { error: `${slug} has ${held.join(" and ")}, so its settings stay.${open > 0 ? " Close the lanes first." : ""}` };
+      return { error: `${slug} still has ${held.join(" and ")}, so it can't be detached yet.${open > 0 ? " Finish or close that work first, then try again." : " Try again in a moment."}` };
     }
     for (const name of ["settings.json", "meta.json"]) rmSync(join(project.state, name), { force: true });
     try {
@@ -354,15 +355,24 @@ export class SettingsControl implements Control {
     return since && since === revision ? { unchanged: true, revision } : { ...view, watch, revision };
   }
 
-  /** Paseo's own fuzzy search, with a typed path that exists put first so pasting one still works. */
+  /** Paseo's own fuzzy search, with a typed path put first so pasting one still works: "~/a/b", "/a/b", or "a/b" read from the home folder, and a last part still being typed completes from its folder. */
   async findPaths(query: string): Promise<unknown> {
     const typed = query.trim();
     const found: string[] = [];
-    if (/^[~/]/.test(typed)) {
+    const asked = /^[~/]/.test(typed) ? expandHome(typed) : typed.includes("/") ? join(homedir(), typed) : null;
+    if (asked) {
       try {
-        const here = realpathSync(expandHome(typed));
+        const here = realpathSync(asked);
         if (statSync(here).isDirectory()) found.push(here);
-      } catch {}
+      } catch {
+        try {
+          const parent = realpathSync(dirname(asked)), start = basename(asked).toLowerCase();
+          for (const entry of readdirSync(parent, { withFileTypes: true })) {
+            if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name.toLowerCase().startsWith(start)) found.push(join(parent, entry.name));
+            if (found.length >= 10) break;
+          }
+        } catch {}
+      }
     }
     try {
       for (const path of await this.deps.folders(typed)) if (!found.includes(path)) found.push(path);

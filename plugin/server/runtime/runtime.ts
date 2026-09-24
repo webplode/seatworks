@@ -528,6 +528,7 @@ export class Runtime {
       reports: (root) => laneReports(projectOf(root).state),
       diff: (root, lane) => diffStat(lane.worktree ?? root, lane.base, lane.branch),
       teamFiles: (root) => uncommittedTeamFiles(root),
+      failures: () => this.turns.failures,
     }, signIn);
   }
 

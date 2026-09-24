@@ -16,6 +16,8 @@ export type TurnDeps = {
 
 export class TurnRules {
   readonly lastEnding = new Map<string, string>();
+  /** Agents whose last turn failed, with their role and the error: the brief turns these into one card per failing model. A turn that ends well clears it. */
+  readonly failures = new Map<string, { role: string; message: string; at: number }>();
   private readonly deps: TurnDeps;
   private readonly startedAt = new Map<string, number>();
 
@@ -30,6 +32,7 @@ export class TurnRules {
   forget(agentId: string): void {
     this.startedAt.delete(agentId);
     this.lastEnding.delete(agentId);
+    this.failures.delete(agentId);
   }
 
   async ownerOf(project: Project, agentId: string, role: RoleSpec): Promise<string | undefined> {
@@ -55,6 +58,8 @@ export class TurnRules {
     const started = this.startedAt.get(agent.id) ?? Date.now() - 30 * 60_000;
     this.startedAt.delete(agent.id);
     if (outcome.kind === "canceled") return;
+    if (outcome.kind === "failed") this.failures.set(agent.id, { role: role.label, message: outcome.error.message, at: Date.now() });
+    else this.failures.delete(agent.id);
     const text = outputText(timeline);
     this.lastEnding.set(agent.id, text);
     if (outcome.kind === "failed") {

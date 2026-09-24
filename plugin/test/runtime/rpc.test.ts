@@ -164,9 +164,9 @@ test("attaching a project is undone by detaching it, unless work is still runnin
   const state = join(HOME, ".local/share/seatworks-v2/projects", added.slug);
   writeFileSync(join(state, "ledger.json"), JSON.stringify({ version: STATE_VERSION, lanes: { L1: { id: "L1", status: "open" } }, tasks: {} }));
   const refused = await call("seatworks.projects.remove", { project: added.slug });
-  assert.match(refused.error, /1 open or waiting lane\(s\)/);
+  assert.match(refused.error, /1 unfinished piece of work/);
   writeFileSync(join(state, "ledger.json"), JSON.stringify({ version: STATE_VERSION, lanes: { L1: { id: "L1", status: "waiting", after: ["L0"] } }, tasks: {} }));
-  assert.match((await call("seatworks.projects.remove", { project: added.slug })).error, /1 open or waiting lane\(s\)/, "a lane waiting to open is work still to come");
+  assert.match((await call("seatworks.projects.remove", { project: added.slug })).error, /1 unfinished piece of work/, "a lane waiting to open is work still to come");
 
   // Closed lanes and their cut tasks are provenance that nothing deletes, so they must not count as work.
   writeFileSync(
@@ -330,6 +330,12 @@ test("the setup screen finds folders the way Paseo's Add project does, with a ty
   const down = served(undefined, async () => { throw new Error("daemon away"); });
   assert.match((await down.call("seatworks.paths.find", { query: "repo" })).error, /daemon away/);
   assert.deepEqual((await down.call("seatworks.paths.find", { query: root })).folders.map((folder: { path: string }) => folder.path), [root], "a typed path still answers when the search cannot");
+  assert.deepEqual((await down.call("seatworks.paths.find", { query: join(root, "re") })).folders.map((folder: { path: string }) => folder.path), [join(root, "repo")], "a last part still being typed completes from its folder");
+  const home = process.env.HOME;
+  process.env.HOME = root;
+  try {
+    assert.deepEqual((await down.call("seatworks.paths.find", { query: "repo/" })).folders.map((folder: { path: string }) => folder.path), [join(root, "repo")], "a path without ~ is read from the home folder");
+  } finally { process.env.HOME = home; }
 });
 
 test("the sensor's key is written from the panel, never read back into it, and forgotten only when asked", async () => {

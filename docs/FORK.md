@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.3, state format 4, 517 tests.
+- Plugin version: 2.5.4, state format 4, 518 tests.
 
 ## Areas the fork adds
 
@@ -59,6 +59,12 @@ Commits `75fb7cd`, `5da8e43`, `b3fab38` and `26f0a3c`.
   - a sign-in `reload`, ranked first.
 - **Per-project work streams.** Each project shows one line per lane with how far it got. A lane
   that waits shows what it starts after.
+- **Plain words on every card.** Each card leads with one sentence that says what the Human
+  approves and what happens next. The agent's own report sits behind **Details**.
+- **Approve all.** One button for every card that a plain yes settles: ready work whose tests did not
+  fail, and team files to commit. It lists each approval before it runs, commits first, then sends
+  the Supervisor one message to land the lanes one at a time. Questions, permissions and red tests
+  still need the Human's own answer.
 - **The Land click is the approval.** It grants `land` and `close_lane` for that project, then asks
   the Supervisor to run `close_lane` with `land: true`.
   - A lane that carried on the Human's own branch (`onBranch`) is offered as **Finish** instead:

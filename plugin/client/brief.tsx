@@ -4,7 +4,7 @@ import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { briefRpc, briefLabel, commitTeamFilesRpc, reloadSupervisorRpc, type TeamBrief } from "../shared/brief.ts";
+import { approvable, briefRpc, briefLabel, commitTeamFilesRpc, count, reloadSupervisorRpc, type TeamBrief } from "../shared/brief.ts";
 import { bindingRpc, supervisionRpc } from "../shared/rpc.ts";
 import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
@@ -19,14 +19,15 @@ function useCardActions(supervisor: string | null) {
   const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), commit = useRpc(commitTeamFilesRpc), reload = useRpc(reloadSupervisorRpc);
   return {
     reload: async () => { await reload({}); },
-    /** The click is the approval: the project gains landing, and the Supervisor is told to land this one line now. */
-    land: async (item: Item) => {
-      if (!supervisor || !item.scope || !item.lane) throw new Error("Open your Supervisor to land this work.");
+    /** The click is the approval: each project gains landing, and the Supervisor is told to land these lines now. */
+    land: async (items: Item[]) => {
+      if (!supervisor || items.some((item) => !item.scope || !item.lane)) throw new Error("Open your Supervisor to land this work.");
       const view = await read({}) as unknown as SupervisionView;
-      const scope = view.binding.projects.find((p) => p.id === item.scope);
-      if (!scope) throw new Error("This project is no longer supervised.");
-      if (!scope.grants.includes("land")) await bind({ ...bindingInput(view.binding, view.binding.active), projects: view.binding.projects.map((p) => ({ id: p.id, grants: p.id === scope.id ? [...new Set([...p.grants, "land" as const, "close_lane" as const])] : p.grants })) });
-      await paseo.agents.ref(supervisor).send(`The Human approved landing ${item.lane} in project ${scope.id} (${item.diff ?? "its branch"}). Close that lane with land: true now. ${item.stays ? " It carried on its own branch, so this runs its gate and merges nothing." : ""} If the tests fail or the branch cannot merge cleanly, stop and tell the Human why instead of retrying.`);
+      const scopes = new Set(items.map((item) => item.scope!));
+      for (const id of scopes) if (!view.binding.projects.some((p) => p.id === id)) throw new Error("A project here is no longer supervised.");
+      if (view.binding.projects.some((p) => scopes.has(p.id) && !p.grants.includes("land"))) await bind({ ...bindingInput(view.binding, view.binding.active), projects: view.binding.projects.map((p) => ({ id: p.id, grants: scopes.has(p.id) ? [...new Set([...p.grants, "land" as const, "close_lane" as const])] : p.grants })) });
+      const lines = items.map((item) => `- ${item.lane} in project ${item.scope} (${item.diff ?? "its branch"})${item.stays ? ": it carried on its own branch, so this runs its gate and merges nothing" : ""}`);
+      await paseo.agents.ref(supervisor).send(`The Human approved landing ${items.length === 1 ? "this lane" : "these lanes"}. Close each with land: true now, one at a time:\n${lines.join("\n")}\nIf the tests fail or a branch cannot merge cleanly, stop that one and tell the Human why instead of retrying.`);
     },
     commit: async (item: Item) => { if (!item.scope) throw new Error("Unknown project."); return await commit({ scope: item.scope }); },
   };
@@ -42,18 +43,27 @@ function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: Plu
   const run = async (work: () => Promise<string>) => { setBusy(true); setTrouble(null); try { setDone(await work()); setConfirming(false); } catch (e) { setTrouble(message(e)); } finally { setBusy(false); } };
   const tone = item.kind === "permission" ? c.statusWarning : item.kind === "land" ? c.statusSuccess : item.kind === "tests" || item.kind === "error" ? c.statusDanger : c.foreground;
   const mark = item.kind === "land" ? "✓ " : item.kind === "tests" ? "✗ " : item.kind === "question" ? "? " : "";
+  const [more, setMore] = useState(false);
   const open = onAgent && item.agent && !item.action ? <Button theme={theme} label={item.kind === "permission" ? "Open agent to answer" : item.kind === "question" ? "Answer" : item.kind === "land" || item.kind === "tests" ? "Open Lead" : "Open conversation"} onPress={() => onAgent(item.agent!)} /> : null;
   return <View style={{ gap: 8, padding: 12, borderWidth: 1, borderRadius: 8, borderColor: item.kind === "land" ? c.statusSuccess : item.kind === "tests" ? c.statusDanger : c.border, backgroundColor: c.surface1 }}>
     <Text style={{ color: tone, fontWeight: "600" }}>{mark}{item.title} <Text style={{ color: c.foregroundMuted, fontWeight: "400" }}>· {item.project}</Text></Text>
-    {item.diff ? <Text selectable style={{ color: c.foreground, fontFamily: "monospace", fontSize: 12 }}>{item.diff}</Text> : null}
-    <Text selectable numberOfLines={4} style={{ color: c.foregroundMuted, lineHeight: 20 }}>{item.detail}</Text>
+    {item.plain ? <>
+      <Text style={{ color: c.foreground, lineHeight: 20 }}>{item.plain}</Text>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: more }} onPress={() => setMore(!more)}>
+        <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{more ? "▾ Hide details" : "▸ Details"}</Text>
+      </Pressable>
+    </> : null}
+    {!item.plain || more ? <>
+      {item.diff ? <Text selectable style={{ color: c.foreground, fontFamily: "monospace", fontSize: 12 }}>{item.diff}</Text> : null}
+      <Text selectable numberOfLines={item.plain ? undefined : 4} style={{ color: c.foregroundMuted, lineHeight: 20 }}>{item.detail}</Text>
+    </> : null}
     {trouble ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{trouble}</Text> : null}
     {done ? <Text style={{ color: c.foregroundMuted }}>{done}</Text> : confirming ? <View style={{ gap: 8 }}>
       <Text style={{ color: c.foreground }}>{item.stays
         ? `Finish this work? It stays on ${item.diff?.split(" · ")[0]?.replace("Stays on ", "") ?? "your branch"}: your Supervisor runs its tests and closes this line of work, and nothing is merged.`
         : `Land this work on ${item.diff?.split(" · ")[0]?.split(" → ")[1] ?? "your branch"}? Your Supervisor merges it and closes this line of work.`} This also lets the Supervisor land in {item.project} from now on.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <Button theme={theme} tone="accent" label={busy ? "Asking…" : item.stays ? "Finish it" : "Land it"} disabled={busy} onPress={() => void run(async () => { await actions.land(item); return item.stays ? "Your Supervisor is finishing it. Follow along in chat." : "Your Supervisor is landing it. Follow along in chat."; })} />
+        <Button theme={theme} tone="accent" label={busy ? "Asking…" : item.stays ? "Finish it" : "Land it"} disabled={busy} onPress={() => void run(async () => { await actions.land([item]); return item.stays ? "Your Supervisor is finishing it. Follow along in chat." : "Your Supervisor is landing it. Follow along in chat."; })} />
         <Button theme={theme} label="Cancel" disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     </View> : <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -62,6 +72,42 @@ function ItemCard({ item, theme, supervisor, onAgent }: { item: Item; theme: Plu
       {item.kind === "commit" ? <Button theme={theme} tone="accent" label={busy ? "Committing…" : `Commit ${item.files?.join(" & ") ?? "files"}`} disabled={busy} onPress={() => void run(async () => { const r = await actions.commit(item); return r.committed.length ? `Committed ${r.committed.join(" and ")}.` : "Nothing left to commit."; })} /> : null}
       {open}
     </View>}
+  </View>;
+}
+
+/** One click for every card a plain yes settles: team files are committed first, then the Supervisor lands the ready work. */
+function ApproveAll({ items, others, theme, supervisor }: { items: Item[]; others: number; theme: PluginTheme; supervisor: string | null }) {
+  const c = theme.colors;
+  const actions = useCardActions(supervisor);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
+  const lands = items.filter((item) => item.kind === "land"), commits = items.filter((item) => item.kind === "commit");
+  const approve = async () => {
+    setBusy(true); setTrouble(null);
+    const failed: string[] = [];
+    for (const item of commits) { try { await actions.commit(item); } catch (e) { failed.push(`${item.project}: ${message(e)}`); } }
+    try { if (lands.length) await actions.land(lands); } catch (e) { failed.push(message(e)); }
+    setBusy(false); setConfirming(false);
+    if (failed.length) setTrouble(`Not everything went through. ${failed.join(" ")}`);
+    else setDone(lands.length ? "Approved. Your Supervisor is landing the work; follow along in chat." : "Approved and committed.");
+  };
+  if (done) return <Text style={{ color: c.foregroundMuted }}>{done}</Text>;
+  return <View style={{ gap: 8, padding: 12, borderWidth: 1, borderRadius: 8, borderColor: c.accent, backgroundColor: c.surface1 }}>
+    {trouble ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{trouble}</Text> : null}
+    {confirming ? <>
+      <Text style={{ color: c.foreground, fontWeight: "600" }}>You approve all of this:</Text>
+      {items.map((item) => <Text key={item.id} style={{ color: c.foreground, lineHeight: 20 }}>• {item.project}: {item.plain ?? item.title}</Text>)}
+      <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{lands.length ? "Your Supervisor may land in these projects from now on. " : ""}{others ? `${count(others, "other card")} still ${others === 1 ? "needs" : "need"} your own answer.` : ""}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Button theme={theme} tone="accent" label={busy ? "Approving…" : "Approve all"} disabled={busy} onPress={() => void approve()} />
+        <Button theme={theme} label="Cancel" disabled={busy} onPress={() => setConfirming(false)} />
+      </View>
+    </> : <>
+      <Text style={{ color: c.foreground }}>{[lands.length ? `${count(lands.length, "work stream")} ready to land` : "", commits.length ? `team files to commit in ${count(commits.length, "project")}` : ""].filter(Boolean).join(" and ")}. Check them in one go.</Text>
+      <View style={{ flexDirection: "row" }}><Button theme={theme} tone="accent" label={`Approve all (${items.length})…`} onPress={() => setConfirming(true)} /></View>
+    </>}
   </View>;
 }
 
@@ -92,6 +138,7 @@ function BriefContent({ data, error, theme, onAgent }: { data: TeamBrief | null;
           <Text style={{ color: c.foregroundMuted, fontSize: 12 }}>{s.state}</Text>
         </Pressable>)}
       </View>)}
+      {data.supervisor && data.items.some(approvable) ? <ApproveAll key={data.items.filter(approvable).map((item) => item.id).join()} items={data.items.filter(approvable)} others={data.items.filter((item) => !approvable(item)).length} theme={theme} supervisor={data.supervisor} /> : null}
       {data.items.map(item => <ItemCard key={item.id} item={item} theme={theme} supervisor={data.supervisor} onAgent={onAgent} />)}
       {data.omitted ? <Text style={{ color: c.foregroundMuted }}>{data.omitted} more updates. Open the project's Activity view for details.</Text> : null}
       {!data.items.length ? <Text style={{ color: c.foregroundMuted }}>{data.lines ? "Nothing needs you right now. The team keeps going and asks here when it does." : "Nothing is running. Tell your Supervisor what to work on next."}</Text> : null}

@@ -75,7 +75,7 @@ still need separate live coverage. The earlier fixture UI checks and simulated o
 are offline evidence only. Live evidence is retained outside the repository under
 `~/.local/share/seatworks-e2e/20260923-live/`.
 
-Since then the fork has moved to 2.5.3 on state format 4. It adds a workspace composer home with team
+Since then the fork has moved to 2.5.4 on state format 4. It adds a workspace composer home with team
 presets, Land/Finish, Commit and sign-in cards, keychain sign-in for Claude seats, Codex Peers that can
 commit in lane copies, and no Devin CLI. It has also merged upstream `v2` up to `50c3a2f`. The
 [fork record](FORK.md) lists every addition, how each upstream sync was folded in, and what is

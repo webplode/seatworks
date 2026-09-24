@@ -20,7 +20,7 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
     seen.add(id);
     for (const [i, p] of (seat.pendingPermissions ?? []).entries()) {
       result.needsYou++;
-      result.items.push({ id: `permission:${id}:${i}`, project: name, kind: "permission", agent: id, title: "Waiting on you", detail: (p.title ?? p.description ?? p.name ?? "Open this agent to answer its permission request.").slice(0, 600) });
+      result.items.push({ id: `permission:${id}:${i}`, project: name, kind: "permission", agent: id, title: "Waiting on you", plain: "An agent wants your permission before it goes on. Open it to allow or deny the request.", detail: (p.title ?? p.description ?? p.name ?? "Open this agent to answer its permission request.").slice(0, 600) });
     }
   };
   if (signIn) {
@@ -39,7 +39,7 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       result.lines += lanes.length + scope.leads.filter(lead => !lanes.some(l => l.lead === lead.agent)).length;
       const questions = Object.values(ledger.asks).filter(a => a.status === "open");
       result.questions += questions.length;
-      for (const ask of questions) result.items.push({ id: `${scope.id}:${ask.id}`, project: scope.name, kind: "question", agent: byId.has(ask.to) ? ask.to : binding.supervisor.agent, title: "Team question", detail: ask.text.slice(0, 600) });
+      for (const ask of questions) result.items.push({ id: `${scope.id}:${ask.id}`, project: scope.name, kind: "question", agent: byId.has(ask.to) ? ask.to : binding.supervisor.agent, title: "Team question", plain: "A teammate asked your Supervisor something. Your Supervisor usually answers it; open it if you want to answer yourself.", detail: ask.text.slice(0, 600) });
       const reports = look.reports(scope.root);
       for (const lane of lanes) {
         const report = reports.get(lane.id);
@@ -47,15 +47,16 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
         const detail = `${lane.title}${report.summary ? `\n${report.summary}` : ""}`.slice(0, 600);
         // A lane that carried on the Human's own branch merges nowhere: finishing it runs its gate and closes it.
         const diff = lane.onBranch ? undefined : look.diff(scope.root, lane) ?? undefined;
-        if (report.gate === false) result.items.push({ id: `${scope.id}:${lane.id}:gate`, project: scope.name, kind: "tests", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, diff, title: "Tests must pass before this can land", detail });
-        else if (lane.onBranch) result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, stays: true, diff: `Stays on ${lane.branch} · nothing is merged`, title: report.gate ? "Ready to finish · tests passed" : "Ready to finish · no tests set", detail });
-        else result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, diff: diff ? `${lane.branch} → ${lane.base} · ${diff}` : `${lane.branch} → ${lane.base}`, title: report.gate ? "Ready to land · tests passed" : "Ready to land · no tests set", detail });
+        const checked = report.gate ? "Its tests passed." : "No tests were set, so nothing checked it.";
+        if (report.gate === false) result.items.push({ id: `${scope.id}:${lane.id}:gate`, project: scope.name, kind: "tests", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, diff, title: "Tests must pass before this can land", plain: `Nothing to approve yet. "${lane.title}" is finished, but its tests fail. Open the Lead to see why.`, detail });
+        else if (lane.onBranch) result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, stays: true, diff: `Stays on ${lane.branch} · nothing is merged`, title: report.gate ? "Ready to finish · tests passed" : "Ready to finish · no tests set", plain: `Approve to finish "${lane.title}". The work already sits on ${lane.branch}, so nothing is merged: your Supervisor runs the tests once more and closes this work stream. ${checked}`, detail });
+        else result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, diff: diff ? `${lane.branch} → ${lane.base} · ${diff}` : `${lane.branch} → ${lane.base}`, title: report.gate ? "Ready to land · tests passed" : "Ready to land · no tests set", plain: `Approve to merge "${lane.title}" into ${lane.base}${diff ? ` (${diff})` : ""}. ${checked} Your Supervisor merges it and closes this work stream.`, detail });
       }
       const teamFiles = look.teamFiles(scope.root);
-      if (teamFiles.length) result.items.push({ id: `${scope.id}:team-files`, project: scope.name, kind: "commit", agent: null, scope: scope.id, files: teamFiles, title: "Commit the team instructions?", detail: `Seatworks added its team block to ${teamFiles.join(" and ")}. Committing it keeps every agent and teammate on the same instructions. Only ${teamFiles.length === 1 ? "this file is" : "these files are"} committed.` });
+      if (teamFiles.length) result.items.push({ id: `${scope.id}:team-files`, project: scope.name, kind: "commit", agent: null, scope: scope.id, files: teamFiles, title: "Commit the team instructions?", plain: `Approve to commit ${teamFiles.join(" and ")} in ${scope.name}. ${teamFiles.length === 1 ? "It holds" : "They hold"} the rules every agent on this project follows. Nothing else is committed.`, detail: `Seatworks added its team block to ${teamFiles.join(" and ")}. Committing it keeps every agent and teammate on the same instructions. Only ${teamFiles.length === 1 ? "this file is" : "these files are"} committed.` });
       for (const task of Object.values(ledger.tasks).filter(t => lanes.some(l => l.id === t.lane) && !["merged","cut"].includes(t.status))) {
-        if (task.handback?.gate?.ok === false || task.status === "failed") result.items.push({ id: `${scope.id}:${task.id}`, project: scope.name, kind: "tests", agent: ledger.lanes[task.lane]?.lead ?? null, title: "Checks need attention", detail: `${task.title}: ${task.handback?.gate?.note ?? "Task reported a failure."}`.slice(0,600) });
-        else if (task.status === "done") result.items.push({ id: `${scope.id}:${task.id}`, project: scope.name, kind: "review", agent: ledger.lanes[task.lane]?.lead ?? null, title: "Ready for Lead review", detail: task.title.slice(0,600) });
+        if (task.handback?.gate?.ok === false || task.status === "failed") result.items.push({ id: `${scope.id}:${task.id}`, project: scope.name, kind: "tests", agent: ledger.lanes[task.lane]?.lead ?? null, title: "Checks need attention", plain: `Nothing to approve. A task failed its checks; the Lead is on it. Open the Lead to see what went wrong.`, detail: `${task.title}: ${task.handback?.gate?.note ?? "Task reported a failure."}`.slice(0,600) });
+        else if (task.status === "done") result.items.push({ id: `${scope.id}:${task.id}`, project: scope.name, kind: "review", agent: ledger.lanes[task.lane]?.lead ?? null, title: "Ready for Lead review", plain: "Nothing needed from you. A task is done and its Lead is reviewing it.", detail: task.title.slice(0,600) });
       }
       const queued = held.filter(l => ids.has(l.to)).length;
       result.held += queued;

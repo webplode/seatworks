@@ -192,7 +192,7 @@ export class Patrol {
     for (const lane of Object.values(ledger.lanes).filter((entry) => entry.status === "open" && entry.lead && !seats.has(entry.lead))) {
       const gone = `${project.slug}:${lane.id}:${lane.lead}`;
       if (this.goneFlag.has(gone)) continue;
-      const posted = await desk.post(await desk.supervisorFor(project, lane.opener), `leadgone:${gone}`, letters.leadGone(lane));
+      const posted = await desk.post(await desk.supervisorFor(project, lane.opener), `leadgone:${gone}`, letters.leadGone(lane), project);
       if (posted !== "nobody") this.goneFlag.add(gone);
     }
   }

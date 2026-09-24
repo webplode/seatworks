@@ -435,6 +435,7 @@ test("a lane whose Lead is gone gets a new one where it stands, with the asks th
   const mail = h.agents.get(sup)!.sent.join("\n---\n");
   assert.equal(mail.match(/LEAD GONE L1/g)?.length, 1, mail);
   assert.match(mail, /LEAD GONE L1 \(Build\): its Lead [^ ]+ is no longer seated[^]*replace_lead puts a new Lead on it where it stands/);
+  assert.match(mail, /\[Project [^\]]+\]\nLEAD GONE L1/, "the letter names its project, so the chat can say which");
   h.runtime.dispose();
 });
 

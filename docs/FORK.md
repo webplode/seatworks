@@ -165,6 +165,17 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
 **Live check.** A plugin reload carried the live state from 3 to 4, with the backup
 `backup-state-3-…`, and kept the bound Supervisor.
 
+**Driven in the WebUI (2026-09-25).** On a new project, greet, whose copy sat on
+`feature/greeting` with an untracked file, the Supervisor opened a lane on a new branch that took
+the file along (`onBranch` with `newBranch`), planned a second lane to wait for it (`after`),
+changed that waiting lane (`amend_lane`), and put a new Lead on the first after its Lead was
+archived (`replace_lead`). It showed three gaps, now fixed:
+- the Supervisor seat still had the tool list from before the merge (the `tools/list_changed`
+  fix above);
+- Claude Code sent `onBranch` as text (the typed-values fix above);
+- the "Lead gone", "opened" and "half-open" letters did not name their project, so their chat
+  card could not either.
+
 **Rollback points:**
 - branch `backup/pre-upstream-merge-20260924`;
 - `~/.local/share/seatworks-v2.bak-20260924`.
@@ -188,8 +199,6 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
 
 ## Open items
 
-- Upstream's newer flows are covered by tests but have not been driven end to end in the WebUI:
-  onBranch and newBranch lanes, waiting lanes, amendments and Lead replacement.
 - The brief reads lane reports from the tail of the live `events.log`. A report rolled into
   `events.0000000N.log` before the Human looks no longer yields a Land card.
 - The card list reflows as items resolve.

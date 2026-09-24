@@ -122,7 +122,7 @@ async function release(desk: DeskServices, project: Project, lane: Lane): Promis
     const entry = ledger.lanes[lane.id];
     if (entry) delete entry.held;
   });
-  await desk.ctx.post(await desk.roster.supervisorFor(project, claimed.opener), `opened:${lane.id}`, letters.waited(claimed, openedReply(project, claimed, started.slot, started.lead, issue)));
+  await desk.ctx.post(await desk.roster.supervisorFor(project, claimed.opener), `opened:${lane.id}`, letters.waited(claimed, openedReply(project, claimed, started.slot, started.lead, issue)), project);
   return undefined;
 }
 
@@ -155,6 +155,6 @@ async function putBackHalfOpen(desk: DeskServices, project: Project): Promise<vo
     if (!lane.lead && slot) await slots.release(project, slot, lane.branch, lane.base);
     else if (!lane.lead && !lane.onBranch && (await currentBranch(project.root)) === lane.branch) await slots.giveBack(project, lane.base, lane.branch);
     ctx.event(project, { kind: "lane.halfOpen", lane: lane.id, status: lane.status, lead: lane.lead ?? null });
-    if (lane.status !== "waiting") await ctx.post(await roster.supervisorFor(project, lane.opener), `halfopen:${lane.id}`, letters.halfOpen(lane));
+    if (lane.status !== "waiting") await ctx.post(await roster.supervisorFor(project, lane.opener), `halfopen:${lane.id}`, letters.halfOpen(lane), project);
   }
 }

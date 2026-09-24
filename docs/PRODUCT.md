@@ -75,10 +75,17 @@ still need separate live coverage. The earlier fixture UI checks and simulated o
 are offline evidence only. Live evidence is retained outside the repository under
 `~/.local/share/seatworks-e2e/20260923-live/`.
 
+Since then the fork has moved to 2.5.2 on state format 4. It adds a workspace composer home with team
+presets, Land/Finish, Commit and sign-in cards, keychain sign-in for Claude seats, Codex Peers that can
+commit in lane copies, and no Devin CLI. It has also merged upstream `v2` up to `50c3a2f`. The
+[fork record](FORK.md) lists every addition, how each upstream sync was folded in, and what is
+still open.
+
 ## Documentation ownership
 
 - This file owns the Human's current direction and product objective.
 - [Architecture](ARCHITECTURE.md) and [Reference](REFERENCE.md) describe upstream behavior.
+- [Fork record](FORK.md) owns what this fork adds over upstream and how upstream syncs were merged.
 - [Supervision and multi-project research](research/supervision-and-multiproject.md)
   compares source evidence and proposes implementation steps. Recommendations there
   are not implemented behavior or additional Human decisions.

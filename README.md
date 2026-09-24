@@ -186,6 +186,7 @@ agents, with real permissions, and they cost money. The evals that call real mod
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it works inside, in one sitting |
 | [REFERENCE.md](docs/REFERENCE.md) | To look something up: verbs, letters, facts, settings, files |
 | [ANTIPATTERNS.md](docs/ANTIPATTERNS.md) | How a team of agents goes wrong, and which of those the watch can see |
+| [FORK.md](docs/FORK.md) | What this fork adds over upstream, and how upstream syncs were merged |
 | [AGENTS.md](AGENTS.md) | The rules this code follows |
 
 ## License

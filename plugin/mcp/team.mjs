@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, watchFile, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -25,9 +25,25 @@ function agentId() {
   }
 }
 const agent = agentId();
-const tools = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "tools.json"), "utf-8"))[toolSet] ?? [];
+const toolsFile = join(dirname(fileURLToPath(import.meta.url)), "tools.json");
+const readTools = () => JSON.parse(readFileSync(toolsFile, "utf-8"))[toolSet] ?? [];
+let tools = readTools();
+let started = false;
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
+
+/** A seat outlives plugin updates, so a tool added since it started reaches it by the list changing, not by a restart it never gets. */
+watchFile(toolsFile, { interval: Number(process.env.SEATWORKS_TOOLS_POLL_MS ?? 5000) }, () => {
+  let next;
+  try {
+    next = readTools();
+  } catch {
+    return;
+  }
+  if (JSON.stringify(next) === JSON.stringify(tools)) return;
+  tools = next;
+  if (started) send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+}).unref();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function call(name, args) {
@@ -69,7 +85,8 @@ createInterface({ input: process.stdin }).on("line", async (line) => {
   }
   const { id, method, params } = message;
   if (method === "initialize") {
-    send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "team", version: "2.0.0" } } });
+    send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2025-06-18", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "team", version: "2.0.0" } } });
+    started = true;
   } else if (method === "tools/list") {
     send({ jsonrpc: "2.0", id, result: { tools } });
   } else if (method === "tools/call") {

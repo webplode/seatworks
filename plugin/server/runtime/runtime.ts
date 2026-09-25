@@ -497,6 +497,8 @@ export class Runtime {
     }
     const team = this.source.teamFor();
     for (const problem of team.errors) console.error(`seatworks-v2: settings: ${problem}`);
+    // A role an update brings, like the Critic, has no provider until one is written for it.
+    this.reconcileProviders(team);
   }
 
   async connect(): Promise<void> {

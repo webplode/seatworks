@@ -171,7 +171,7 @@ function PlanCheckCard({ team, values, machine, layer, theme, disabled, save }: 
           ]}
         />
       </SettingsRow>
-      <SettingsRow label="Approved by" hint={`${team.checkpoints.approver === "human" ? "You, on the Flow tab; the Supervisor is told and cannot approve for you." : "The Supervisor, with approve_plan."} ${sourceLabel(sourceOf(values, machine, (entry) => entry.checkpoints?.approver, layer), layer)}.`}>
+      <SettingsRow label="Approved by" hint={`${team.checkpoints.approver === "human" ? "You, on its card in Team activity; the Supervisor is told and cannot approve for you." : "The Supervisor, with approve_plan."} ${sourceLabel(sourceOf(values, machine, (entry) => entry.checkpoints?.approver, layer), layer)}.`}>
         <TabBar
           theme={theme}
           active={team.checkpoints.approver}
@@ -191,7 +191,7 @@ function PlanCheckCard({ team, values, machine, layer, theme, disabled, save }: 
 const LAND_CHECK: Record<CheckpointMode, string> = {
   off: "Landings are not checked.",
   shadow: "Every landing is checked and the result kept in checkpoints.log, with its evidence in the Supervisor's reply; nothing is held back.",
-  on: "A landing the check flags waits for you on the Flow tab before anything reaches the base branch.",
+  on: "A landing the check flags waits for you on its card in Team activity before anything reaches the base branch.",
 };
 
 /** On the Supervisor's chip, since landing is its call: when a landing waits for you first. Only you approve one. */

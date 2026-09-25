@@ -175,6 +175,10 @@ export class Desk {
     return supervisor.decideLand(this.services, project, lane, approve, note);
   }
 
+  approveReady(project: Project, lane: string): Promise<{ ok: boolean; text: string }> {
+    return supervisor.approveReady(this.services, project, lane);
+  }
+
   archive(agentId: string | undefined, force = false): Promise<void> {
     return this.services.roster.archive(agentId, force);
   }

@@ -78,7 +78,7 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
         }
         if (lane.landApproval && !lane.landApproval.approved) {
           result.needsYou++;
-          result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, held: true, diff: `${lane.branch} → ${lane.base}`, title: "Held for your approval before merging",
+          result.items.push({ id: `${scope.id}:${lane.id}:held:${lane.landApproval.since}`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, held: true, diff: `${lane.branch} → ${lane.base}`, title: "Held for your approval before merging",
             plain: `"${titleOf(lane)}" is finished, and this project asks you before it is merged into ${lane.base}. Approve to merge it now, or send it back with a note.`,
             detail: [...lane.landApproval.signals, ...lane.landApproval.evidence].join("\n").slice(0, 600) });
           continue;

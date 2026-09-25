@@ -274,3 +274,26 @@ test("a landing held only for a missing READY lands once the Lead reports, with 
   assert.deepEqual(runs(h.project.state).map((run) => run.decision), ["ask", "pass"]);
   h.runtime.dispose();
 });
+
+test("the Human's Merge on a ready card is their approval: the land check lands it without asking again, but a later commit is looked at afresh", async () => {
+  const { h, land, onMain } = await laneWith("outbox-land-card.json", risky, { checkpoints: { land: "on", landApprove: "every" } });
+  const approved = (await h.runtime.control.approveReady(h.project.slug, "L1")) as { decided?: string };
+  assert.match(approved.decided ?? "", /approved to land as it stands at/);
+  const landed = await land();
+  assert.equal(landed.ok, true, landed.text);
+  assert.match(landed.text, /Land check \(on\): the Human approved it\./);
+  assert.ok(onMain("src/auth/login.ts"));
+  assert.deepEqual(runs(h.project.state).map((run) => run.decision), ["approved"]);
+  h.runtime.dispose();
+
+  const late = await laneWith("outbox-land-card-late.json", risky, { checkpoints: { land: "on", landApprove: "every" } });
+  await late.h.runtime.control.approveReady(late.h.project.slug, "L1");
+  late.work({ "a.txt": "more\n" });
+  assert.match((await late.land()).text, /waits for the Human's approval/);
+  late.h.runtime.dispose();
+
+  const shadow = await laneWith("outbox-land-card-shadow.json", risky);
+  assert.match(((await shadow.h.runtime.control.approveReady(shadow.h.project.slug, "L1")) as { decided?: string }).decided ?? "", /Nothing to record/);
+  assert.equal(shadow.h.ledger().lanes.L1!.landApproval, undefined);
+  shadow.h.runtime.dispose();
+});

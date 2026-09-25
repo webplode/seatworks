@@ -214,6 +214,7 @@ export type ControlDeps = {
   unbind?: (root: string) => void;
   decidePlan: (project: Project, lane: string, approve: boolean, note: string) => Promise<{ ok: boolean; text: string }>;
   decideLand: (project: Project, lane: string, approve: boolean, note: string) => Promise<{ ok: boolean; text: string }>;
+  approveReady: (project: Project, lane: string) => Promise<{ ok: boolean; text: string }>;
 };
 
 export class SettingsControl implements Control {
@@ -412,6 +413,14 @@ export class SettingsControl implements Control {
     if (!project) return { error: unknownProject(slug) };
     const decided = await this.deps.decideLand(project, lane, approve, note.trim());
     return decided.ok ? { decided: decided.text } : { error: decided.text };
+  }
+
+  /** The Human's Merge on a ready card, recorded as their approval before the Supervisor lands it. */
+  async approveReady(slug: string, lane: string): Promise<unknown> {
+    const project = this.deps.source.named(slug);
+    if (!project) return { error: unknownProject(slug) };
+    const approved = await this.deps.approveReady(project, lane);
+    return approved.ok ? { decided: approved.text } : { error: approved.text };
   }
 
   async flow(slug: string, since?: string, open?: string[]): Promise<unknown> {

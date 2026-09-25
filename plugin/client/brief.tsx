@@ -5,7 +5,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { approvable, briefRpc, briefLabel, commitTeamFilesRpc, count, reloadSupervisorRpc, type TeamBrief } from "../shared/brief.ts";
-import { bindingRpc, landDecideRpc, planDecideRpc, supervisionRpc } from "../shared/rpc.ts";
+import { bindingRpc, landApproveRpc, landDecideRpc, planDecideRpc, supervisionRpc } from "../shared/rpc.ts";
 import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
 import { message } from "./data.ts";
@@ -17,7 +17,7 @@ type Item = TeamBrief["items"][number];
 function useCardActions(supervisor: string | null) {
   const paseo = usePaseo();
   const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), commit = useRpc(commitTeamFilesRpc), reload = useRpc(reloadSupervisorRpc);
-  const plan = useRpc(planDecideRpc), landing = useRpc(landDecideRpc);
+  const plan = useRpc(planDecideRpc), landing = useRpc(landDecideRpc), approveReady = useRpc(landApproveRpc);
   return {
     /** A plan or a landing the project held for the Human: their word goes straight to the desk, not through the Supervisor. */
     decide: async (item: Item, approve: boolean, note: string) => {
@@ -36,6 +36,12 @@ function useCardActions(supervisor: string | null) {
       const scopes = new Set(items.map((item) => item.scope!));
       for (const id of scopes) if (!view.binding.projects.some((p) => p.id === id)) throw new Error("A project here is no longer supervised.");
       if (view.binding.projects.some((p) => scopes.has(p.id) && !p.grants.includes("land"))) await bind({ ...bindingInput(view.binding, view.binding.active), projects: view.binding.projects.map((p) => ({ id: p.id, grants: scopes.has(p.id) ? [...new Set([...p.grants, "land" as const, "close_lane" as const])] : p.grants })) });
+      // With the land check on, the click is recorded as the approval, so the check does not ask the Human again.
+      for (const item of items.filter((entry) => !entry.stays)) {
+        const slug = view.binding.projects.find((p) => p.id === item.scope)?.slug;
+        const said = slug ? await approveReady({ project: slug, lane: item.lane! }) as { error?: string } : { error: "This project is no longer supervised." };
+        if (said.error) throw new Error(said.error);
+      }
       const lines = items.map((item) => `- ${item.lane} in project ${item.scope} (${item.diff ?? "its branch"})${item.stays ? ": it carried on its own branch, so this runs its gate and merges nothing" : ""}`);
       await paseo.agents.ref(supervisor).send(`The Human approved landing ${items.length === 1 ? "this lane" : "these lanes"}. Close each with land: true now, one at a time:\n${lines.join("\n")}\nIf the tests fail or a branch cannot merge cleanly, stop that one and tell the Human why instead of retrying.`);
     },

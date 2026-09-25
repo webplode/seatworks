@@ -64,6 +64,7 @@ test("the plugin serves the catalog, settings, projects, team and status over RP
     "seatworks.doctor.run",
     "seatworks.flow.read",
     "seatworks.git.identity",
+    "seatworks.land.approve",
     "seatworks.land.decide",
     "seatworks.mcp.parse",
     "seatworks.models.refresh",

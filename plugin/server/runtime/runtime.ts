@@ -195,6 +195,7 @@ export class Runtime {
       },
       decidePlan: (project, lane, approve, note) => this.desk.decidePlan(project, lane, approve, "human", note),
       decideLand: (project, lane, approve, note) => this.desk.decideLand(project, lane, approve, note),
+      approveReady: (project, lane) => this.desk.approveReady(project, lane),
     });
   }
 

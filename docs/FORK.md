@@ -8,7 +8,7 @@ into it.
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
 - Last upstream sync: upstream `v2` at `1975453` (2026-09-25).
-- Plugin version: 2.6.0, state format 10, 601 tests.
+- Plugin version: 2.6.0, state format 10, 602 tests.
 
 ## Areas the fork adds
 
@@ -156,8 +156,23 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
 - **Tests.** Detach tests run without seats (`noSeats`). Devin-only tests were dropped.
 
 The checks stay in shadow by default (`plan` and `land` are recorded, not held), and the Critic is
-on. A Human who turns the land check on approves twice for one landing: once on the ready card,
-and again when the check holds it.
+on. With the land check on, Merge on a ready card first records the Human's approval
+(`seatworks.land.approve`), so the check does not hold the lane for them again. Only something new,
+such as a commit after the click, holds it on its own card.
+
+**Driven in the WebUI (2026-09-25).** A new project, tally, was added from the composer and given two
+pieces of work:
+- the first landed as one squashed commit on `main`, after a Reviewer asked for a fix and the Lead
+  settled it;
+- the second, with the plan and land checks on for tally only, seated a Critic that raised one point,
+  held the plan until the Human approved it on its card, and held the landing on its card.
+
+The run showed three gaps, now fixed:
+- the fork had stopped writing role providers when the plugin starts, so the Critic's provider was
+  missing;
+- Merge on a ready card did not count as the approval, so the Human had to approve twice;
+- the held card reused the ready card's id, so it kept the ready card's "merging" line and hid its
+  buttons.
 
 **Rollback points:**
 - branch `backup/pre-upstream-merge-20260925`;

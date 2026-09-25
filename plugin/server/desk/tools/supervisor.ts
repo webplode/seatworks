@@ -349,6 +349,32 @@ export async function decideLand(desk: DeskServices, project: Project, laneId: s
   return ok(`Approved. It could not land yet: ${blocked}. The Supervisor lands it once that is cleared.`);
 }
 
+/**
+ * The Human's Merge on a ready card is their approval. With the land check on, it is recorded before the Supervisor
+ * lands the lane, so the check does not hold it for them again; anything new that landing turns up still does.
+ */
+export async function approveReady(desk: DeskServices, project: Project, laneId: string): Promise<ToolReply> {
+  const { ctx } = desk;
+  const ledger = loadLedger(project.state);
+  const lane = ledger.lanes[laneId];
+  if (!lane || lane.status !== "open") return no(`Lane ${laneId} is not open.`);
+  const checks = ctx.team(project).checkpoints;
+  if (checks.land !== "on" || lane.onBranch) return ok(`Nothing to record: the land check does not hold lane ${laneId}.`);
+  if (lane.landApproval && !lane.landApproval.approved) return no(`Lane ${laneId} already waits for your approval on its own card.`);
+  const head = await headSha(project.root, lane.branch);
+  if (!head) return no(`Lane ${laneId} has no branch ${lane.branch} to approve.`);
+  const { signals, evidence } = await landCheck(project, ledger, lane, { set: Boolean(loadConfig(project.state).gate), ok: true }, checks);
+  if (signals.includes(NOT_READY)) return no(`Lane ${laneId} is not reported ready as it now stands, so there is nothing to approve yet.`);
+  const at = Date.now();
+  await ctx.ledger(project, (current) => {
+    const entry = current.lanes[laneId];
+    if (entry) entry.landApproval = { since: at, head, signals, evidence, overGate: false, approved: { at, note: "Approved on its card." } };
+  });
+  keepRun(project, { checkpoint: "land", mode: "on", lane: laneId, by: "human", decision: "approved", findings: signals, waitedMs: 0 });
+  ctx.event(project, { kind: "land.approved", lane: laneId });
+  return ok(`Lane ${laneId} is approved to land as it stands at ${head.slice(0, 7)}.`);
+}
+
 /** Changes what a lane is asked while it is open or waiting, keeping what it was asked before; its Lead is told what moved. */
 export const amendLane: Tool = async ({ ctx }, caller, args) => {
   const { project } = caller;

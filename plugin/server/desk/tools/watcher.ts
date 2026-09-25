@@ -1,6 +1,7 @@
 import { type Caller, no, ok, str } from "../context.ts";
 import type { Team } from "../../catalog/team.ts";
 import { type Incident, awaitsWatcher, loadIncidents } from "../incidents.ts";
+import { loadLedger, taskOfPeer } from "../ledger.ts";
 import { WATCHER_JUDGED, judge as judgeIncidents, notice } from "../notice.ts";
 import type { Tool } from "../services.ts";
 import { HELD } from "./incidents.ts";
@@ -35,7 +36,12 @@ export const raise: Tool = async (services, caller, args) => {
   if (!found) return no(`${kind || "That"} is not a kind you raise. You raise ${Object.keys(kinds).join(", ") || "nothing in this kit"}.`);
   const sent = ctx.sent(caller.id, ref);
   if (!sent) return no(`${ref || "That"} is not a step a reading sent you. Give the ref as the reading wrote it, like R3.S5. A reading sent before the desk restarted cannot be raised against; the next one carries what is still there.`);
-  if (!(await roster.seated(sent.seat.id))) return no(`${sent.seat.id} has gone, so nothing raised about it would reach anyone.`);
+  if (!(await roster.seated(sent.seat.id))) {
+    // A Peer let go once its work was accepted still has a Lead answering for that work until the lane closes.
+    const ledger = loadLedger(caller.project.state);
+    const task = taskOfPeer(ledger, sent.seat.id);
+    if (task === undefined || ledger.lanes[task.lane]?.status !== "open") return no(`${sent.seat.id} has gone, so nothing raised about it would reach anyone.`);
+  }
   const quote = sent.text.replace(/^R\d+\./, "");
   const { opened, place } = await notice(services, caller.project, sent.seat, [{ kind, level: found.level, quote, facts: [], by: "watcher" }]);
   ctx.event(caller.project, { kind: "watch.raised", agent: caller.id, seat: sent.seat.id, finding: kind, step: ref, why: mask(str(args.why)) });

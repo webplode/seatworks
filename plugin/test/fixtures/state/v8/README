@@ -1,0 +1,4 @@
+The files Seatworks kept in state format 8, as a machine with one project held them. Never edited:
+a new format gets its own folder, and state.test.ts carries every folder up to the current one.
+Format 8 adds the land check and a landing held for the Human: L1 waits for approval to land, over a migration.
+Machine files carry the fork's additions as in v4 (queued outbox letters, launch-profile visibility, supervision, dependencies, the sensor budget).

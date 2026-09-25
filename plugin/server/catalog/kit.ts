@@ -43,6 +43,8 @@ export type HarnessSpec = {
   stateWrites?: { path: string; delivery: "launch" | "file" };
   projectContextOption?: string;
   exitPattern?: string;
+  mcpCall?: string;
+  mcpServerField?: string;
   settings: { file: string; source: string; roleSource: string; ownedPaths?: string[]; inherits?: { from: string; keys: string[] } };
   links?: { link: string; target: string; optional?: boolean }[];
   files?: Record<string, string[]>;
@@ -78,6 +80,8 @@ const HARNESS_FIELDS = new Set([
   "stateWrites",
   "projectContextOption",
   "exitPattern",
+  "mcpCall",
+  "mcpServerField",
   "settings",
   "links",
   "files",
@@ -139,6 +143,8 @@ export function harnessProblems(id: string, raw: Record<string, unknown>): strin
     } catch {}
     if (typeof raw.exitPattern !== "string" || groups < 1) problems.push("gives an exitPattern that is not a pattern capturing the exit code");
   }
+  if (raw.mcpCall !== undefined && (typeof raw.mcpCall !== "string" || !raw.mcpCall.includes("{server}"))) problems.push("gives an mcpCall that does not say where the server's name goes");
+  if (raw.mcpServerField !== undefined && typeof raw.mcpServerField !== "string") problems.push("gives an mcpServerField that is not a path");
   if (raw.systemPrompt !== undefined && raw.systemPrompt !== "config" && raw.systemPrompt !== "file") problems.push(`takes its prompt as ${String(raw.systemPrompt)}, which is neither config nor file`);
   if (raw.systemPrompt === "file" && !raw.promptFile) problems.push("takes its prompt as a file but names no promptFile");
   return problems;
@@ -217,6 +223,8 @@ export type Question = {
   confirms?: string[];
   needs?: string[];
   excusedBeside?: boolean;
+  for?: string;
+  after?: string[];
   label?: string;
 };
 
@@ -328,7 +336,7 @@ function loadMcp(dir: string): Record<string, McpEntry> {
 }
 
 const SENSOR_KEYS = ["id", "url", "model", "timeoutSeconds", "retries", "stateChars", "debounceSeconds", "everySeconds", "unclear", "questions"];
-const QUESTION_KEYS = ["view", "instructions", "criteria", "threshold", "level", "alone", "agrees", "confirms", "needs", "excusedBeside", "label"];
+const QUESTION_KEYS = ["view", "instructions", "criteria", "threshold", "level", "alone", "agrees", "confirms", "needs", "excusedBeside", "for", "after", "label"];
 
 export function sensorProblems(id: string, raw: Record<string, unknown>): string[] {
   const problems: string[] = [];
@@ -365,6 +373,10 @@ export function sensorProblems(id: string, raw: Record<string, unknown>): string
       problems.push(`asks ${name} with needs that is not a list of its view's fields (${fields.join(", ")})`);
     }
     if (question?.label !== undefined && (typeof question.label !== "string" || !question.label.trim())) problems.push(`asks ${name} with a label that is not text`);
+    if (question?.for !== undefined && (typeof question.for !== "string" || !question.for)) problems.push(`asks ${name} for something that is not a capability`);
+    if (question?.after !== undefined && !(Array.isArray(question.after) && question.after.length > 0 && question.after.every((kind) => typeof kind === "string" && kind !== ""))) {
+      problems.push(`asks ${name} after something that is not a list of who an instruction comes from`);
+    }
     if (question?.excusedBeside !== undefined && (question.excusedBeside !== true || !opens)) problems.push(`asks ${name} excused beside, though it opens no incident to excuse`);
   }
   return problems;
@@ -584,7 +596,10 @@ export function paseoToolsPolicy(role: RoleSpec): { enabled?: boolean; disabledT
   return rest;
 }
 
+export const TEAM_SERVER = "team";
+export const PASEO_SERVER = "paseo";
+
 export function teamServer(kit: Kit, role: RoleSpec, spool: string, node: string): McpServers {
   if (!role.tools) return {};
-  return { team: { type: "stdio", command: node, args: [join(kit.dir, "mcp", "team.mjs"), role.role, role.tools, spool] } };
+  return { [TEAM_SERVER]: { type: "stdio", command: node, args: [join(kit.dir, "mcp", "team.mjs"), role.role, role.tools, spool] } };
 }

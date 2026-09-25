@@ -1,4 +1,6 @@
+import type { CheckpointMode, Team } from "../catalog/team.ts";
 import type { SeatView } from "../core/paseo.ts";
+import { digestOf, runsOf } from "./checkpoints.ts";
 import { type Lane, type Ledger, ownCopyHolder } from "./ledger.ts";
 import { type Project, type ProjectConfig, projectOf } from "./project.ts";
 
@@ -35,6 +37,23 @@ function ownCopyLines(project: Project, ledger: Ledger, config: ProjectConfig, c
   return lines;
 }
 
+/** What each checkpoint is set to and what its log holds, so a shadow period can be read before it is turned on. */
+function checkLines(project: Project, checks: Team["checkpoints"]): string[] {
+  const line = (checkpoint: "plan" | "land", set: CheckpointMode, approval: string, holds: boolean) => {
+    const { runs, held, asked, last } = runsOf(project, checkpoint);
+    const kept = runs === 0 ? "nothing checked yet" : `${runs} checked, ${holds ? `${held} ${set === "on" ? "held" : "would have been held"}, ` : ""}${asked} ${set === "on" ? "sent for approval" : "would have been sent for approval"}${last ? `; last flagged ${last.lane} at ${last.at}: ${(last.findings[0] ?? "").replace(/[.!?]+$/, "")}` : ""}`;
+    const digest = digestOf(project, checkpoint, checks.forced ? "on" : set).lines.map((text) => `  ${text}`);
+    return [`- ${checkpoint}: ${checks.forced ? `on, because ${checks.forced}` : set}. ${set === "off" && !checks.forced ? "Nothing is checked." : `${approval}. In checkpoints.log: ${kept}.`}`, ...digest].join("\n");
+  };
+  return [
+    "## Checkpoints",
+    "",
+    line("plan", checks.plan, `Plans are approved ${checks.approve === "every" ? "every time" : "when they touch risky paths"}, by ${checks.approver === "human" ? "the Human on the panel" : "the Supervisor"}`, true),
+    line("land", checks.land, `Landings are approved ${checks.landApprove === "every" ? "every time" : "when something in them should be seen first"}, by the Human on the panel`, false),
+    "",
+  ];
+}
+
 function laneAim(lane: Lane): string[] {
   const outcome = lane.outcome.replace(/\s+/g, " ").trim();
   return [
@@ -50,11 +69,12 @@ export function statusText(
   config: ProjectConfig,
   seats: Map<string, SeatView>,
   now: number,
-  { laneId, waiting = [], held = [], copy }: { laneId?: string; waiting?: SeatView[]; held?: { to: string; text: string; at: number }[]; copy?: OwnCopy } = {},
+  { laneId, waiting = [], held = [], copy, checks }: { laneId?: string; waiting?: SeatView[]; held?: { to: string; text: string; at: number }[]; copy?: OwnCopy; checks?: Team["checkpoints"] } = {},
 ): string {
   const gate = config.gate || (config.gate === "" ? "none, by this project's own choice" : "none");
-  const lines = [`# Status: ${project.root}`, "", `Updated ${new Date(now).toISOString()}. Base ${config.base ?? "unset"}. Gate ${gate}.`, ""];
+  const lines = [`# Status: ${project.root}`, "", `Updated ${new Date(now).toISOString()}. Base ${config.base ?? "unset"}. Gate ${gate}. Lanes land as ${config.landAs}.`, ""];
   if (copy) lines.push(...ownCopyLines(project, ledger, config, copy));
+  if (checks) lines.push(...checkLines(project, checks));
   // One outbox holds every project's mail: a seated recipient belongs to its copy's project, a gone one to this project's record.
   const mine = held.filter((letter) => {
     const seat = seats.get(letter.to);
@@ -89,18 +109,32 @@ export function statusText(
   if (open.length === 0) lines.push("No open lanes.", "");
   for (const lane of open) {
     const detour = lane.detourOf ? ` Clearing the way for ${lane.detourOf}.` : "";
-    lines.push(`## ${lane.id} ${lane.title}`, "", `Branch ${lane.branch}${lane.onBranch ? ", carried on in the project's own copy" : ` off ${lane.base}`}. Lead ${seatLine(seats, lane.lead, now)}.${detour}`, ...(copy ? laneAim(lane) : []), "");
+    const land = lane.landApproval;
+    const approval = [
+      ...(lane.approval
+        ? [`Plan ${lane.approval.plan} waits ${minutes(now, lane.approval.since)} min for approval by ${lane.approval.by === "human" ? "the Human, on the panel" : "the owner"}: ${lane.approval.signals.join(" ") || "every plan here is approved first."} None of its tasks starts until then.`]
+        : []),
+      ...(lane.ready ? [`Reported ready ${minutes(now, lane.ready.at)} min ago.`] : []),
+      ...(land?.approved
+        ? [`Landing approved by the Human ${minutes(now, land.approved.at)} min ago; close_lane with land true lands it.`]
+        : land
+          ? [`Landing waits ${minutes(now, land.since)} min for the Human's approval: ${land.signals.join(" ") || "every landing here is approved first."}`]
+          : []),
+    ];
+    lines.push(`## ${lane.id} ${lane.title}`, "", `Branch ${lane.branch}${lane.onBranch ? ", carried on in the project's own copy" : ` off ${lane.base}`}. Lead ${seatLine(seats, lane.lead, now)}.${detour}`, ...approval, ...(copy ? laneAim(lane) : []), "");
     const tasks = Object.values(ledger.tasks).filter((task) => task.lane === lane.id);
     if (tasks.length === 0) lines.push("- no tasks yet");
     for (const task of tasks) {
       const detail = ["running", "rework"].includes(task.status)
         ? `, Peer ${seatLine(seats, task.peer, now)}`
         : task.status === "waiting"
-          ? `, after ${(task.after ?? []).join(", ")}${task.held ? `. Not started: ${task.held.why}` : ""}`
+          ? `${task.after?.length ? `, after ${task.after.join(", ")}` : ""}${task.held ? `. Not started: ${task.held.why}` : ""}`
           : task.handback
             ? `, hand-back ${minutes(now, task.handback.at)} min ago`
             : "";
-      lines.push(`- ${task.id} ${task.title}: ${task.status}${detail}`);
+      // A plan waiting for approval is judged on what each task is for and what it will write, not on its titles.
+      const judged = lane.approval && task.plan === lane.approval.plan ? [`  Goal: ${task.goal}`, `  Owns: ${task.owned.join(", ")}${task.mode === "parallel" ? ", in parallel" : ""}`] : [];
+      lines.push(`- ${task.id} ${task.title}: ${task.status}${detail}`, ...judged);
     }
     lines.push("");
   }

@@ -22,6 +22,8 @@ import * as lead from "./tools/lead.ts";
 import * as shared from "./tools/shared.ts";
 import * as supervisor from "./tools/supervisor.ts";
 import { openWaiting, startWaiting } from "./waiting.ts";
+import { decidePlan } from "./approval.ts";
+import * as critique from "./critique.ts";
 import * as watcher from "./tools/watcher.ts";
 import * as worker from "./tools/worker.ts";
 import type { SupervisionControl } from "../runtime/supervision-control.ts";
@@ -34,8 +36,10 @@ const TOOLS: Record<string, Tool> = {
   close_lane: supervisor.closeLane,
   amend_lane: supervisor.amendLane,
   replace_lead: supervisor.replaceLead,
+  approve_plan: supervisor.approvePlan,
   set_project: supervisor.setProject,
   start_task: lead.startTask,
+  plan_tasks: lead.planTasks,
   start_review: lead.startReview,
   accept: lead.accept,
   rework: lead.rework,
@@ -50,6 +54,7 @@ const TOOLS: Record<string, Tool> = {
   ack: incidents.ack,
   raise: watcher.raise,
   judge: watcher.judge,
+  findings: critique.findings,
 };
 
 const ASK: { holds: (role: RoleSpec) => boolean; tool: Tool }[] = [
@@ -160,6 +165,14 @@ export class Desk {
     });
     this.services.ctx.event(project, { kind: "watcher.seated", agent: id });
     return id;
+  }
+
+  decidePlan(project: Project, lane: string, approve: boolean, by: string, note: string): Promise<{ ok: boolean; text: string }> {
+    return decidePlan(this.services, project, lane, approve, by, note);
+  }
+
+  decideLand(project: Project, lane: string, approve: boolean, note: string): Promise<{ ok: boolean; text: string }> {
+    return supervisor.decideLand(this.services, project, lane, approve, note);
   }
 
   archive(agentId: string | undefined, force = false): Promise<void> {
@@ -297,7 +310,7 @@ export class Desk {
             const scoped = <T>(values: Record<string, T>) => Object.fromEntries(Object.entries(values).filter(([id]) => selected.has(id)));
             return ok(JSON.stringify({ binding: { ...view.binding, projects: view.binding.projects.filter((p) => selected.has(p.id)) }, agents: view.agents.filter((a) => selected.has(a.project)), deliveries: view.deliveries.filter((d) => selected.has(d.project)), dependencies: view.dependencies.filter((d) => selected.has(d.producer.project) && selected.has(d.consumer.project)), communication: scoped(view.communication), problems: scoped(view.problems) }));
           }
-          const operation = ({ status: "observe", incidents: "observe", amend_lane: "open_lane", replace_lead: "open_lane" } as Record<string, Operation>)[request.tool] ?? request.tool as Operation;
+          const operation = ({ status: "observe", incidents: "observe", amend_lane: "open_lane", replace_lead: "open_lane", approve_plan: "open_lane" } as Record<string, Operation>)[request.tool] ?? request.tool as Operation;
           const scope = await this.supervision.verifyTarget(caller.id, String(args.project ?? ""), operation);
           if (request.tool === "close_lane" && args.land) this.supervision.store.authorize(caller.id, scope.scope.id, "land");
           caller.project = scope.project;

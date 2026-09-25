@@ -2,7 +2,7 @@
 
 export type FlowSeat = { id: string; role: string; status: string; minutes: number; waiting: string[] };
 export type FlowTask = { id: string; title: string; status: string; kind: string; peer: FlowSeat | null; minutes: number; handback: number | null };
-export type FlowLane = { id: string; title: string; status: string; branch: string; base?: string; lead: FlowSeat | null; tasks: FlowTask[]; taskCount: number; running: number; open: boolean; after?: string[]; held?: string };
+export type FlowLane = { id: string; title: string; status: string; branch: string; base?: string; lead: FlowSeat | null; tasks: FlowTask[]; taskCount: number; running: number; open: boolean; after?: string[]; held?: string; approval?: { plan: number; by: "human" | "supervisor"; minutes: number; signals: string[] }; landApproval?: { minutes: number; approved: boolean; signals: string[]; evidence: string[] } };
 export type FlowAsk = { id: string; kind: string; fromRole: string; to: string; minutes: number; text: string };
 export type WatchLean = { title: string; p: number; bar: number };
 export type WatchSeat = {
@@ -41,7 +41,9 @@ export type WatchView = {
   incidents: WatchIncident[];
   trouble: { kind: string; minutes: number; detail: string }[];
 };
-export type FlowView = { project: string; at: number; revision: string; supervisors: FlowSeat[]; lanes: FlowLane[]; moreLanes: number; asks: FlowAsk[]; watch: WatchView };
+/** A Critic reading one lane, for the few minutes it lives. */
+export type FlowCritic = { lane: string; title: string; seat: FlowSeat };
+export type FlowView = { project: string; at: number; revision: string; supervisors: FlowSeat[]; critics: FlowCritic[]; lanes: FlowLane[]; moreLanes: number; asks: FlowAsk[]; watch: WatchView };
 export type Check = { id: string; ok: boolean; detail: string };
 
 export type CleanItem = {

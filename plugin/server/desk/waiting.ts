@@ -65,10 +65,11 @@ export async function openWaiting(desk: DeskServices, project: Project, retryHel
 
 /** The same for tasks, in open lanes: an accepted or cut task frees what held one, a round does not. */
 export async function startWaiting(desk: DeskServices, project: Project, retryHeld: boolean): Promise<void> {
+  await putBackHalfStarted(desk, project);
   const ledger = loadLedger(project.state);
   for (const waiting of Object.values(ledger.tasks).filter((task) => task.status === "waiting" && (retryHeld || !task.held?.tried))) {
     const lane = ledger.lanes[waiting.lane];
-    if (lane?.status !== "open" || !lane.lead) continue;
+    if (lane?.status !== "open" || !lane.lead || (waiting.plan !== undefined && lane.approval?.plan === waiting.plan)) continue;
     const pending = taskWaitsFor(ledger, lane.id, waiting.after ?? []);
     if (Array.isArray(pending) && pending.length > 0) continue;
     const held = typeof pending === "string" ? { why: `${pending} Cut this task to drop it, or cut it and start the work again without waiting.` } : await releaseTask(desk, project, lane, waiting);
@@ -85,6 +86,7 @@ async function releaseTask(desk: DeskServices, project: Project, lane: Lane, tas
     const entry = ledger.tasks[task.id];
     if (entry?.status !== "waiting") return undefined;
     Object.assign(entry, { status: "running", startSha, updatedAt: Date.now() });
+    desk.ctx.seating.add(seatingKey(project, entry.id));
     return { ...entry };
   });
   if (!claimed) return undefined;
@@ -124,6 +126,41 @@ async function release(desk: DeskServices, project: Project, lane: Lane): Promis
   });
   await desk.ctx.post(await desk.roster.supervisorFor(project, claimed.opener), `opened:${lane.id}`, letters.waited(claimed, openedReply(project, claimed, started.slot, started.lead, issue)), project);
   return undefined;
+}
+
+/**
+ * A task running with no Peer that nothing is seating was left so by a stop. A Peer Paseo had already started is taken
+ * on; otherwise a task that waited goes back to waiting and starts again, and one started outright is cut, its Lead told.
+ */
+async function putBackHalfStarted(desk: DeskServices, project: Project): Promise<void> {
+  const { ctx, slots, roster } = desk;
+  const halfStarted = (ledger: Ledger) => Object.values(ledger.tasks).filter((task) => task.status === "running" && !task.peer && !ctx.seating.has(seatingKey(project, task.id)));
+  if (halfStarted(loadLedger(project.state)).length === 0) return;
+  const seats = await roster.open();
+  // An empty listing is a daemon that answered nothing, not word that no Peer was started.
+  if (seats.length === 0) return;
+  const stopped = await ctx.ledger(project, (ledger) =>
+    halfStarted(ledger).flatMap((task) => {
+      const seat = seats.find((entry) => !entry.archivedAt && entry.labels?.["seatworks.project"] === project.slug && entry.labels["seatworks.task"] === task.id);
+      if (seat) {
+        task.peer = seat.id;
+        ledger.agents[seat.id] = { id: seat.id, role: seat.labels!["seatworks.role"] ?? "peer", lane: task.lane, task: task.id };
+        return [];
+      }
+      const slot = task.mode === "parallel" ? task.slot : undefined;
+      task.status = task.opening ? "waiting" : "cut";
+      if (task.mode === "parallel") {
+        delete task.slot;
+        delete task.worktree;
+      }
+      return [{ task: { ...task }, slot, into: ledger.lanes[task.lane]?.branch }];
+    }),
+  );
+  for (const { task, slot, into } of stopped) {
+    if (slot) await slots.release(project, slot, task.branch, into);
+    ctx.event(project, { kind: "task.halfStarted", task: task.id, now: task.status });
+    if (task.status === "cut") await ctx.post(loadLedger(project.state).lanes[task.lane]?.lead, `notstarted:${task.id}`, letters.notStarted(task));
+  }
 }
 
 /**

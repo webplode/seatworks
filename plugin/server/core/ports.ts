@@ -36,7 +36,9 @@ export type Stream = { readonly ready: Promise<void>; stop(): void };
 export type Seats = {
   open(): Promise<SeatView[]>;
   look(id: string): Promise<SeatLook>;
-  send(id: string, text: string, steer?: boolean): Promise<void>;
+  send(id: string, text: string, steer: boolean, kinds: string[]): Promise<void>;
+  /** What a person said to the seat, oldest first: the messages the desk did not send, and their answers when it asked. */
+  typed(id: string): Promise<string[]>;
   respond(id: string, requestId: string, response: PermissionResponse): Promise<void>;
   archive(id: string): Promise<void>;
   watch(id: string, see: (seen: Seen) => void): Stream;

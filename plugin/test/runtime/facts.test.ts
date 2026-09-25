@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { loadKit } from "../../server/catalog/kit.ts";
 import type { Seen } from "../../server/core/ports.ts";
 import type { StreamMessage } from "../../server/core/stream.ts";
-import { DESTRUCTIVE, FACT_LEVELS, FACT_TITLES, type Fact, type Rules, SUPPRESSED, TEST_PATH, onDetail, stuck } from "../../server/runtime/watch/facts.ts";
+import { DESTRUCTIVE, FACT_LEVELS, FACT_TITLES, type Fact, type Rules, SUPPRESSED, TEST_PATH, callsTo, onDetail, stuck } from "../../server/runtime/watch/facts.ts";
+import { TEAM_SERVER } from "../../server/catalog/kit.ts";
 import { weigh } from "../../server/runtime/watch/jev/rules.ts";
 import { SeatWatch } from "../../server/runtime/watch/watches.ts";
 
@@ -41,8 +42,9 @@ function toSeen(message: StreamMessage, epochs: Map<string, number>): Seen | und
   return { kind: "row", row: { item: event.item!, seq: message.seq, epoch: message.epoch!, turnId: event.turnId ?? null, replay } };
 }
 
-function play(messages: StreamMessage[], given: Rules, heard = false) {
-  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: given, heardSince: () => heard, goal: "", context: "", beside: [], role: "Peer" }));
+/** `handed` is the outcome of a hand-back the turn made, if it made one. */
+function play(messages: StreamMessage[], given: Rules, handed?: string) {
+  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: given, handedBack: () => handed, goal: "", context: "", beside: [], role: "Peer", can: [] }));
   const facts: (Fact & { seq?: number })[] = [];
   const epochs = new Map<string, number>();
   let now = 1_000;
@@ -160,19 +162,38 @@ test("an edit that takes assertions out of a test, or silences a check, is notic
   );
 });
 
+test("a hand-back that says complete while the last check it ran after its last edit failed is contradicted, and nothing else is", () => {
+  const edit = fixture("devin").find((message) => message.event.item?.type === "tool_call" && message.event.item?.name === "edit" && message.event.item?.status === "completed")!;
+  const wrote = again(edit, "w", 2, (detail) => Object.assign(detail, { filePath: "src/a.ts" }));
+  const red = again(piRow(11), "g", 3, (detail) => Object.assign(detail, { command: "npm test", exitCode: 1 }));
+  const green = again(piRow(11), "g2", 4, (detail) => Object.assign(detail, { command: "npm test", exitCode: 0 }));
+  const later = again(edit, "w2", 4, (detail) => Object.assign(detail, { filePath: "src/b.ts" }));
+  const start: StreamMessage = { event: { type: "turn_started", turnId: "t" } };
+  const end: StreamMessage = { event: { type: "turn_completed", turnId: "t" } };
+  const given = rules({ gates: ["npm test"] });
+  const claimed = (messages: StreamMessage[], handed?: string) => play([start, fixture("pi")[1]!, ...messages, end], given, handed).filter((fact) => fact.kind === "claim-contradicted");
+  assert.deepEqual(claimed([wrote, red], "complete").map((fact) => [fact.level, fact.quote]), [["attend", "handed back as complete, but `npm test` failed the last time it ran, after the last edit"]]);
+  assert.deepEqual(claimed([wrote, red], "partial"), [], "a partial hand-back does not say it works");
+  assert.deepEqual(claimed([wrote, red]), [], "and a turn that handed nothing back said nothing");
+  assert.deepEqual(claimed([wrote, red, green], "complete"), [], "it passed in the end");
+  assert.deepEqual(claimed([wrote, red, later], "complete"), [], "an edit after it leaves the claim unchecked, not contradicted");
+  assert.equal(FACT_LEVELS["claim-contradicted"], "attend");
+  assert.equal(FACT_TITLES["claim-contradicted"], "Handed back as complete while its last check failed");
+});
+
 test("a turn that reports having written files the gate never saw afterwards is unverified, and one that ran it is not", () => {
   const edit = fixture("devin").find((message) => message.event.item?.type === "tool_call" && message.event.item?.name === "edit" && message.event.item?.status === "completed")!;
   const wrote = again(edit, "w", 2, (detail) => Object.assign(detail, { filePath: "src/a.ts" }));
   const gate = again(piRow(11), "g", 3, (detail) => Object.assign(detail, { command: "npm test" }));
   const start: StreamMessage = { event: { type: "turn_started", turnId: "t" } };
   const end: StreamMessage = { event: { type: "turn_completed", turnId: "t" } };
-  const skipped = play([start, fixture("pi")[1]!, wrote, end], rules({ gates: ["npm test"] }), true);
+  const skipped = play([start, fixture("pi")[1]!, wrote, end], rules({ gates: ["npm test"] }), "complete");
   assert.deepEqual(kinds(skipped).filter((kind) => kind === "unverified"), ["unverified"]);
-  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, end], rules({ gates: ["npm test"] }), true)).filter((kind) => kind === "unverified"), []);
-  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, end], rules({ gates: ["npm test"] }), false)).filter((kind) => kind === "unverified"), [], "a turn that reported nothing claimed nothing");
+  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, end], rules({ gates: ["npm test"] }), "complete")).filter((kind) => kind === "unverified"), []);
+  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, end], rules({ gates: ["npm test"] }))).filter((kind) => kind === "unverified"), [], "a turn that reported nothing claimed nothing");
   // The runner the gate's script starts is the gate too, on one module's tests as on all of them.
   const own = again(piRow(11), "g", 3, (detail) => Object.assign(detail, { command: 'node --test "test/text/slug.test.js"' }));
-  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, own, end], rules({ gates: ["npm test", "node --test"] }), true)).filter((kind) => kind === "unverified"), []);
+  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, own, end], rules({ gates: ["npm test", "node --test"] }), "complete")).filter((kind) => kind === "unverified"), []);
 });
 
 const claudeTurn2 = () =>
@@ -243,7 +264,7 @@ test("a second loop in the same turn is reported, once the first has been broken
 });
 
 test("a message steered into a long turn does not make it long again", () => {
-  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), heardSince: () => false, goal: "", context: "", beside: [], role: "Peer" }));
+  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), handedBack: () => undefined, goal: "", context: "", beside: [], role: "Peer", can: [] }));
   const t0 = Date.parse("2026-09-19T10:00:00Z");
   watch.see({ kind: "turn", phase: "started", turnId: "t" }, t0);
   assert.equal(watch.longTurn(t0 + 40 * 60_000, 30).length, 1);
@@ -258,12 +279,12 @@ test("a commit message written to the temp directory is not a write the gate has
   const message = again(edit, "m", 4, (detail) => Object.assign(detail, { filePath: "/var/folders/xy/T/msg" }));
   const start: StreamMessage = { event: { type: "turn_started", turnId: "t" } };
   const end: StreamMessage = { event: { type: "turn_completed", turnId: "t" } };
-  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, message, end], rules({ gates: ["npm test"], cwd: "/work" }), true)).filter((kind) => kind === "unverified"), []);
+  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, message, end], rules({ gates: ["npm test"], cwd: "/work" }), "complete")).filter((kind) => kind === "unverified"), []);
   // Devin names a file it creates "Wrote <path>", which read as a relative path inside the project.
   const created = again(edit, "c", 5, (detail) => Object.assign(detail, { filePath: "Wrote /var/folders/xy/T/bench.mjs" }));
-  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, created, end], rules({ gates: ["npm test"], cwd: "/work" }), true)).filter((kind) => kind === "unverified"), []);
+  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, created, end], rules({ gates: ["npm test"], cwd: "/work" }), "complete")).filter((kind) => kind === "unverified"), []);
   const inside = again(edit, "i", 5, (detail) => Object.assign(detail, { filePath: "Wrote ./src/b.ts" }));
-  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, inside, end], rules({ gates: ["npm test"], cwd: "/work" }), true)).filter((kind) => kind === "unverified"), ["unverified"]);
+  assert.deepEqual(kinds(play([start, fixture("pi")[1]!, wrote, gate, inside, end], rules({ gates: ["npm test"], cwd: "/work" }), "complete")).filter((kind) => kind === "unverified"), ["unverified"]);
 });
 
 test("irreversible commands are caught where a command starts, in any flag order, and not in quoted text", () => {
@@ -329,12 +350,12 @@ test("the gate named in an unverified fact is masked like any other quote", () =
   const edit = fixture("devin").find((message) => message.event.item?.type === "tool_call" && message.event.item?.name === "edit" && message.event.item?.status === "completed")!;
   const wrote = again(edit, "w", 2, (detail) => Object.assign(detail, { filePath: "src/a.ts" }));
   const gate = "GITHUB_TOKEN=ghp_0123456789abcdefghijklmn npm test";
-  const facts = play([{ event: { type: "turn_started", turnId: "t" } }, fixture("pi")[1]!, wrote, { event: { type: "turn_completed", turnId: "t" } }], rules({ gates: [gate] }), true);
+  const facts = play([{ event: { type: "turn_started", turnId: "t" } }, fixture("pi")[1]!, wrote, { event: { type: "turn_completed", turnId: "t" } }], rules({ gates: [gate] }), "complete");
   assert.doesNotMatch(facts.find((fact) => fact.kind === "unverified")!.quote, /ghp_0123/);
 });
 
 test("the end of a turn that is not the one the seat is in does not close it", () => {
-  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), heardSince: () => false, goal: "", context: "", beside: [], role: "Peer" }));
+  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), handedBack: () => undefined, goal: "", context: "", beside: [], role: "Peer", can: [] }));
   watch.see({ kind: "turn", phase: "started", turnId: "turn-2" }, 1_000);
   watch.see({ kind: "turn", phase: "completed", turnId: "turn-1" }, 2_000);
   assert.equal(watch.running, true);
@@ -343,7 +364,7 @@ test("the end of a turn that is not the one the seat is in does not close it", (
 });
 
 test("an instruction arriving mid-turn is a new subject, so the reading before it no longer counts as the one before", () => {
-  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), heardSince: () => false, goal: "", context: "", beside: [], role: "Peer" }));
+  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), handedBack: () => undefined, goal: "", context: "", beside: [], role: "Peer", can: [] }));
   const questions = { drifting: { view: "work" as const, instructions: "q", threshold: 0.7, level: "attend" as const, alone: true } };
   const answer = { answers: { drifting: 0.9 }, model: "m" };
   const findings = (before?: Record<string, number>) => weigh(answer, questions, [], { unclear: 0.2, ended: false, before }).findings.length;
@@ -358,7 +379,7 @@ test("an instruction arriving mid-turn is a new subject, so the reading before i
 });
 
 test("Claude's task notifications stay in what the sensor reads, though nothing counts them", () => {
-  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), heardSince: () => false, goal: "", context: "", beside: [], role: "Peer" }));
+  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, () => ({ rules: rules(), handedBack: () => undefined, goal: "", context: "", beside: [], role: "Peer", can: [] }));
   for (const message of claudeTurn2()) {
     if (message.event.type !== "timeline") continue;
     watch.see({ kind: "row", row: { item: message.event.item!, seq: message.seq!, epoch: message.epoch!, turnId: message.event.turnId ?? null, replay: false } });
@@ -401,4 +422,24 @@ test("removing only scratch files is not an irreversible command, and anything e
   assert.equal(kept?.kind, "destructive");
   assert.match(kept!.quote, /rm -rf src/);
   assert.equal(shell("rm -rf /tmp/a src").length, 1, "one real target among scratch ones is enough");
+});
+
+test("a refusal the desk gave a seat is not a failed call, on every harness that says which server answered: the desk already said why and what instead", () => {
+  const failedCat = piRow(15);
+  const failing = (name: string, seq: number, detail?: Record<string, unknown>) => {
+    const copy = again(failedCat, `t${seq}`, seq);
+    copy.event.item!.name = name;
+    if (detail) copy.event.item!.detail = detail;
+    return copy;
+  };
+  const deskOf = (harness: string) => rules({ desk: callsTo(kit.harnesses[harness]!.mcpCall, kit.harnesses[harness]!.mcpServerField, TEAM_SERVER) });
+  // As each harness recorded a refused team call live.
+  assert.deepEqual(kinds(play([...opening(), failing("mcp__team__start_task", 2)], deskOf("claude"))), [], "claude");
+  // Pi names a call server_tool, so a pasted team_x server's calls start the same way; the server it records tells them apart.
+  const pi = [
+    failing("team_plan_tasks", 2, { type: "unknown", output: { content: [{ type: "text", text: "Error: The plan was not taken" }], details: { error: "tool_error", server: "team" } } }),
+    failing("team_plan_tasks", 3, { type: "unknown", output: { content: [{ type: "text", text: 'Validation failed for tool "team_plan_tasks"' }], details: {} } }),
+    failing("team_x_lookup", 4, { type: "unknown", output: { content: [{ type: "text", text: "Error: not found" }], details: { error: "tool_error", server: "team_x" } } }),
+  ];
+  assert.deepEqual(kinds(play([...opening(), ...pi], deskOf("pi"))), ["call-failed", "call-failed"], "pi: a call Pi refused before the desk saw it, and another server's, are still failures");
 });

@@ -11,7 +11,9 @@ import {
   type ProxySpec,
   type RoleSpec,
   type SensorSpec,
+  PASEO_SERVER,
   PASEO_TOOLS,
+  TEAM_SERVER,
   can,
   supportsRole,
   agentDefault,
@@ -19,7 +21,7 @@ import {
   teamServer,
   toolsOf,
 } from "./kit.ts";
-import type { Connect, Layer, McpChoice } from "./settings.ts";
+import { type CHECKPOINT_MODES, type Connect, type Layer, type McpChoice } from "./settings.ts";
 
 export type SettingValue = string | number | boolean;
 export type McpState = {
@@ -40,9 +42,34 @@ export type Team = {
   mcp: Record<string, McpState>;
   attention: Attention;
   sensor?: { spec: SensorSpec; key: string };
+  /** `forced` says why a check runs at its strictest though nobody chose it: settings the desk could not read. */
+  checkpoints: Checkpoints;
+  /** Who reads a new lane against the Human's own words before its Lead gets far: a Critic seat, or nobody. */
+  critic: { by: "seat" | "off" };
   rules: string;
   errors: string[];
 };
+
+export type CheckpointMode = (typeof CHECKPOINT_MODES)[number];
+
+/** A landing is only ever approved by the Human: landing is already the Supervisor's call, so it cannot also be the check on it. */
+export type Checkpoints = {
+  plan: CheckpointMode;
+  approve: "risky" | "every";
+  approver: "human" | "supervisor";
+  risk: string;
+  land: CheckpointMode;
+  landApprove: "risky" | "every";
+  landLines: number;
+  forced?: string;
+};
+
+/** Paths whose change is risky enough that a plan touching them waits for a person: access, money, data shape, and what ships. */
+export const RISKY_PATHS =
+  "(^|/)(auth|login|session|passwords?|secrets?|credentials?|tokens?|payments?|billing|migrations?|schema)(/|\\.|$)|\\.sql$|(^|/)\\.github/workflows(/|$)|(^|/)(Dockerfile|docker-compose[^/]*|\\.env[^/]*)$|(^|/)(infra|deploy|terraform|k8s|helm)(/|$)";
+
+/** More changed lines than one sitting reviews well: past a few hundred, reviewers find fewer defects. */
+export const LAND_LINES = 1000;
 
 export function templateRoles(entry: McpEntry): string[] {
   return entry.kind === "proxy" ? Object.keys(entry.tools ?? {}) : (entry.roles ?? []);
@@ -52,7 +79,8 @@ export function templateRoles(entry: McpEntry): string[] {
 export function eligibleRoles(state: McpState, kit: Kit): string[] {
   const entry = state.entry;
   if (entry?.kind === "proxy") return Object.keys(state.tools ?? entry.tools ?? {});
-  const working = () => kit.roles.filter((role) => role.tools && !can(role, "watch")).map((role) => role.role);
+  // Neither reader works: a Watcher reads seats and a Critic reads a lane, and a pasted server's tools can write.
+  const working = () => kit.roles.filter((role) => role.tools && !can(role, "watch") && !can(role, "critique")).map((role) => role.role);
   if (entry) return entry.roles ?? working();
   return working();
 }
@@ -80,6 +108,10 @@ function resolveMcp(kit: Kit, layers: Layer[], errors: string[]): Record<string,
   const states: Record<string, McpState> = {};
   const ids = new Set([...Object.keys(kit.mcp), ...layers.flatMap((layer) => Object.keys(layer.mcp ?? {}))]);
   for (const id of ids) {
+    if (id === TEAM_SERVER || id === PASEO_SERVER) {
+      errors.push(`The MCP server ${id} has the name of a server every seat already has, so it would replace that one; it is left out: paste it again under another name`);
+      continue;
+    }
     const entry = kit.mcp[id];
     const choices = layers.map((layer) => layer.mcp?.[id]).filter((choice): choice is McpChoice => choice !== undefined);
     const settings: Record<string, SettingValue> = {};
@@ -225,6 +257,20 @@ export function resolveTeam(kit: Kit, machine: Layer = {}, project: Layer = {}, 
     profiles: machine.profiles,
     ...(spec && machine.sensor?.key ? { sensor: { spec, key: machine.sensor.key } } : {}),
     attention: { ...kit.attention, ...stripUndefined(machine.attention), ...stripUndefined(project.attention) },
+    // A check the Human turned on must not fall silently to its default when the file that says so cannot be read.
+    checkpoints:
+      unread.length > 0
+        ? { plan: "on", approve: "every", approver: "human", risk: RISKY_PATHS, land: "on", landApprove: "every", landLines: LAND_LINES, forced: unread.join("; ") }
+        : {
+            plan: project.checkpoints?.plan ?? machine.checkpoints?.plan ?? "shadow",
+            approve: project.checkpoints?.approve ?? machine.checkpoints?.approve ?? "risky",
+            approver: project.checkpoints?.approver ?? machine.checkpoints?.approver ?? "human",
+            risk: project.checkpoints?.risk ?? machine.checkpoints?.risk ?? RISKY_PATHS,
+            land: project.checkpoints?.land ?? machine.checkpoints?.land ?? "shadow",
+            landApprove: project.checkpoints?.landApprove ?? machine.checkpoints?.landApprove ?? "risky",
+            landLines: project.checkpoints?.landLines ?? machine.checkpoints?.landLines ?? LAND_LINES,
+          },
+    critic: { by: project.critic?.by ?? machine.critic?.by ?? "seat" },
     rules: [machine.rules, project.rules].filter((text) => text && text.trim()).join("\n\n"),
     errors,
   };
@@ -279,7 +325,7 @@ export function serversFor(kit: Kit, team: Team, roleName: string, context: { no
   const seat = team.roles[roleName];
   if (!seat) return {};
   const desk = teamServer(kit, seat.role, context.spool, context.node);
-  const servers: McpServers = desk.team && seat.harness.mcp.desk ? { team: { ...(desk.team as object), ...seat.harness.mcp.desk } } : { ...desk };
+  const servers: McpServers = desk[TEAM_SERVER] && seat.harness.mcp.desk ? { [TEAM_SERVER]: { ...(desk[TEAM_SERVER] as object), ...seat.harness.mcp.desk } } : { ...desk };
   for (const id of seat.mcp) {
     const state = team.mcp[id]!;
     const { entry } = state;
@@ -300,10 +346,10 @@ export function preapprovedFor(kit: Kit, team: Team, roleName: string): { kind: 
   const seat = team.roles[roleName];
   if (!seat) return [];
   const refs = (server: string, tools: string[]) => tools.map((tool) => ({ kind: "mcp" as const, server, tool }));
-  const approved = seat.role.tools ? refs("team", toolsOf(kit, seat.role)) : [];
-  // Paseo adds its own server at launch, named "paseo"; only the tools this role is allowed there.
+  const approved = seat.role.tools ? refs(TEAM_SERVER, toolsOf(kit, seat.role)) : [];
+  // Paseo adds its own server at launch, unless a seat's config already names one; only the tools this role is allowed there.
   const paseo = paseoToolsPolicy(seat.role);
-  if (paseo?.enabled !== false) approved.push(...refs("paseo", PASEO_TOOLS.filter((tool) => !paseo?.disabledTools?.includes(tool))));
+  if (paseo?.enabled !== false) approved.push(...refs(PASEO_SERVER, PASEO_TOOLS.filter((tool) => !paseo?.disabledTools?.includes(tool))));
   for (const id of seat.mcp) {
     const state = team.mcp[id]!;
     if (state.entry?.kind === "proxy") approved.push(...refs(id, (state.tools ?? state.entry.tools)?.[roleName] ?? []));

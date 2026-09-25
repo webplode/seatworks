@@ -21,9 +21,9 @@ and a disagreement is settled with evidence, not with rank.
 
 ### What holds for everyone
 
-- **What the project does is the Human's word**, kept in a `CONTEXT.md` outside this repository.
-  The parts your work touches reach you in your directive or brief, with its path when you need the
-  whole. Where it is silent on a behavior your work needs, ask; do not choose.
+- **What the project does is the Human's word**, kept in a `CONTEXT.md` outside this repository, so
+  never look for it here. The parts your work touches reach you in your directive or brief, with its
+  path when you need the whole. Where it is silent on a behavior your work needs, ask; do not choose.
 - **Nothing here has shipped** unless the Human's part of this file says so. Change a contract and
   every caller and test with it; add no shim, adapter, re-export, dual path, flag or stub to keep an
   old shape alive.

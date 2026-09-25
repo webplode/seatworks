@@ -2,8 +2,9 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, s
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { appendRolling, rolledStamps } from "../../../core/rolling.ts";
-import type { View, ViewName } from "./views.ts";
+import type { Turn, View, ViewName } from "./views.ts";
 
+/** One reading as it was kept; one kept before its `turn` was has none. */
 export type Kept = {
   at: number;
   askedAt: number;
@@ -21,6 +22,7 @@ export type Kept = {
   found: string[];
   verdicts: { kind: string; question: string; says: string; p: number }[];
   views: Partial<Record<ViewName, View>>;
+  turn?: Turn;
 };
 
 export const ROTATE_BYTES = 32 * 1024 * 1024;

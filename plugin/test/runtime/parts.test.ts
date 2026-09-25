@@ -51,7 +51,9 @@ test("ids count per ledger and per lane, and titles become branch slugs", () => 
   assert.equal(nextTaskId(entry, "code"), "L1-T1");
   assert.equal(nextTaskId(entry, "review"), "L1-R2");
   assert.equal(nextAskId(ledger), "A1");
-  assert.equal(slugify("Add Discount Codes: 10% off!", 24), "add-discount-codes-10-of");
+  assert.equal(slugify("Add Discount Codes: 10% off!", 24), "add-discount-codes-10", "a long title is cut between words, never inside one");
+  assert.equal(slugify("Money as integer cents, orders migrated", 24), "money-as-integer-cents");
+  assert.equal(slugify("Supercalifragilisticexpialidocious", 24), "supercalifragilisticexpi", "one word longer than the limit is cut where it must be");
   assert.equal(slugify("Chi tiêu định kỳ", 24), "chi-tieu-dinh-ky", "a title in Vietnamese keeps its letters, not a dash for each mark");
 });
 

@@ -13,7 +13,7 @@ const kit = loadKit(join(dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const shipped = Object.values(kit.sensors)[0]!;
 const row = (item: Record<string, unknown>, seq: number) => ({ item, seq, epoch: "e", turnId: "t", replay: false });
 const shell = (id: string, command: string, extra: Record<string, unknown> = {}) => ({ type: "tool_call", callId: id, name: "Bash", status: "completed", detail: { type: "shell", command, output: "ok", ...extra } });
-const brief = (extra: Partial<Brief> = {}): Brief => ({ role: "Peer", goal: "Task L1-T1: login", context: "", beside: [], gates: ["npm test", "node --test"], workingCopy: "/work/app", ...extra });
+const brief = (extra: Partial<Brief> = {}): Brief => ({ role: "Peer", can: ["work", "write", "watched"], goal: "Task L1-T1: login", context: "", beside: [], gates: ["npm test", "node --test"], workingCopy: "/work/app", ...extra });
 const size = (value: unknown) => JSON.stringify(value).length;
 
 function turn(...items: Record<string, unknown>[]): Window {
@@ -106,7 +106,7 @@ test("each view holds its own fields and no other, and a question is asked only 
     for (const field of Object.keys(view)) assert.ok((VIEW_FIELDS[name as keyof typeof VIEW_FIELDS] as readonly string[]).includes(field), `${name} holds ${field}`);
   }
   assert.deepEqual(Object.keys(views).sort(), ["actions", "claim", "instruction", "work"]);
-  for (const [name, question] of Object.entries(asked(shipped.questions, views))) assert.ok(views[question.view], name);
+  for (const [name, question] of Object.entries(asked(shipped.questions, views, { can: brief().can, from: trail.from }))) assert.ok(views[question.view], name);
 });
 
 test("the view about what a seat did shows its acts and not what it printed or said about them", () => {
@@ -133,15 +133,45 @@ test("a question about the steps straight after the instruction is not asked of 
   window.add(row({ type: "user_message", text: "No, the rate table is not in pricing.ts" }, 1));
   window.add(row(shell("c1", "grep RATES"), 2));
   const whole = viewsOf(trailOf(window, false, {}), brief(), 8000);
+  const person = { can: brief().can, from: ["person"] };
   assert.deepEqual((whole.instruction!.steps as Step[]).map((step) => step.id), ["S1"], "this view begins where the instruction did");
-  assert.ok("agreed_without_checking" in asked(shipped.questions, whole));
+  assert.ok("agreed_without_checking" in asked(shipped.questions, whole, person));
   for (let index = 0; index < 85; index++) window.add(row(shell(`c${index}`, `ls dir${index}`), index + 3));
   window.add(row({ type: "assistant_message", text: "Moved it; the suite is green", messageId: "m1" }, 90));
   const holed = viewsOf(trailOf(window, true, {}), brief(), 8000);
   assert.equal(holed.instruction, undefined);
-  const left = asked(shipped.questions, holed);
+  const left = asked(shipped.questions, holed, person);
   assert.ok(!("agreed_without_checking" in left));
   assert.ok("unverified_success" in left, "a question whose subject is the claim at the end is not held back: the end is never what is lost");
+});
+
+test("a turn's instruction is told apart by who sent it: a person, or the kinds of desk letter it carries", () => {
+  const from = (item: Record<string, unknown>) => {
+    const window = new Window();
+    window.add(row({ type: "user_message", text: "Fix it", ...item }, 1));
+    return trailOf(window, false, {}).from;
+  };
+  assert.deepEqual(from({ clientMessageId: "sw2-rework.amended-6f1c2a", messageId: "sw2-rework.amended-6f1c2a" }), ["rework", "amended"]);
+  assert.deepEqual(from({ clientMessageId: null, messageId: "0b9e5d4a" }), ["person"], "a prompt a person starts a seat with has only a random messageId");
+  assert.deepEqual(from({ clientMessageId: "c-17" }), ["person"]);
+});
+
+test("a question is asked only of a role that can do what it is for, and after an instruction from one it names", () => {
+  const window = new Window();
+  window.add(row({ type: "user_message", text: "AMENDED L1-T3: the write set now includes migrations/" }, 1));
+  window.add(row(shell("c1", "git show HEAD -- test/migrate.test.js"), 2));
+  const views = viewsOf(trailOf(window, false, {}), brief(), 8000);
+  const peer = ["work", "write", "watched"];
+  const questions = (can: string[], from: string[]) => Object.keys(asked(shipped.questions, views, { can, from }));
+  assert.ok(questions(peer, ["landback"]).includes("agreed_without_checking"), "the Human's own words sending a landing back");
+  assert.ok(!questions(["lead", "watched"], ["message"]).includes("agreed_without_checking"), "a Supervisor's message is its order, as a rework is its Lead's");
+  assert.ok(!questions(peer, ["amended"]).includes("agreed_without_checking"), "the desk granting what a seat asked for doubts nothing");
+  assert.ok(!questions(peer, ["rework"]).includes("agreed_without_checking"), "nor is a rework a doubt: it is its Lead's order, with the Lead's evidence");
+  assert.ok(questions(peer, ["answer", "landback"]).includes("agreed_without_checking"), "letters sent together are asked after if any one is");
+  assert.ok(questions(peer, ["person"]).includes("proves_the_old_is_gone"));
+  assert.ok(!questions(peer, ["rework"]).includes("proves_the_old_is_gone"), "a rework names a bug, and a test that it is gone is what it asks for");
+  assert.ok(!questions(["lead", "watched"], ["person"]).includes("proves_the_old_is_gone"), "a Lead reading its Peer's test wrote none");
+  assert.ok(questions(["lead", "watched"], ["person"]).includes("goal_drift"));
 });
 
 test("each view keeps to its cap, newest steps first, or for the instruction's view the first ones", () => {

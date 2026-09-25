@@ -51,6 +51,20 @@ function sentence(head: string, body: string): string | null {
   if (/^READING /.test(head)) return "The watcher checked on an agent.";
   if (/^You are seated on this project/.test(head)) return "The watcher started.";
   if (/^The Human selected supervision revision/.test(head)) return "Your project list or permissions changed.";
+  if ((m = head.match(/^PLAN \d+ of [A-Z]+[0-9][\w-]* (\(.+?\)) waits for (the Human's|your) approval/))) return m[2] === "the Human's" ? `The plan for ${quoted(titled(m[1]!))} waits for your approval.` : `The plan for ${quoted(titled(m[1]!))} is waiting to be approved.`;
+  if ((m = head.match(/^APPROVED plan \d+ of [A-Z]+[0-9][\w-]* (\(.+?\))/))) return `The plan for ${quoted(titled(m[1]!))} was approved.`;
+  if ((m = head.match(/^SENT BACK plan \d+ of [A-Z]+[0-9][\w-]* (\(.+?\)):/))) return `The plan for ${quoted(titled(m[1]!))} was sent back for changes.`;
+  if ((m = head.match(/^LAND HELD [A-Z]+[0-9][\w-]* (\(.+?\)): the owner/))) return `${quoted(titled(m[1]!))} is held for a closer look before it is merged.`;
+  if ((m = head.match(/^LAND SENT BACK [A-Z]+[0-9][\w-]* (\(.+?\)):/))) return `Merging ${quoted(titled(m[1]!))} was sent back for changes.`;
+  if ((m = head.match(/^LANDED [A-Z]+[0-9][\w-]* (\(.+?\)) after the Human approved it/))) return `${quoted(titled(m[1]!))} was merged after you approved it.`;
+  if ((m = head.match(/^HELD AGAIN [A-Z]+[0-9][\w-]* (\(.+?\)): the Human approved it/))) return `You approved ${quoted(titled(m[1]!))}, but merging it turned up more to check.`;
+  if ((m = head.match(/^CHANGED [A-Z]+[0-9][\w-]* (\(.+?\)) after its landing was held/))) return `${quoted(titled(m[1]!))} changed after it was held, so it needs approving again.`;
+  if ((m = head.match(/^APPROVED [A-Z]+[0-9][\w-]* (\(.+?\)) for landing by the Human/))) return `You approved ${quoted(titled(m[1]!))}, but it can't be merged yet.`;
+  if ((m = head.match(/^SENT BACK [A-Z]+[0-9][\w-]* (\(.+?\)) by the Human/))) return `You sent ${quoted(titled(m[1]!))} back for changes.`;
+  if ((m = head.match(/^CRITIQUE [A-Z]+[0-9][\w-]* (\(.+?\)): (\d+) point/))) return `A second reader found ${m[2] === "1" ? "1 point" : `${m[2]} points`} where ${quoted(titled(m[1]!))} may not match what you asked.`;
+  if (/^Read lane [A-Z]+[0-9][\w-]* against what the Human wrote/.test(head)) return "A second reader was asked to check the new work against your own words.";
+  if (/^CHECK DIGEST /.test(head)) return "A safety check has a summary of how it has been doing.";
+  if ((m = head.match(/^NOT STARTED [A-Z]+[0-9][\w-]* (\(.+?\)):/))) return `A task was dropped because it never started: ${quoted(titled(m[1]!))}.`;
   return null;
 }
 
@@ -114,6 +128,9 @@ const steps: Record<string, [running: string, done: string]> = {
   done: ["Handing back finished work", "Handed back finished work"],
   raise: ["Flagging something to check", "Flagged something to check"],
   judge: ["Checking a flagged step", "Checked a flagged step"],
+  approve_plan: ["Deciding on a plan", "Decided on a plan"],
+  plan_tasks: ["Laying out the plan", "Laid out the plan"],
+  findings: ["Handing in what it found", "Handed in what it found"],
 };
 
 /** `mcp__team__status`, `team__status`, `team.status` or `team_status` → the tool's own name, if it is one of the team's. */

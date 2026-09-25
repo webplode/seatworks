@@ -150,7 +150,7 @@
     },
     {
       "name": "close_lane",
-      "description": "Close a lane and archive its agents. With land true the desk first merges the base branch into the lane in the lane's own copy when the base has moved, runs the project's gate there, then moves the base branch up to the lane. If any of that cannot happen the lane stays open and the reason comes back; a conflict with the base is its Lead's to settle in the lane. A landed lane branch is deleted once its copy is put away; one closed without landing is kept. A lane opened with onBranch is not merged or switched away from: landing it runs the gate and closes it, and its branch stays as it is. A red gate stops the landing unless you land over it with overGate true — the verdict is evidence, and landing over it is your call.",
+      "description": "Close a lane and archive its agents. With land true the desk first merges the base branch into the lane in the lane's own copy when the base has moved, runs the project's gate there, then lands it on the base as the project lands lanes (landAs in set_project). If any of that cannot happen the lane stays open and the reason comes back; a conflict with the base is its Lead's to settle in the lane. A landed lane branch is deleted once its copy is put away; one closed without landing is kept. A lane opened with onBranch is not merged or switched away from: landing it runs the gate and closes it, and its branch stays as it is. A red gate stops the landing unless you land over it with overGate true — the verdict is evidence, and landing over it is your call. When the project checks landings, the reply carries the evidence, and a landing the check flags waits for the Human's approval on the panel instead: the lane stays open, and LANDED or SENT BACK comes as mail.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -263,6 +263,36 @@
       }
     },
     {
+      "name": "approve_plan",
+      "description": "Approve a plan a lane holds for your approval, and its tasks start; or send it back with what the Lead should change, and its tasks are cut. A plan held for the Human is theirs to decide, on the panel.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
+          },
+          "lane": {
+            "type": "string",
+            "description": "The lane whose plan waits."
+          },
+          "approve": {
+            "type": "boolean",
+            "description": "True to approve, false to send it back."
+          },
+          "note": {
+            "type": "string",
+            "description": "What the Lead should change, when you send it back; anything worth saying, when you approve."
+          }
+        },
+        "required": [
+          "project",
+          "lane",
+          "approve"
+        ]
+      }
+    },
+    {
       "name": "set_project",
       "description": "Set this project's base branch and gate: the command that proves the lane works (for example npm test). By default it runs once on the whole lane, when its Lead reports it ready and before it lands, so tasks merge into the lane without each having to build on its own.",
       "inputSchema": {
@@ -295,6 +325,15 @@
           "project": {
             "type": "string",
             "description": "Exact enrolled Paseo project ID from status; never a path or folder name."
+          },
+          "landAs": {
+            "type": "string",
+            "enum": [
+              "squash",
+              "merge",
+              "ff"
+            ],
+            "description": "How a landed lane goes onto its base, as the Human's repository does it. squash (default): one commit per lane. merge: a merge commit keeping the lane's commits. ff: every commit of the lane, fast-forwarded."
           }
         },
         "required": [
@@ -483,8 +522,96 @@
   ],
   "lead": [
     {
+      "name": "plan_tasks",
+      "description": "Lay the lane's tasks out at once, before the first one starts: each with what it owns, what it waits for, and whether it runs in parallel. The desk checks the plan for tasks that would collide and says what it found; tasks in the lane's copy run one after another in the order after allows, listed order otherwise. Each task starts by itself once what it waits for is accepted, and whatever can start now does.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "description": "Every task of the plan, in the order you mean them to run.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "A short name for this task, unique in the plan, that the others name in after. Not a task id."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Short name, at most 60 characters."
+                },
+                "goal": {
+                  "type": "string",
+                  "description": "The outcome, not the implementation."
+                },
+                "acceptance": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Behaviors that show the task done; each needs one focused check."
+                },
+                "owned": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Exact paths the Peer may change."
+                },
+                "outOfScope": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Limits the owned paths don't already hold: what the Peer must leave alone, not do, or not decide."
+                },
+                "context": {
+                  "type": "string",
+                  "description": "Decisions made, approaches ruled out, where to start reading."
+                },
+                "skills": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Skills the Peer should open, by name. Only the ones it has: name one that it does not and the desk answers with the list it does have. Its own prompt already opens the obvious ones, so this is for a case it would not reach for."
+                },
+                "parallel": {
+                  "type": "boolean",
+                  "description": "Run beside the lane's writer in a separate working copy. Only for an independent write set."
+                },
+                "after": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Keys of this plan, or tasks of the lane, this one waits for. It starts once every one of them has been accepted."
+                },
+                "role": {
+                  "type": "string",
+                  "description": "Optional role to take it, when the kit has more than one that writes. Left out, the kit's first. This is how best-of-n gets two kinds of Peer on one question; a role that only reads is refused, with the list of those that write."
+                }
+              },
+              "required": [
+                "key",
+                "title",
+                "goal",
+                "acceptance",
+                "owned",
+                "outOfScope"
+              ]
+            }
+          }
+        },
+        "required": [
+          "tasks"
+        ]
+      }
+    },
+    {
       "name": "start_task",
-      "description": "Start a Peer on one task. By default it works in your lane's working copy and commits straight onto the lane branch, one writer at a time; accepting it needs no merge. Set parallel when the task's owned paths are independent of every active task and touch no shared contract: it then gets its own working copy and branch, runs beside the others, and merges back when accepted. No limit caps how many tasks a lane may run.",
+      "description": "Start a Peer on one task the lane's plan did not foresee; lay a lane's tasks out with plan_tasks first. By default it works in your lane's working copy and commits straight onto the lane branch, one writer at a time; accepting it needs no merge. Set parallel when the task's owned paths are independent of every active task and touch no shared contract: it then gets its own working copy and branch, runs beside the others, and merges back when accepted. No limit caps how many tasks a lane may run.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -684,6 +811,13 @@
               "type": "string"
             },
             "description": "Everything out of scope as it stands now."
+          },
+          "owned": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every path it owns now. A task running beside others that takes more is checked against them, as when it started."
           }
         },
         "required": [
@@ -1098,6 +1232,64 @@
           "incident",
           "says",
           "why"
+        ]
+      }
+    }
+  ],
+  "critic": [
+    {
+      "name": "findings",
+      "description": "Hand in where the Human's words and the lane may not agree, once, then end your turn. None found is a right and common answer: leave findings out or empty. Each quote must be copied exactly; one that is not there is refused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "string"
+          },
+          "findings": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "missing",
+                    "added",
+                    "contradiction",
+                    "ambiguity"
+                  ]
+                },
+                "human": {
+                  "type": "string",
+                  "description": "The Human's words, copied exactly. Empty only for added."
+                },
+                "lane": {
+                  "type": "string",
+                  "description": "The lane's words, copied exactly. Empty when the lane says nothing of it."
+                },
+                "why": {
+                  "type": "string",
+                  "description": "What goes wrong if the lane is built as written, in one sentence."
+                },
+                "question": {
+                  "type": "string",
+                  "description": "The one question for the Human that settles it, with its choices and your recommended answer."
+                }
+              },
+              "required": [
+                "kind",
+                "human",
+                "lane",
+                "why",
+                "question"
+              ]
+            }
+          }
+        },
+        "required": [
+          "lane"
         ]
       }
     }

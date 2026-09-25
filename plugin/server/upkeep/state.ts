@@ -24,7 +24,21 @@ export const STEPS: StateStep[] = [{ to: 2, machine(root) {
   // 4 takes in upstream's formats 2 to 4 at once: Lane.onBranch, lanes that wait, their landed mark,
   // amendment history and tasks that wait. All are optional additions, so nothing is carried.
   to: 4,
-}];
+},
+  // 5 only adds the checkpoint settings and a lane's count of plans; state 4 has neither to carry.
+  { to: 5 },
+  // 6 only adds who approves plans, a lane's plan held for approval, and which plan a task came from; state 5 has none of them.
+  { to: 6 },
+  // 7 only adds how a project's lanes land; a project without it lands as squash, the new default, since landing is not
+  // a record to carry but the next close to happen.
+  { to: 7 },
+  // 8 only adds the land check's settings and a landing held for the Human; state 7 has neither.
+  { to: 8 },
+  // 9 only adds who reads a new lane against the Human's words; a project without it has a Critic, the default.
+  { to: 9 },
+  // 10 only adds when a lane was last reported ready; a lane from before has none, and is reported again before it lands.
+  { to: 10 },
+];
 
 const MACHINE_FILES = ["state.json", "settings.json", "outbox.json", "content.json", "supervision.json", "dependencies.json", "jev-budget.json"];
 const PROJECT_FILES = ["ledger.json", "incidents.json", "project.json", "meta.json", "settings.json"];

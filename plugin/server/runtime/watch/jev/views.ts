@@ -3,10 +3,13 @@ import type { Sibling } from "../../../desk/ledger.ts";
 import { within } from "../facts.ts";
 import type { Step, Trail } from "../trail.ts";
 
-/** What the sensor is told about the seat itself, apart from what its turn did. */
-export type Brief = { role: string; goal: string; context: string; beside: Sibling[]; gates: string[]; workingCopy: string };
+/** What the sensor is told about the seat itself, apart from what its turn did; `can` chooses questions and is never sent. */
+export type Brief = { role: string; can: string[]; goal: string; context: string; beside: Sibling[]; gates: string[]; workingCopy: string };
 
 export type View = Record<string, unknown>;
+
+/** What chooses the questions a turn is asked: what the seat's role can do, and who its instruction came from. */
+export type Turn = { can: string[]; from: string[] };
 
 export const LEAST_STATE_CHARS = 1000;
 
@@ -121,11 +124,13 @@ export function viewsOf(trail: Trail, brief: Brief, limit: number): Partial<Reco
 
 const blank = (value: unknown) => value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
 
-/** The questions these views can answer: the view each reads is there, with something in what it needs. */
-export function asked(questions: Record<string, Question>, views: Partial<Record<ViewName, View>>): Record<string, Question> {
+/** The questions that apply to this seat's turn and its views can answer: its role can do what each is `for`, its instruction came from one it is asked `after`, and the view it reads has something in what it needs. */
+export function asked(questions: Record<string, Question>, views: Partial<Record<ViewName, View>>, turn: Turn): Record<string, Question> {
   return Object.fromEntries(
     Object.entries(questions).filter(([, question]) => {
       const view = views[question.view];
+      if (question.for && !turn.can.includes(question.for)) return false;
+      if (question.after && !question.after.some((kind) => turn.from.includes(kind))) return false;
       return view !== undefined && (!question.needs || question.needs.some((field) => !blank(view[field])));
     }),
   );

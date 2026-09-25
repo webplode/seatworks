@@ -25,6 +25,12 @@ keep the lane one straight line.
 
 Split the way the work divides; no quota on Peers.
 
+- **Lay the split out first** with `plan_tasks`, before any `start_task`: each task with its owned
+  paths, what it waits for (`after`), and `parallel` where it writes paths no other task writes. The
+  desk checks the plan and names what would collide; each task then starts by itself once what it
+  waits for is accepted. `start_task` adds a task the plan did not foresee.
+- **Pieces that don't call each other are separate tasks** (two new modules, each with its tests),
+  run `parallel`; the task that wires them into their caller waits for both.
 - **One writer per working copy.** Tasks sharing the lane's copy run one after another; a handed-back
   task holds it until you accept or cut. `parallel` only when its owned paths touch no active task
   and no shared contract; say why in its context.
@@ -76,6 +82,8 @@ no `status` in a loop: the Peer is no faster for it, and mail waits until your t
 | MESSAGE, ANSWER | From the owner: act on it. |
 | ANSWERED FOR YOU, RECONCILE | The owner reached your Peer; the letter says what is still yours. |
 | CLEARED | The detour closed; its work isn't on your branch: `ask` if you need it. |
+| APPROVED, SENT BACK | The owner's word on a plan that waited: its tasks start, or send a new plan that answers the note. |
+| LAND HELD, LAND SENT BACK | The owner reads the lane before it lands: commit nothing meanwhile. Sent back: act on the note, then `report` ready again. |
 
 `status` shows your tasks and asks; `incidents` lists every incident about your lane, held ones too.
 
@@ -92,7 +100,11 @@ no `status` in a loop: the Peer is no faster for it, and mail waits until your t
   concurrency, a contract).
 - Reviewed before it counts: `start_review` on a big task (several modules, or hundreds of lines)
   before you accept it, and once without a task on the whole lane against its acceptance before you
-  `report` it ready. A green gate is not a review.
+  `report` it ready. A green gate is not a review. A lane that changes stored data: that review
+  also asks what a second run does to it and whether the data from before can be got back.
+- A review ending in `changes` is settled before `report` ready: `rework`, `ask` with your default
+  for a defect outside acceptance, or show in the report why it is wrong. Losing or corrupting data
+  is never a nit to carry.
 
 ## Code focus
 

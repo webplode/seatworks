@@ -18,7 +18,7 @@ const shipped = Object.values(kit.sensors)[0]!;
 
 const spec = (questions: SensorSpec["questions"], extra: Partial<SensorSpec> = {}): SensorSpec => ({ ...shipped, retries: 2, timeoutSeconds: 1, questions, ...extra });
 const noul = (instructions = "q") => ({ view: "work" as const, instructions, threshold: 0.7, level: "attend" as const });
-const brief = (goal = "g"): Brief => ({ role: "Peer", goal, context: "", beside: [], gates: ["npm test"], workingCopy: "/w" });
+const brief = (goal = "g"): Brief => ({ role: "Peer", can: ["work", "write", "watched"], goal, context: "", beside: [], gates: ["npm test"], workingCopy: "/w" });
 const sensing = (questions: SensorSpec["questions"], extra: Partial<SensorSpec> = {}) => ({ spec: spec(questions, extra), key: "k", brief: brief(), rules: {} });
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const row = (item: Record<string, unknown>, seq: number) => ({ item, seq, epoch: "e", turnId: "t", replay: false });
@@ -165,6 +165,10 @@ test("the shipped sensor asks only questions it can use, and the kit refuses one
     "asks r with needs that is not a list of its view's fields (role, goal, context, beside, instruction, steps)",
   ]);
   assert.deepEqual(sensorProblems("x", { ...shipped, id: "x", questions: { q: { view: "work", instructions: "?", excusedBeside: true } } } as never), ["asks q excused beside, though it opens no incident to excuse"]);
+  assert.deepEqual(sensorProblems("x", { ...shipped, id: "x", questions: { q: { view: "work", instructions: "?", for: ["write"] }, r: { view: "instruction", instructions: "?", after: "rework" } } } as never), [
+    "asks q for something that is not a capability",
+    "asks r after something that is not a list of who an instruction comes from",
+  ]);
 });
 
 test("the usual shapes a secret is printed in are masked", () => {

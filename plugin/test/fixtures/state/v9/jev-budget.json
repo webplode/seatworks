@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "day": "2026-09-23",
+  "calls": 1,
+  "cases": {
+    "shop-abc123/L1-T1": "example-revision"
+  }
+}

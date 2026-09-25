@@ -69,6 +69,20 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       // Lanes are often titled "<project>: what it does"; the card already names the project.
       const titleOf = (lane: { title: string }) => lane.title.toLowerCase().startsWith(`${scope.name.toLowerCase()}:`) ? lane.title.slice(scope.name.length + 1).trim() : lane.title;
       for (const lane of lanes) {
+        if (lane.approval?.by === "human") {
+          const steps = Object.values(ledger.tasks).filter((t) => t.lane === lane.id && t.plan === lane.approval!.plan && t.status !== "cut");
+          result.needsYou++;
+          result.items.push({ id: `${scope.id}:${lane.id}:plan:${lane.approval.plan}`, project: scope.name, kind: "plan", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, held: true, title: "A plan waits for your approval",
+            plain: `Your team planned "${titleOf(lane)}"${steps.length ? ` in ${count(steps.length, "step")}` : ""}. Nothing starts until you approve it. Send it back with a note if something should change.`,
+            detail: [...steps.map((t) => `• ${t.title}`), lane.approval.signals.join(" ")].filter(Boolean).join("\n").slice(0, 600) });
+        }
+        if (lane.landApproval && !lane.landApproval.approved) {
+          result.needsYou++;
+          result.items.push({ id: `${scope.id}:${lane.id}:land`, project: scope.name, kind: "land", agent: lane.lead ?? null, scope: scope.id, lane: lane.id, held: true, diff: `${lane.branch} → ${lane.base}`, title: "Held for your approval before merging",
+            plain: `"${titleOf(lane)}" is finished, and this project asks you before it is merged into ${lane.base}. Approve to merge it now, or send it back with a note.`,
+            detail: [...lane.landApproval.signals, ...lane.landApproval.evidence].join("\n").slice(0, 600) });
+          continue;
+        }
         const report = reports.get(lane.id);
         if (!report?.ready) continue;
         const detail = `${titleOf(lane)}${report.summary ? `\n${report.summary}` : ""}`.slice(0, 600);
@@ -89,14 +103,14 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
       result.held += queued;
       const running = [...ids].filter(id => ["running","starting"].includes(byId.get(id)?.status ?? "")).length;
       const human = result.items.slice(start).filter(i => i.kind === "permission").length;
-      const landing = result.items.slice(start).filter(i => i.kind === "land" || i.kind === "commit").length;
+      const landing = result.items.slice(start).filter(i => i.kind === "plan" || i.kind === "land" || i.kind === "commit").length;
       const waiting = Object.values(ledger.lanes).filter(l => l.status === "waiting");
       const streams = [...lanes.slice(0, 6).map((lane) => {
         const tasks = Object.values(ledger.tasks).filter(t => t.lane === lane.id && t.status !== "cut");
         const merged = tasks.filter(t => t.status === "merged").length;
         const report = reports.get(lane.id);
         const lead = lane.lead ? byId.get(lane.lead) : undefined;
-        const state = report?.ready ? (report.gate === false ? "tests failed" : "ready for you")
+        const state = lane.approval?.by === "human" ? "plan waits for you" : lane.landApproval && !lane.landApproval.approved ? "ready for you" : report?.ready ? (report.gate === false ? "tests failed" : "ready for you")
           : tasks.length ? `${merged} of ${count(tasks.length, "task")} done` : lead && ["running", "starting"].includes(lead.status ?? "") ? "planning" : "waiting";
         return { id: lane.id, title: titleOf(lane).slice(0, 120), state, agent: lane.lead ?? null };
       }), ...waiting.slice(0, Math.max(0, 6 - lanes.length)).map((lane) => ({ id: lane.id, title: titleOf(lane).slice(0, 120), state: lane.after?.length ? "starts when earlier work is merged" : "waiting to start", agent: null }))];
@@ -107,7 +121,7 @@ export function teamBrief(binding: Binding, seats: SeatView[], read: (root: stri
     }
   }
   if (failing.length) { const cards = modelCards(failing, folded); result.needsYou += cards.length; result.items.push(...cards); }
-  const rank = (item: TeamBrief["items"][number]) => item.action ? -1 : ["permission", "land", "tests", "question"].indexOf(item.kind) >>> 0;
+  const rank = (item: TeamBrief["items"][number]) => item.action ? -1 : ["permission", "plan", "land", "tests", "question"].indexOf(item.kind) >>> 0;
   result.items.sort((a,b) => rank(a) - rank(b));
   result.omitted = Math.max(0, result.items.length - 24);
   result.items = result.items.slice(0,24);

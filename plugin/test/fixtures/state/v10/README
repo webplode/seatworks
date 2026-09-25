@@ -1,0 +1,4 @@
+The files Seatworks kept in state format 10, as a machine with one project held them. Never edited:
+a new format gets its own folder, and state.test.ts carries every folder up to the current one.
+Format 10 adds when a lane was last reported ready: L1 was.
+Machine files carry the fork's additions as in v4 (queued outbox letters, launch-profile visibility, supervision, dependencies, the sensor budget).

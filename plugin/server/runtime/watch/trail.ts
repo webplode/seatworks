@@ -14,8 +14,8 @@ export type Step = (
   | { id: string; kind: "compacted" }
 ) & { note?: string };
 
-/** A turn since its instruction: its steps in order, how many fell out before them, and what it ended on. */
-export type Trail = { instruction: string; steps: Step[]; lost: number; final?: { id: string; text: string } };
+/** A turn since its instruction: who sent that, its steps in order, how many fell out before them, and what it ended on. */
+export type Trail = { instruction: string; from: string[]; steps: Step[]; lost: number; final?: { id: string; text: string } };
 
 const LIMIT = { command: 600, output: 300, change: 160, said: 600, thought: 400, told: 600, error: 300, input: 200, target: 300 };
 
@@ -104,7 +104,8 @@ export function trailOf(window: Window, ended: boolean, rules: { exit?: RegExp; 
   const closing = ended && units[end - 1]?.kind === "said" ? units[end - 1] : undefined;
   const steps = units.flatMap((unit, index) => (unit === closing ? [] : [step(`S${lost + index + 1}`, unit, rules.exit, rules.destructive)]));
   const final = closing?.kind === "said" ? { id: `S${lost + units.indexOf(closing) + 1}`, text: clip(flat(mask(closing.text)), LIMIT.said) } : undefined;
-  return { instruction: flat(mask(window.lastInstruction())), steps, lost, ...(final ? { final } : {}) };
+  const instruction = window.lastInstruction();
+  return { instruction: flat(mask(instruction.text)), from: instruction.from, steps, lost, ...(final ? { final } : {}) };
 }
 
 export function stepText(step: Step): string {

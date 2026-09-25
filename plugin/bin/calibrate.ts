@@ -16,7 +16,7 @@ import { stepText } from "../server/runtime/watch/trail.ts";
 
 export type Label = { id: string; seat: string; kind: string; opened: number; last: number; closed?: number; sensor?: Judged; by?: "watcher"; label: "useful" | "noise" };
 
-type Fetcher = Parameters<typeof assessViews>[4];
+type Fetcher = Parameters<typeof assessViews>[5];
 type Answers = (record: Kept) => Record<string, number> | undefined;
 
 const ENOUGH = 5;
@@ -115,7 +115,8 @@ async function reask(kept: Kept[], spec: SensorSpec, key: string, fetcher?: Fetc
     while (next < kept.length) {
       const record = kept[next++]!;
       try {
-        const asking = await assessViews(spec, key, record.views, `replay:${record.seat}`, fetcher);
+        // A record kept before its turn was does not say what its seat could do or who sent its instruction, so a question asked only of some is not asked of it again.
+        const asking = await assessViews(spec, key, record.views, record.turn ?? { can: [], from: [] }, `replay:${record.seat}`, fetcher);
         if (!asking) continue;
         const { assessment } = asking;
         answers.set(record, assessment.answers);
@@ -267,8 +268,7 @@ export async function calibrate(options: CalibrateOptions): Promise<string> {
       const at = fired(kept, name, question, stored, threshold, unclear);
       const attention = at.filter((item) => item.level === "attend").map((item) => item.at);
       const pages = at.length - attention.length;
-      const lowest = question.alone && question.level === "page" ? threshold - unclear : threshold;
-      out.push(`  at ${fixed(threshold)}: fires on ${at.length} turns${pages > 0 ? ` (${pages} as page)` : ""}, at most ${peak(attention)} attention in 24 hours; precision ${precision(scored, lowest)}`);
+      out.push(`  at ${fixed(threshold)}: fires on ${at.length} turns${pages > 0 ? ` (${pages} as page)` : ""}, at most ${peak(attention)} attention in 24 hours; precision ${precision(scored, threshold)}`);
       now.push(...attention);
       if (question.level === "attend") {
         const peakAt = (candidate: number, answers: Answers) => peak(fired(kept, name, question, answers, candidate, unclear).map((item) => item.at));

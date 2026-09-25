@@ -251,6 +251,11 @@ something irreversible is seen or a permission is asked.
 | `confirms` | `worker_stuck` (for `stuck`, `no-recovery`), `unverified_success` (for `unverified`) | Judges the open fact |
 | recorded only | `injected_intent`, `guessed_ambiguity`, `admits_error`, `changed_direction`, `wrapped_instead_of_changed`, `proof_changes_product`, `claim_contradicted` | Nothing, until `calibrate` earns it a threshold |
 
+A question with `for` is asked only of a seat whose role can do that (`write`: a Peer). One with `after`
+is asked only when the turn's instruction came from those: a person, or a letter of that kind, read
+from the id the desk gives it. `agreed_without_checking` is asked after the Human's words, typed or
+in a landing sent back; an order from a seat above is not a doubt to check.
+
 Each view is one request, so a reading costs up to four, plus one per finding it pinpoints. 429 and
 5xx responses are retried. A failure is logged as `sensor.degraded` at most once a minute.
 

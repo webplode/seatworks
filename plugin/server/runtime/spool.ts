@@ -45,9 +45,12 @@ export function takeRequests(spool: string, now = Date.now()): ToolRequest[] {
   return taken;
 }
 
+export function replyFile(spool: string, id: string): string {
+  return join(spoolDirs(spool).replies, `${id}.json`);
+}
+
 export function writeReply(spool: string, id: string, reply: ToolReply): void {
-  const { replies } = spoolDirs(spool);
-  const temp = join(replies, `${id}.tmp`);
+  const temp = join(spoolDirs(spool).replies, `${id}.tmp`);
   writeFileSync(temp, JSON.stringify(reply));
-  renameSync(temp, join(replies, `${id}.json`));
+  renameSync(temp, replyFile(spool, id));
 }

@@ -1,9 +1,10 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { SettingsCard, SettingsRow, SettingsSection, SettingsSwitch } from "@getpaseo/plugin/client/ui";
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Button, Empty } from "./bits.tsx";
 import { type FlowLane, type FlowSeat, type FlowView, countsInstead, watcherState } from "./data.ts";
+import { ApprovalsCards } from "./approvals.tsx";
 import { IncidentsCard, WatchCard } from "./watching.tsx";
 
 type Props = {
@@ -107,7 +108,7 @@ const Lane = memo(function Lane({ lane, theme, onOpen, onAgent }: { lane: FlowLa
         theme={theme}
         title={`Lead · ${lane.id} ${lane.title}`}
         hint={lane.base ? `${lane.branch} off ${lane.base}` : `${lane.branch}, carried on in place`}
-        state={countsInstead(lane) ? `${lane.taskCount} task${lane.taskCount === 1 ? "" : "s"}, ${lane.running} running` : seatText(lane.lead)}
+        state={lane.landApproval ? (lane.landApproval.approved ? "landing approved, not landed yet" : "landing waits for your approval") : lane.approval ? `plan ${lane.approval.plan} waits for ${lane.approval.by === "human" ? "your approval" : "the Supervisor"}` : countsInstead(lane) ? `${lane.taskCount} task${lane.taskCount === 1 ? "" : "s"}, ${lane.running} running` : seatText(lane.lead)}
         alive={Boolean(lane.lead && lane.lead.status !== "gone")}
         caret={lane.taskCount === 0 ? undefined : lane.open ? "▾" : "▸"}
         onPress={lane.taskCount === 0 ? undefined : () => onOpen(lane.id)}
@@ -182,6 +183,14 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
                       <Node theme={theme} title="Watcher" hint="watches every Lead and Peer" state={watcher.state} alive={watcher.alive} reads />
                     </>
                   ) : null}
+                  {index === 0
+                    ? flow.critics.map((critic) => (
+                        <Fragment key={critic.seat.id}>
+                          <View style={{ width: COL_GAP }} />
+                          <Node theme={theme} title={`Critic · ${critic.lane} ${critic.title}`.trim()} hint="the lane vs the Human's words" state={seatText(critic.seat)} alive={critic.seat.status !== "gone"} reads />
+                        </Fragment>
+                      ))
+                    : null}
                 </View>
               ))}
               {flow.lanes.map((lane) => (
@@ -191,6 +200,8 @@ export function FlowSection({ following, flow, error, live, theme, disabled, onL
           </ScrollView>
         </View>
       )}
+
+      {live && flow ? <ApprovalsCards project={flow.project} lanes={flow.lanes} theme={theme} /> : null}
 
       {live && flow && flow.moreLanes > 0 ? (
         <SettingsCard>

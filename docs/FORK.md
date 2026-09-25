@@ -7,8 +7,8 @@ into it.
 
 - Working branch: `codex/multi-project-supervision`, mirrored to `origin/v2`.
 - Fork point: upstream `2e11099f`.
-- Last upstream sync: upstream `v2` at `50c3a2f` (2026-09-23), merged in `4cb5d1f`.
-- Plugin version: 2.5.7, state format 4, 527 tests.
+- Last upstream sync: upstream `v2` at `1975453` (2026-09-25).
+- Plugin version: 2.6.0, state format 10, 601 tests.
 
 ## Areas the fork adds
 
@@ -56,6 +56,8 @@ Commits `75fb7cd`, `5da8e43`, `b3fab38` and `26f0a3c`.
   - `land`, from a Lead's ready report, with the diff stat;
   - `tests`, when the gate is red;
   - `commit`, for uncommitted `AGENTS.md` and `CLAUDE.md` team blocks;
+  - `plan`, and a held `land`, when the project's plan or land check waits for the Human. Their
+    Approve and Send back buttons go straight to `seatworks.plan.decide` and `seatworks.land.decide`;
   - a sign-in `reload`, ranked first.
 - **Per-project work streams.** Each project shows one line per lane with how far it got. A lane
   that waits shows what it starts after.
@@ -126,6 +128,40 @@ Commits `aaaf452`, `2191953` and `26f0a3c`.
   one reload.
 
 ## Upstream syncs
+
+### 2026-09-25: upstream `v2` at `1975453`
+
+**What upstream brought (31 commits):**
+- a plan checkpoint: a Lead sends its tasks with `plan_tasks`, and a plan can wait for approval
+  (`approve_plan`, or the Human by default);
+- a land check that can hold a landing for the Human, with `landAs` (squash by default, merge or ff);
+- a Critic that reads a new lane against the Human's own words and hands in `findings`;
+- `checkpoints.log` and the CHECK DIGEST letter;
+- desk message ids, the Human's typed words (`Seats.typed()`), and mail held while a seat calls the desk;
+- state formats 5 to 10. Step 10 makes lanes from before report ready again before they land.
+
+**How the conflicts were folded in:**
+- **State formats.** Upstream's 5 to 10 follow the fork's 4 unchanged. Their fixtures gained the
+  fork's outbox and binding fields.
+- **Letter keys.** The fork prefixes keys with the project slug, so `kindOf()` in `outbox.ts`
+  strips it before a letter's kind is read.
+- **New Supervisor tools.** `approve_plan` takes `project` and maps to the `open_lane` grant.
+  `close()` takes the scope revalidation as an argument.
+- **Project names on letters.** The plan-held, critique, land-decided and check-digest letters to
+  the Supervisor now carry `[Project …]`.
+- **Where the Human decides.** Upstream's letters sent the Human to the panel's Flow tab. Here they
+  say "on its card in Seatworks", and the brief shows the card.
+- **`SUPERVISOR.md`.** Gains a "Plans, landings and critiques" section.
+- **Chat.** Every new letter and the three new tools have a plain line.
+- **Tests.** Detach tests run without seats (`noSeats`). Devin-only tests were dropped.
+
+The checks stay in shadow by default (`plan` and `land` are recorded, not held), and the Critic is
+on. A Human who turns the land check on approves twice for one landing: once on the ready card,
+and again when the check holds it.
+
+**Rollback points:**
+- branch `backup/pre-upstream-merge-20260925`;
+- `~/.local/share/seatworks-v2.bak-20260925`.
 
 ### 2026-09-24: upstream `v2` at `50c3a2f`, merged in `4cb5d1f`
 

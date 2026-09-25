@@ -180,3 +180,14 @@ test("the view is plain JSON as Paseo checks it, with no field left undefined, w
   const view = flowView(project, ledger, seats, now);
   assert.deepStrictEqual(JSON.parse(JSON.stringify(view)), view, "Paseo refuses a reply with an undefined field, and the panel shows the flow as unreadable");
 });
+
+test("a Critic reading a lane is drawn with the lane it reads, and one gone or of another project is not", () => {
+  const reading = new Map(seats);
+  const critic = (id: string, lane: string, slug = project.slug, archivedAt?: string) =>
+    reading.set(id, { id, provider: "sw2-critic-devin", cwd: "/w", status: "running", updatedAt: new Date(now - 60_000).toISOString(), labels: { "seatworks.project": slug, "seatworks.critique": lane }, ...(archivedAt ? { archivedAt } : {}) });
+  critic("seat-critic", "L2");
+  critic("seat-old", "L1", project.slug, new Date(now).toISOString());
+  critic("seat-elsewhere", "L1", "other-abc123");
+  const view = flowView(project, working(), reading, now);
+  assert.deepEqual(JSON.parse(JSON.stringify(view.critics)), [{ lane: "L2", title: "Lane L2", seat: { id: "seat-critic", role: "critic", status: "running", minutes: 1, waiting: [] } }]);
+});

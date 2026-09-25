@@ -23,9 +23,21 @@ export function normalize(pattern: string): string {
   return pattern.trim().replace(/^\.\//, "").replace(/\/+$/, "/");
 }
 
+/** `{js,ts}` is either one, as a seat writes a choice of extensions: spelled out before anything reads the glob. */
+function alternatives(pattern: string): string[] {
+  const brace = /\{([^{}]*)\}/.exec(pattern);
+  if (!brace) return [pattern];
+  const before = pattern.slice(0, brace.index);
+  const after = pattern.slice(brace.index + brace[0].length);
+  return brace[1]!.split(",").flatMap((choice) => alternatives(`${before}${choice}${after}`));
+}
+
 export function globToRegex(pattern: string): RegExp {
+  return new RegExp(`^(?:${alternatives(normalize(pattern)).map(regexBody).join("|")})$`);
+}
+
+function regexBody(clean: string): string {
   let out = "";
-  const clean = normalize(pattern);
   for (let index = 0; index < clean.length; index++) {
     const char = clean[index]!;
     if (char === "*") {
@@ -41,7 +53,7 @@ export function globToRegex(pattern: string): RegExp {
     else out += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   }
   if (clean.endsWith("/")) out += ".*";
-  return new RegExp(`^${out}$`);
+  return out;
 }
 
 /** Walks both segment globs together: sampling one against the other misses `*.ts` vs `app.*`. */
@@ -82,7 +94,7 @@ function meet(a: string[], b: string[]): boolean {
 }
 
 export function patternsOverlap(a: string, b: string): boolean {
-  return meet(normalize(a).split("/"), normalize(b).split("/"));
+  return alternatives(normalize(a)).some((left) => alternatives(normalize(b)).some((right) => meet(left.split("/"), right.split("/"))));
 }
 
 export function firstOverlap(left: string[], right: string[]): string | undefined {

@@ -1,9 +1,11 @@
-import { roleThatCan } from "../../catalog/kit.ts";
+import { type RoleSpec, roleThatCan } from "../../catalog/kit.ts";
 import { skillSources } from "../../catalog/content.ts";
 import { skillDirsFor } from "../../catalog/team.ts";
-import { branchExists, currentBranch, diffCounts, git, headSha, outsideOwned, resetHard } from "../../core/git.ts";
+import { branchExists, currentBranch, diffCounts, git, headSha, outsideOwned, resetHard, trackedFiles } from "../../core/git.ts";
+import { serialPaths } from "../../core/scope.ts";
 import { workState } from "../../catalog/project-files.ts";
-import { type Args, type Caller, given, hash, no, ok, str, strs } from "../context.ts";
+import { type Args, type Caller, type DeskContext, given, hash, no, ok, str, strs } from "../context.ts";
+import { keepRun } from "../checkpoints.ts";
 import { errorText } from "../../core/errors.ts";
 import { gateNote, laneGate } from "../gates.ts";
 import {
@@ -19,10 +21,13 @@ import {
   nextAskId,
   nextTaskId,
   slugify,
+  tasksOf,
 } from "../ledger.ts";
 import { clip, letters } from "../letters.ts";
-import { holderOf, startPeer, taskPlacement } from "../opening.ts";
-import type { Project } from "../project.ts";
+import { holderOf, parallelProblem, seatingKey, startPeer, taskPlacement } from "../opening.ts";
+import { riskSignals } from "../approval.ts";
+import { planFindings, readPlan } from "../plan.ts";
+import { type Project, loadConfig } from "../project.ts";
 import type { DeskServices, Tool } from "../services.ts";
 import { startWaiting, taskWaitsFor } from "../waiting.ts";
 import { namedOrNot } from "./shared.ts";
@@ -43,7 +48,7 @@ function laneTask(ledger: Ledger, caller: Caller, id: string): { lane: Lane; tas
   return { lane, task };
 }
 
-function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args, parallel: boolean, startSha: string | undefined, waiting?: { after: string[]; role: string }): Promise<Task> {
+function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args, parallel: boolean, startSha: string | undefined, waiting?: { after: string[]; role: string; plan?: number }): Promise<Task> {
   const title = str(args.title);
   return desk.ctx.ledger(project, (current) => {
     const id = nextTaskId(current.lanes[lane.id]!, "code");
@@ -65,6 +70,7 @@ function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args
       slot: parallel ? undefined : lane.slot,
       startSha,
       status: waiting ? "waiting" : "running",
+      plan: waiting?.plan,
       after: waiting?.after,
       // Who takes it, kept for when it starts: the call that asked for it is long gone by then.
       opening: waiting && { role: waiting.role },
@@ -73,8 +79,30 @@ function recordTask(desk: DeskServices, project: Project, lane: Lane, args: Args
       silent: 0,
     };
     current.tasks[id] = task;
+    // Marked where it is recorded running, so a round cannot take it for one a stop left half started.
+    if (!waiting) desk.ctx.seating.add(seatingKey(project, id));
     return { ...task };
   });
+}
+
+/** The role that takes a task, or why none can: a skill it lacks is refused here, since the Lead's context does not list them. */
+function workRoleFor(ctx: DeskContext, project: Project, args: Args): RoleSpec | string {
+  // Writing, not `work`: a reviewing role holds `work` too, and would be offered as a Peer that cannot write.
+  const asked = str(args.role);
+  const workRole = roleThatCan(ctx.kit, "write", asked || undefined);
+  if (!workRole) return namedOrNot(ctx.kit, "write", asked, "take a task");
+  const held = [...skillSources(ctx.kit, workRole, skillDirsFor(ctx.team(project), workRole.role)).keys()];
+  const unknown = strs(args.skills).filter((name) => !held.includes(name));
+  if (unknown.length === 0) return workRole;
+  return held.length === 0 ? `This kit gives ${workRole.label}s no skills, so ${unknown.join(", ")} cannot be opened.` : `${workRole.label}s have no skill called ${unknown.join(", ")}. They have: ${held.sort().join(", ")}.`;
+}
+
+/** A lane's first task with no plan: the plan check records it in shadow, and refuses it when on. */
+function unplanned(ctx: DeskContext, project: Project, ledger: Ledger, lane: Lane, by: string): string | undefined {
+  const mode = ctx.team(project).checkpoints.plan;
+  if (mode === "off" || lane.plans || tasksOf(ledger, lane.id).some((task) => task.kind === "code")) return undefined;
+  keepRun(project, { checkpoint: "plan", mode, lane: lane.id, by, decision: "hold", findings: ["The lane's first task was started with no plan."] });
+  return mode === "on" ? "This project checks a lane's plan before its first task: lay the lane's tasks out with plan_tasks, then they start from it." : undefined;
 }
 
 export const startTask: Tool = async (desk, caller, args) => {
@@ -86,20 +114,14 @@ export const startTask: Tool = async (desk, caller, args) => {
   const ledger = loadLedger(project.state);
   const lane = laneOfLead(ledger, caller.id);
   if (!lane?.worktree) return no("You have no open lane.");
+  const refused = unplanned(ctx, project, ledger, lane, caller.id);
+  if (refused) return no(refused);
   const pending = after.length > 0 ? taskWaitsFor(ledger, lane.id, after) : [];
   if (typeof pending === "string") return no(`${pending} Start this task without waiting for it.`);
   const problem = pending.length > 0 ? undefined : await taskPlacement(project, ledger, lane, owned, parallel);
   if (problem) return no(`${problem.why} ${problem.instead}`);
-  // Writing, not `work`: a reviewing role holds `work` too, and would be offered as a Peer that cannot write.
-  const asked = str(args.role);
-  const workRole = roleThatCan(ctx.kit, "write", asked || undefined);
-  if (!workRole) return no(namedOrNot(ctx.kit, "write", asked, "take a task"));
-  // Refused here: nothing in the Lead's context lists the skills, and a missing one is a dead line in the brief.
-  const held = [...skillSources(ctx.kit, workRole, skillDirsFor(ctx.team(project), workRole.role)).keys()];
-  const unknown = strs(args.skills).filter((name) => !held.includes(name));
-  if (unknown.length > 0) {
-    return no(held.length === 0 ? `This kit gives ${workRole.label}s no skills, so ${unknown.join(", ")} cannot be opened.` : `${workRole.label}s have no skill called ${unknown.join(", ")}. They have: ${held.sort().join(", ")}.`);
-  }
+  const workRole = workRoleFor(ctx, project, args);
+  if (typeof workRole === "string") return no(workRole);
   if (pending.length > 0) {
     const task = await recordTask(desk, project, lane, args, parallel, undefined, { after, role: workRole.role });
     ctx.event(project, { kind: "task.waiting", task: task.id, after });
@@ -109,6 +131,61 @@ export const startTask: Tool = async (desk, caller, args) => {
   const started = await startPeer(desk, project, lane, task, { role: workRole.role, parent: caller.id, failed: "cut" });
   if (typeof started === "string") return no(started);
   return ok(`Started ${task.id} ${started.where} with Peer ${started.peer}. Its hand-back arrives as mail; there is nothing to wait for in this turn.`);
+};
+
+/** Records a lane's tasks at once, each waiting for what it names, and starts what can start; the plan check runs first. */
+export const planTasks: Tool = async (desk, caller, args) => {
+  const { ctx } = desk;
+  const { project } = caller;
+  const ledger = loadLedger(project.state);
+  const lane = laneOfLead(ledger, caller.id);
+  if (!lane?.worktree) return no("You have no open lane.");
+  const plan = readPlan(ledger, lane, args.tasks as Args[]);
+  if (typeof plan === "string") return no(plan);
+  const roles = new Map<string, string>();
+  for (const task of plan) {
+    const role = workRoleFor(ctx, project, task.args);
+    if (typeof role === "string") return no(`${task.key}: ${role}`);
+    roles.set(task.key, role.role);
+  }
+  const checks = ctx.team(project).checkpoints;
+  const mode = checks.plan;
+  const findings = mode === "off" ? [] : planFindings(ledger, lane, plan, serialPaths(await trackedFiles(lane.worktree), loadConfig(project.state).serialOnly));
+  const signals = mode === "off" || findings.length > 0 ? [] : riskSignals(plan, checks.risk);
+  const asks = signals.length > 0 || (mode !== "off" && findings.length === 0 && checks.approve === "every");
+  if (mode !== "off") keepRun(project, { checkpoint: "plan", mode, lane: lane.id, by: caller.id, decision: findings.length > 0 ? "hold" : asks ? "ask" : "pass", findings: [...findings, ...signals] });
+  const found = findings.map((finding) => `- ${finding}`).join("\n");
+  if (mode === "on" && findings.length > 0) return no(`The plan was not taken: this project checks plans, and the check found\n${found}\nChange what it names and send the whole plan again.`);
+  const number = (lane.plans ?? 0) + 1;
+  const ids = new Map<string, string>();
+  for (const task of plan) {
+    const after = task.after.map((id) => ids.get(id) ?? id);
+    const recorded = await recordTask(desk, project, lane, task.args, task.parallel, undefined, { after, role: roles.get(task.key)!, plan: number });
+    ids.set(task.key, recorded.id);
+  }
+  // Held until a person approves it only when the check is on; in shadow the log says it would have been.
+  const held = mode === "on" && asks;
+  const reason = signals.length > 0 ? signals.join(" ") : "this project approves every plan before it runs.";
+  await ctx.ledger(project, (current) => {
+    const entry = current.lanes[lane.id];
+    if (!entry) return;
+    entry.plans = number;
+    if (held) entry.approval = { plan: number, by: checks.approver, since: Date.now(), signals };
+  });
+  ctx.event(project, { kind: "plan.recorded", lane: lane.id, plan: number, tasks: [...ids.values()], findings: findings.length, held });
+  if (held) {
+    await ctx.post(await desk.roster.supervisorFor(project, lane.opener), `planheld:${lane.id}:${number}`, letters.planHeld(lane, number, reason, checks.approver === "human"), project);
+    return ok(`The plan is recorded as ${[...ids.values()].join(", ")} and waits for the owner's approval, because ${signals.length > 0 ? signals.join(" ") : reason} Nothing of it starts until then; APPROVED or SENT BACK arrives as mail.`);
+  }
+  await startWaiting(desk, project, true);
+  const now = loadLedger(project.state).tasks;
+  const lines = plan.map((task) => {
+    const entry = now[ids.get(task.key)!]!;
+    const state = entry.status === "waiting" ? `waits for ${entry.after!.join(", ") || "the lane's copy"}${entry.held ? ` (${clip(entry.held.why, 200)})` : ""}` : `${entry.status}, Peer ${entry.peer}`;
+    return `- ${task.key} is ${entry.id} ${entry.title}: ${state}`;
+  });
+  const evidence = findings.length > 0 ? `\n\nThe plan check found, as evidence and not a refusal:\n${found}` : "";
+  return ok(`The plan is recorded; each task starts by itself once what it waits for is accepted, and hand-backs arrive as mail.\n${lines.join("\n")}${evidence}`);
 };
 
 /** A landed parallel task's copy and branch are gone, so its change is read from the merge, not `laneBranch...HEAD`. */
@@ -165,6 +242,7 @@ export const startReview: Tool = async ({ ctx, agents }, caller, args) => {
       silent: 0,
     };
     current.tasks[id] = created;
+    ctx.seating.add(seatingKey(project, id));
     return { ...created };
   });
   try {
@@ -187,6 +265,8 @@ export const startReview: Tool = async ({ ctx, agents }, caller, args) => {
       entry.status = "cut";
     });
     return no(`The reviewer could not start: ${errorText(error)}`);
+  } finally {
+    ctx.seating.delete(seatingKey(project, review.id));
   }
 };
 
@@ -269,8 +349,16 @@ export const rework: Tool = async ({ ctx, roster }, caller, args) => {
 
 /** Changes what a task asks while its Peer works, keeping what it asked before; the Peer is told at its next turn, not cut off. */
 export const amendTask: Tool = async ({ ctx }, caller, args) => {
-  const changes = given(args, ["goal"], ["acceptance", "outOfScope"]);
+  const changes = given(args, ["goal"], ["acceptance", "outOfScope", "owned"]);
   if (changes.goal === "" || changes.acceptance?.length === 0) return no("A task keeps a goal and at least one acceptance line; give what it asks now.");
+  if (changes.owned?.length === 0) return no("A task keeps at least one owned path; give every path it owns now.");
+  const ledger = loadLedger(caller.project.state);
+  const current = laneTask(ledger, caller, str(args.task));
+  // Checked as a start is: a task beside others that takes more paths could take what another is writing. A waiting one is checked when it starts.
+  if (typeof current !== "string" && changes.owned && current.task.mode === "parallel" && current.task.status !== "waiting") {
+    const problem = await parallelProblem(caller.project, ledger, current.lane, changes.owned as string[], current.task.id);
+    if (problem) return no(`${problem.why} Leave those paths out of ${current.task.id}.`);
+  }
   const done = await ctx.ledger(caller.project, (ledger) => {
     const found = laneTask(ledger, caller, str(args.task));
     if (typeof found === "string") return found;
@@ -354,6 +442,12 @@ export const report: Tool = async ({ ctx, roster }, caller, args) => {
   const lane = laneOfLead(loadLedger(caller.project.state), caller.id);
   if (!lane) return no("You have no open lane.");
   const gate = args.ready === true ? await laneGate(ctx, caller.project, lane) : undefined;
+  await ctx.ledger(caller.project, (current) => {
+    const entry = current.lanes[lane.id];
+    if (!entry) return;
+    if (args.ready === true) entry.ready = { at: Date.now() };
+    else delete entry.ready;
+  });
   const to = await roster.supervisorFor(caller.project, lane.opener);
   const letter = letters.report(lane, summary, args.ready === true, strs(args.carried), gate);
   const posted = await ctx.post(to, `report:${lane.id}:${hash(summary)}`, letter, caller.project);

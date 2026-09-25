@@ -35,6 +35,13 @@ export type Lane = {
   after?: string[];
   opening?: { isolate?: boolean; role?: string };
   held?: { why: string; tried?: boolean };
+  plans?: number;
+  /** A plan held until a person approves it; its tasks start only then. */
+  approval?: { plan: number; by: "human" | "supervisor"; since: number; signals: string[] };
+  /** When its Lead last reported it ready; an amendment takes it away, since what it was ready against has changed. */
+  ready?: { at: number };
+  /** A landing held for the Human, for the lane branch at `head`; approved, it lands without being asked again while that holds. */
+  landApproval?: { since: number; head: string; signals: string[]; evidence: string[]; overGate: boolean; approved?: { at: number; note: string } };
   landed?: boolean;
   amended?: Amendment[];
   restoring?: Restoring;
@@ -68,6 +75,7 @@ export type Task = {
   openedAt: number;
   updatedAt: number;
   handback?: Handback;
+  plan?: number;
   after?: string[];
   opening?: { role: string };
   held?: { why: string; tried?: boolean };
@@ -260,16 +268,16 @@ export function activeTasks(ledger: Ledger, laneId: string): Task[] {
   return tasksOf(ledger, laneId).filter((task) => ACTIVE.includes(task.status));
 }
 
+/** Cut between words when a title runs past `max`, so a branch never ends in half a word. */
 export function slugify(text: string, max = 32): string {
-  return (
-    text
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/\p{M}/gu, "")
-      .replace(/đ/g, "d")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, max)
-      .replace(/-+$/g, "") || "work"
-  );
+  const whole = text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (whole.length <= max) return whole || "work";
+  const cut = whole.slice(0, max + 1);
+  return cut.includes("-") ? cut.slice(0, cut.lastIndexOf("-")) : cut.slice(0, max);
 }

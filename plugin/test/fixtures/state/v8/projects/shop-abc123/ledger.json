@@ -1,0 +1,155 @@
+{
+  "version": 8,
+  "seq": {
+    "lane": 1,
+    "ask": 1,
+    "slot": 1
+  },
+  "lanes": {
+    "L1": {
+      "id": "L1",
+      "title": "Checkout totals",
+      "outcome": "Totals include tax",
+      "acceptance": [
+        "tax shown",
+        "tax rounded half up"
+      ],
+      "outOfScope": [
+        "payments"
+      ],
+      "base": "fix/totals",
+      "branch": "fix/totals",
+      "onBranch": true,
+      "writeSet": [
+        "src/cart"
+      ],
+      "contracts": [],
+      "lead": "agent-lead-1",
+      "opener": "agent-sup-1",
+      "status": "closed",
+      "landed": true,
+      "amended": [
+        {
+          "at": 1790000020000,
+          "by": "agent-sup-1",
+          "why": "The Human wants tax rounded",
+          "was": {
+            "acceptance": [
+              "tax shown"
+            ]
+          }
+        }
+      ],
+      "openedAt": 1790000000000,
+      "tasks": 2,
+      "plans": 2,
+      "approval": {
+        "plan": 2,
+        "by": "human",
+        "since": 1790000300000,
+        "signals": [
+          "MIGRATE owns db/migrations/002.sql, which this project counts as risky."
+        ]
+      },
+      "landApproval": {
+        "since": 1790000000000,
+        "head": "0123456789abcdef0123456789abcdef01234567",
+        "signals": [
+          "db/migrations/002_cart.sql is a path this project counts as risky."
+        ],
+        "evidence": [
+          "3 commits; 4 files, 120 lines changed.",
+          "Gate: passed on the lane."
+        ],
+        "overGate": false
+      }
+    }
+  },
+  "tasks": {
+    "L1-T1": {
+      "id": "L1-T1",
+      "lane": "L1",
+      "kind": "code",
+      "mode": "lane",
+      "title": "Add tax",
+      "goal": "Totals include tax",
+      "acceptance": [
+        "tax shown"
+      ],
+      "owned": [
+        "src/cart"
+      ],
+      "outOfScope": [],
+      "peer": "agent-peer-1",
+      "status": "merged",
+      "openedAt": 1790000000000,
+      "updatedAt": 1790000100000,
+      "handback": {
+        "file": "handbacks/L1-T1-1790000050000.md",
+        "outcome": "done",
+        "summary": "Tax added",
+        "at": 1790000050000
+      },
+      "silent": 0
+    },
+    "L1-T2": {
+      "id": "L1-T2",
+      "lane": "L1",
+      "kind": "code",
+      "mode": "lane",
+      "title": "Show tax",
+      "goal": "The receipt shows the tax",
+      "acceptance": [
+        "tax line on the receipt"
+      ],
+      "owned": [
+        "src/receipt"
+      ],
+      "outOfScope": [],
+      "status": "cut",
+      "after": [
+        "L1-T1"
+      ],
+      "opening": {
+        "role": "peer"
+      },
+      "held": {
+        "why": "The Peer could not start: the daemon made no agent. It is tried again when a task is accepted or cut; cut it to drop it.",
+        "tried": true
+      },
+      "openedAt": 1790000010000,
+      "updatedAt": 1790000200000,
+      "silent": 0,
+      "plan": 1
+    }
+  },
+  "asks": {
+    "A1": {
+      "id": "A1",
+      "from": "agent-lead-1",
+      "fromRole": "lead",
+      "to": "supervisor",
+      "lane": "L1",
+      "kind": "question",
+      "text": "Round tax up?",
+      "status": "answered",
+      "openedAt": 1790000010000,
+      "reminders": 0,
+      "answer": "Round half up."
+    }
+  },
+  "agents": {
+    "agent-lead-1": {
+      "id": "agent-lead-1",
+      "role": "lead",
+      "lane": "L1"
+    },
+    "agent-peer-1": {
+      "id": "agent-peer-1",
+      "role": "peer",
+      "lane": "L1",
+      "task": "L1-T1"
+    }
+  },
+  "slots": {}
+}

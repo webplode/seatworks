@@ -1,7 +1,7 @@
 import type { Question, SensorSpec } from "../../../catalog/kit.ts";
 import type { Fact } from "../facts.ts";
 import { type Step, trailOf } from "../trail.ts";
-import { type Brief, type View, type ViewName, asked, viewsOf } from "./views.ts";
+import { type Brief, type Turn, type View, type ViewName, asked, viewsOf } from "./views.ts";
 import type { SeatWatch } from "../watches.ts";
 import { errorText } from "../../../core/errors.ts";
 import { Pacer } from "../pacer.ts";
@@ -114,13 +114,13 @@ export async function pinpoint(spec: SensorSpec, key: string, view: View, questi
 
 export type Sensing = { spec: SensorSpec; key: string; brief: Brief; rules: { exit?: RegExp; destructive?: RegExp } };
 
-export type Reading = { spec: SensorSpec; askedAt: number; turnId: string | null; running: boolean; assessment: Assessment; views: Partial<Record<ViewName, View>>; questions: Record<string, Question>; facts: Fact[] };
+export type Reading = { spec: SensorSpec; askedAt: number; turnId: string | null; running: boolean; assessment: Assessment; views: Partial<Record<ViewName, View>>; turn: Turn; questions: Record<string, Question>; facts: Fact[] };
 
 export type Asked = { assessment: Assessment; questions: Record<string, Question> };
 
 /** One request per view, sent together; a reading, a replay and a case all ask this way so all three see the same. */
-export async function assessViews(spec: SensorSpec, key: string, views: Partial<Record<ViewName, View>>, session: string, fetcher?: Fetch, halt?: AbortSignal): Promise<Asked | undefined> {
-  const questions = asked(spec.questions, views);
+export async function assessViews(spec: SensorSpec, key: string, views: Partial<Record<ViewName, View>>, turn: Turn, session: string, fetcher?: Fetch, halt?: AbortSignal): Promise<Asked | undefined> {
+  const questions = asked(spec.questions, views, turn);
   const groups = new Map<ViewName, Record<string, Question>>();
   for (const [name, question] of Object.entries(questions)) groups.set(question.view, { ...groups.get(question.view), [name]: question });
   if (groups.size === 0) return undefined;
@@ -182,15 +182,17 @@ export class Assessor {
     const askedAt = Date.now();
     const { turnId, running } = watch;
     const facts = [...watch.noted];
-    const views = viewsOf(trailOf(watch.window, !running, sensing.rules), sensing.brief, sensing.spec.stateChars);
+    const trail = trailOf(watch.window, !running, sensing.rules);
+    const views = viewsOf(trail, sensing.brief, sensing.spec.stateChars);
+    const turn = { can: sensing.brief.can, from: trail.from };
     let asking: Asked | undefined;
     try {
-      asking = await assessViews(sensing.spec, sensing.key, views, watch.seat.id, this.deps.fetcher, pacer.halt.signal);
+      asking = await assessViews(sensing.spec, sensing.key, views, turn, watch.seat.id, this.deps.fetcher, pacer.halt.signal);
     } catch (error) {
       if (this.pacers.get(watch.seat.id) === pacer) this.deps.failed(watch, error instanceof SensorError ? error : new SensorError(errorText(error)));
       return;
     }
-    if (asking && this.pacers.get(watch.seat.id) === pacer) this.deps.done(watch, { spec: sensing.spec, askedAt, turnId, running, assessment: asking.assessment, views, questions: asking.questions, facts });
+    if (asking && this.pacers.get(watch.seat.id) === pacer) this.deps.done(watch, { spec: sensing.spec, askedAt, turnId, running, assessment: asking.assessment, views, turn, questions: asking.questions, facts });
   }
 
   /** The step a question that opened an incident was about, and how sure the sensor is; undefined when it cannot say. */

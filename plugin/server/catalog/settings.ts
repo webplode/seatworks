@@ -77,7 +77,24 @@ const FlowChoice = z.strictObject({
   everySeconds: z.number().int().min(2).max(120).optional(),
 });
 
+export const CHECKPOINT_MODES = ["off", "shadow", "on"] as const;
+const CheckpointsChoice = z.strictObject({
+  plan: z.enum(CHECKPOINT_MODES).optional(),
+  approve: z.enum(["risky", "every"]).optional(),
+  approver: z.enum(["human", "supervisor"]).optional(),
+  risk: Pattern.optional(),
+  land: z.enum(CHECKPOINT_MODES).optional(),
+  landApprove: z.enum(["risky", "every"]).optional(),
+  landLines: z.number().int().min(1).optional(),
+});
+
+const CriticChoice = z.strictObject({
+  by: z.enum(["seat", "off"]).optional(),
+});
+
 const shared = {
+  checkpoints: CheckpointsChoice.optional(),
+  critic: CriticChoice.optional(),
   roles: z.record(z.string(), RoleChoice).optional(),
   mcp: z.record(z.string(), McpChoice).optional(),
   rules: z.string().optional(),

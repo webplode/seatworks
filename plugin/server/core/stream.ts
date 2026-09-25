@@ -19,7 +19,7 @@ export type Page = {
 
 export type TimelineHandle = {
   subscribe(handler: (message: StreamMessage) => void): (() => void) & { readonly ready: Promise<void> };
-  refetch(options: { direction: "tail" | "after"; cursor?: Cursor; limit?: number; projection: "canonical" }): Promise<Page>;
+  refetch(options: { direction: "tail" | "after"; cursor?: Cursor; limit?: number; projection: "canonical" | "projected" }): Promise<Page>;
 };
 
 export type FollowOptions = { readyMs?: number; log?: (line: string, error?: unknown) => void; archived?: () => Promise<boolean> };

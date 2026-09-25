@@ -129,6 +129,22 @@
         ]
       },
       "hidesWords": []
+    },
+    {
+      "role": "critic",
+      "label": "Critic",
+      "description": "Reads a new lane against what the Human actually wrote, once, and tells the Supervisor where they may not agree; it sees none of the Supervisor's reasoning and cannot touch the work",
+      "follows": "peer",
+      "can": [
+        "critique"
+      ],
+      "tools": "critic",
+      "prompt": "prompts/CRITIC.md",
+      "skills": null,
+      "paseoTools": {
+        "enabled": false
+      },
+      "hidesWords": []
     }
   ]
 }

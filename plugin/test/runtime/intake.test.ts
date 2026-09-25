@@ -549,3 +549,70 @@ test("an idle Lead is flagged to its Supervisor, unless it reported its lane rea
   assert.doesNotMatch(told, /LANE IDLE L2/, "ready for the Human is not stalled");
   h.runtime.dispose();
 });
+
+test("a project is not detached while a seat still works in it, since that seat would put it back on record", async () => {
+  const h = harness("outbox-detach-live.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.tick(Date.now());
+  const refused = (await h.runtime.control.removeProject(h.project.slug)) as { error?: string };
+  assert.match(refused.error ?? "", new RegExp(`1 seat is still working in it \\(${sup}\\): archive it first`));
+  h.agents.get(sup)!.archivedAt = new Date().toISOString();
+  assert.deepEqual(await h.runtime.control.removeProject(h.project.slug), { removed: h.project.slug });
+  h.runtime.dispose();
+});
+
+test("a task left running with no Peer by a stop starts again if it waited, and is cut with its Lead told if not", async () => {
+  const { h, lane } = await laneWithPeer("outbox-half-started.json");
+  const ledger = h.ledger();
+  const base = { lane: "L1", kind: "code" as const, mode: "lane" as const, goal: "g", acceptance: ["a"], owned: ["b.txt"], outOfScope: [], branch: lane.branch, worktree: lane.worktree, status: "running" as const, openedAt: Date.now(), updatedAt: Date.now(), silent: 0 };
+  ledger.tasks["L1-T1"]!.status = "merged";
+  ledger.tasks["L1-T2"] = { ...base, id: "L1-T2", title: "Waited", opening: { role: "peer" }, after: ["L1-T1"] };
+  ledger.tasks["L1-T3"] = { ...base, id: "L1-T3", title: "Straight" };
+  ledger.lanes.L1!.tasks = 3;
+  saveLedger(h.project.state, ledger);
+  await h.tick(Date.now());
+  const after = h.ledger().tasks;
+  assert.equal(after["L1-T2"]!.status, "running");
+  assert.ok(after["L1-T2"]!.peer, "a task that waited goes back to waiting and starts again");
+  assert.equal(after["L1-T3"]!.status, "cut");
+  await h.idle(lane.lead!);
+  assert.match(h.agents.get(lane.lead!)!.sent.join("\n"), /NOT STARTED L1-T3 \(Straight\): the desk stopped while its Peer was being started, so it is cut\. Start it again if you still want it/);
+  h.runtime.dispose();
+});
+
+test("a task whose Peer Paseo had started before a stop is taken on, not started twice", async () => {
+  const { h, lane } = await laneWithPeer("outbox-half-seated.json");
+  const ledger = h.ledger();
+  ledger.tasks["L1-T1"]!.status = "merged";
+  ledger.tasks["L1-T2"] = { id: "L1-T2", title: "Seated", lane: "L1", kind: "code", mode: "lane", goal: "g", acceptance: ["a"], owned: ["b.txt"], outOfScope: [], branch: lane.branch, worktree: lane.worktree, status: "running", opening: { role: "peer" }, openedAt: Date.now(), updatedAt: Date.now(), silent: 0 };
+  ledger.lanes.L1!.tasks = 2;
+  saveLedger(h.project.state, ledger);
+  const already = h.add("sw2-peer-claude/claude-opus-5", lane.worktree!, "L1-T2 Seated", "running", "brief", { "seatworks.project": h.project.slug, "seatworks.lane": "L1", "seatworks.task": "L1-T2", "seatworks.role": "peer" });
+  const seats = h.agents.size;
+  await h.tick(Date.now());
+  assert.equal(h.ledger().tasks["L1-T2"]!.peer, already);
+  assert.equal(h.agents.size, seats, "no second Peer");
+  h.runtime.dispose();
+});
+
+test("a round while a task's Peer is being started leaves it to start, rather than taking it for one a stop left", async () => {
+  const { h, lane } = await laneWithPeer("outbox-task-race.json");
+  h.agents.get(h.ledger().tasks["L1-T1"]!.peer!)!.status = "idle";
+  // The round runs while Paseo is still creating the Peer: the task is recorded running and has no Peer yet.
+  const workspaces = (h.paseo as unknown as { workspaces: { ref(id: string): { agents: { create(options: unknown): Promise<unknown> } } } }).workspaces;
+  const ref = workspaces.ref.bind(workspaces);
+  workspaces.ref = (id) => {
+    const found = ref(id);
+    const create = found.agents.create.bind(found.agents);
+    found.agents.create = async (options) => {
+      await h.tick(Date.now());
+      return create(options);
+    };
+    return found;
+  };
+  const started = await h.call(lane.lead!, "lead", "start_task", { title: "Beside", goal: "g", acceptance: ["a"], owned: ["c.txt"], outOfScope: ["the rest"], parallel: true });
+  assert.equal(started.ok, true, started.text);
+  const task = h.ledger().tasks["L1-T2"]!;
+  assert.deepEqual([task.status, Boolean(task.peer)], ["running", true]);
+  h.runtime.dispose();
+});

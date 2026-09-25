@@ -1,0 +1,4 @@
+The files Seatworks kept in state format 9, as a machine with one project held them. Never edited:
+a new format gets its own folder, and state.test.ts carries every folder up to the current one.
+Format 9 adds who reads a new lane against the Human's words: this project turned its Critic off.
+Machine files carry the fork's additions as in v4 (queued outbox letters, launch-profile visibility, supervision, dependencies, the sensor budget).

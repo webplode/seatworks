@@ -172,9 +172,14 @@ export async function taskPlacement(project: Project, ledger: Ledger, lane: Lane
       ? { why: `${holder.id} has handed back and is waiting on you, and it still holds the lane's working copy — rework would wake its Peer in there.`, instead: "Accept or cut it first, or set parallel only for owned paths independent of it." }
       : { why: `${holder.id} is still writing in the lane's working copy, and it holds one writer at a time.`, instead: `Pass after ${holder.id} to start this once it is accepted, or set parallel only for owned paths independent of it.` };
   }
+  return parallelProblem(project, ledger, lane, owned);
+}
+
+/** What a parallel task owning these paths would collide with: a path one writer at a time may write, or a task running beside it. */
+export async function parallelProblem(project: Project, ledger: Ledger, lane: Lane, owned: string[], self?: string): Promise<Refusal | undefined> {
   const serial = serialHits(owned, serialPaths(await trackedFiles(lane.worktree ?? project.root), loadConfig(project.state).serialOnly));
   if (serial.length > 0) return { why: `A parallel task can't own ${serial.join(", ")}.`, instead: "Run it in the lane's working copy instead." };
-  for (const task of activeTasks(ledger, lane.id).filter((entry) => entry.kind === "code")) {
+  for (const task of activeTasks(ledger, lane.id).filter((entry) => entry.kind === "code" && entry.id !== self)) {
     const clash = firstOverlap(owned, task.owned);
     if (clash) return { why: `The owned paths overlap ${task.id} at ${clash}.`, instead: `Pass after ${task.id} instead of running it in parallel.` };
   }
@@ -218,5 +223,7 @@ export async function startPeer(desk: DeskServices, project: Project, lane: Lane
     });
     if (parallel) await slots.release(project, taken, task.branch, lane.branch);
     return `The Peer could not start: ${errorText(error)}`;
+  } finally {
+    ctx.seating.delete(seatingKey(project, task.id));
   }
 }

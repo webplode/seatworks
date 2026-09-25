@@ -75,10 +75,10 @@ still need separate live coverage. The earlier fixture UI checks and simulated o
 are offline evidence only. Live evidence is retained outside the repository under
 `~/.local/share/seatworks-e2e/20260923-live/`.
 
-Since then the fork has moved to 2.5.7 on state format 4. It adds a workspace composer home with team
+Since then the fork has moved to 2.6.0 on state format 10. It adds a workspace composer home with team
 presets, Merge/Finish, Commit and sign-in cards, keychain sign-in for Claude seats, Codex Peers that can
 commit in lane copies, and no Devin CLI. Human-facing text is plain: the chat shows the team's
-messages and tool calls in everyday words, and a failing model becomes one card with a way out. It has also merged upstream `v2` up to `50c3a2f`. The
+messages and tool calls in everyday words, and a failing model becomes one card with a way out. It has also merged upstream `v2` up to `1975453`, with its plan and land checkpoints, squash landing and the Critic. The
 [fork record](FORK.md) lists every addition, how each upstream sync was folded in, and what is
 still open.
 

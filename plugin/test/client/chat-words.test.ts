@@ -21,7 +21,11 @@ test("letters the desk writes today all have a plain line, and batches keep one 
   const texts = [letters.handback(task, "/tmp/h.md", "done", "peer-1"), letters.askTo(ask, "the Peer"), letters.answered(ask), letters.message("the Supervisor", "Carry on."),
     letters.mergeFailed(task, "dirty tree", ""), letters.conflict(task, ["a.js"], "lane/l1"), letters.rework("Fix it"), letters.cut("Not needed"), letters.nudge("done"),
     letters.failed("the Peer", "Model not found"), letters.laneIdle(lane, 20, ""), letters.report(lane, "ok", false, undefined), letters.canLand(lane), letters.leadGone(lane),
-    letters.takeover(lane, "lead-0"), letters.halfOpen(lane), letters.waited(lane, "it opens once L0 lands"), letters.reminder(ask, 10), letters.escalated(ask, 10, "L1")];
+    letters.takeover(lane, "lead-0"), letters.halfOpen(lane), letters.waited(lane, "it opens once L0 lands"), letters.reminder(ask, 10), letters.escalated(ask, 10, "L1"),
+    letters.planHeld(lane, 1, "it has 3 tasks.", true), letters.planHeld(lane, 1, "it has 3 tasks.", false), letters.planApproved(lane, 1, ""), letters.planSentBack(lane, 1, "Split T2", ["L1-T2"]),
+    letters.landHeld(lane, "it touches package.json."), letters.landSentBack(lane, "Add a test"), ...(["landed", "blocked", "again", "changed", "sent back"] as const).map((how) => letters.landDecided(lane, how, "text")),
+    letters.checkDigest("land", "ready", ["It held 3 of 10."]), letters.notStarted(task), letters.critique(lane, [{ kind: "missing", human: "add greet", lane: "", why: "No test.", question: "Test it?" }]),
+    letters.critiqueBrief("L1", ["Add greet"], undefined, "lane text")];
   for (const text of texts) assert.ok(plainLetter(`[Delivery 1]\n[Project p]\n${text}`), `no plain line for: ${text.split("\n")[0]}`);
   const batch = letters.mailbox([`[Delivery 1]\n${letters.canLand(lane)}`, letters.failed("the Peer", "Model not found")], [ask]);
   assert.deepEqual(plainLetter(batch)!.lines, ['Work can be merged now: "Add greet".', 'An agent stopped with an error: "Model not found"', "1 question is still waiting for an answer."]);
@@ -43,5 +47,6 @@ test("the team's own tools read as plain steps; other tools are left alone", () 
   assert.equal(plainStep("mcp__team__status", "completed", { project: "p" })!.label, "Checked on the team");
   assert.equal(plainStep("mcp__team__close_lane", "running", { land: true })!.label, "Merging finished work");
   assert.equal(plainStep("mcp__team__answer", "failed", {})!.label, "Answering a teammate: didn't go through");
+  assert.equal(plainStep("mcp__team__plan_tasks", "completed", {})!.label, "Laid out the plan");
   assert.equal(plainStep("Shell", "completed", {}), null);
 });

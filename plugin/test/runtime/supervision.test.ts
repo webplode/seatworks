@@ -44,7 +44,7 @@ function fixture(activity = async (_id: string, _limit: number): Promise<unknown
   ]);
   const sent: { to: string; text: string }[] = [];
   const seats: Seats = { async open() { return [...agents.values()]; }, async look(id) { const a = agents.get(id); if (!a) throw new Error("gone"); return { ...a, projectId: `p${paths.indexOf(a.cwd)}` }; },
-    async send(to, text) { sent.push({ to, text }); }, async respond() { throw new Error("Corrections must not answer permissions."); }, async archive() {}, watch() { throw new Error("unused"); } };
+    async send(to, text) { sent.push({ to, text }); }, async typed() { return []; }, async respond() { throw new Error("Corrections must not answer permissions."); }, async archive() {}, watch() { throw new Error("unused"); } };
   const outbox = new Outbox(join(root, "outbox.json"), (_to, items) => items.map((i) => i.text).join("\n"), seats, undefined, undefined,
     (letter, seat) => letter.guard ? store.validate(letter.guard, seat) : undefined);
   const control = new SupervisionControl({ store, seats, outbox, activity, kit: loadKit(fileURLToPath(new URL("../../", import.meta.url))),

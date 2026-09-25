@@ -129,7 +129,7 @@ test("a question alone raises on two readings in a running turn or one at its en
   assert.ok(weigh({ answers, model: "m" }, questions, noted, { unclear, ended: false, before: answers }).findings.some((finding) => finding.kind === "missing_mechanism"));
   assert.ok(weigh({ answers, model: "m" }, questions, noted, { unclear, ended: true }).findings.some((finding) => finding.kind === "missing_mechanism"), "a turn that has ended gets no second reading, so one is enough");
   const close = weigh({ answers: { unsafe_action: 0.6, worker_stuck: 0.6 }, model: "m" }, questions, noted, { unclear, ended: false });
-  assert.deepEqual(close.findings.map((finding) => [finding.kind, finding.level]), [["unsafe_action", "attend"]], "an unclear answer on an irreversible act is never let pass");
+  assert.deepEqual(close.findings, [], "an unclear answer opens nothing, on an irreversible act too: the sensor cannot tell");
   assert.equal(close.verdicts[0]!.says, "unclear");
   assert.equal(weigh({ answers: { worker_stuck: 0.5 }, model: "m" }, questions, noted, { unclear, ended: false }).verdicts[0]!.says, "unclear", "the band's lower edge is in the band");
   assert.equal(weigh({ answers: { worker_stuck: 0.2 }, model: "m" }, questions, noted, { unclear, ended: false }).verdicts[0]!.says, "vetoes");

@@ -36,6 +36,11 @@ function served(paseo?: unknown, folders?: (query: string) => Promise<string[]>)
   return { kit, runtime, names, call, bound };
 }
 
+/** A daemon with no seats at all, so detaching a project can see that nothing works in it. */
+function noSeats(runtime: unknown): void {
+  (runtime as { api: unknown }).api = { agents: { list: async () => ({ entries: [], pageInfo: { hasMore: false } }) } };
+}
+
 test("explicit model discovery registers and reloads role providers before querying a fresh daemon", async () => {
   mkdirSync(join(HOME, ".paseo"), { recursive: true });
   writeFileSync(join(HOME, ".paseo", "config.json"), "{}");
@@ -59,10 +64,12 @@ test("the plugin serves the catalog, settings, projects, team and status over RP
     "seatworks.doctor.run",
     "seatworks.flow.read",
     "seatworks.git.identity",
+    "seatworks.land.decide",
     "seatworks.mcp.parse",
     "seatworks.models.refresh",
     "seatworks.paths.find",
     "seatworks.paths.list",
+    "seatworks.plan.decide",
     "seatworks.projects.add",
     "seatworks.projects.candidates",
     "seatworks.projects.list",
@@ -159,7 +166,8 @@ test("a project can be registered by its path before any agent has run in it", a
 });
 
 test("attaching a project is undone by detaching it, unless work is still running in it", async () => {
-  const { call } = served();
+  const { call, runtime } = served();
+  noSeats(runtime);
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sw2-rpc-attach-")));
   execFileSync("git", ["init", "-q", root]);
   const added = await call("seatworks.projects.add", { root });
@@ -266,6 +274,7 @@ test("a folder that is there and cannot be read is a refusal, not a rejected cal
 
 test("a project detached in this session can be attached again, and the desk's half of a second setup keeps the layer", async () => {
   const { call, runtime } = served();
+  noSeats(runtime);
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sw2-again-")));
   const added = await call("seatworks.projects.add", { root });
   assert.equal(typeof added.slug, "string");
@@ -429,6 +438,7 @@ test("the word that stands for the key is never itself written, and a refused or
 
 test("detaching a project also takes it out of the Supervisor's scope", async () => {
   const { call, runtime } = served();
+  noSeats(runtime);
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sw2-rpc-unbind-")));
   execFileSync("git", ["init", "-q", root]);
   const added = await call("seatworks.projects.add", { root });

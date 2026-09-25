@@ -21,11 +21,18 @@ export type Compose = (to: string, letters: Letter[]) => string | Promise<string
 export type Dropped = (letter: Letter, now: number) => void;
 /** Whether the seat's harness takes a text into a running turn rather than replacing the turn with it. */
 export type Steers = (seat: SeatLook) => boolean;
+/** Whether the seat is waiting on a call to the desk: a text steered in then is taken as the call being cut short. */
+export type Calling = (agentId: string) => boolean;
 
 const KEEP_MS = 7 * 24 * 3_600_000;
 const DUPLICATE_MS = 30 * 60_000;
 const GRACE_MS = 10 * 60_000;
 const SETTLE_MS = 60_000;
+
+/** A letter's kind, the first part of its key; the desk puts the project's slug (name and six hex characters) before a project's letters. */
+export function kindOf(key: string): string {
+  return key.replace(/^[^:]*-[0-9a-f]{6}:/, "").split(":")[0]!;
+}
 
 export function busy(status: string | null | undefined): boolean {
   return status === "running" || status === "initializing";
@@ -37,6 +44,7 @@ export class Outbox {
   private readonly seats: Seats;
   private readonly dropped: Dropped | undefined;
   private readonly steers: Steers;
+  private readonly calling: Calling;
   private readonly awaiting = new Map<string, number>();
   private readonly started = new Map<string, number>();
   private recovered = false;
@@ -48,14 +56,14 @@ export class Outbox {
   }
   private readonly lanes = new Map<string, Promise<unknown>>();
 
-
-  constructor(file: string, compose: Compose, seats: Seats, dropped?: Dropped, steers: Steers = () => false, validate: Validate = () => undefined) {
+  constructor(file: string, compose: Compose, seats: Seats, dropped?: Dropped, steers: Steers = () => false, validate: Validate = () => undefined, calling: Calling = () => false) {
     this.file = file;
     this.compose = compose;
     this.seats = seats;
     this.dropped = dropped;
     this.steers = steers;
     this.validate = validate;
+    this.calling = calling;
   }
 
   records(): Letter[] {
@@ -158,7 +166,7 @@ export class Outbox {
       const waiting = since !== undefined && Date.now() - since < GRACE_MS;
       // A turn this desk never saw start — one running across a restart — is not known to be settled.
       const began = this.started.get(to);
-      const steer = seat.status === "running" && began !== undefined && Date.now() - began >= SETTLE_MS && this.steers(seat);
+      const steer = seat.status === "running" && began !== undefined && Date.now() - began >= SETTLE_MS && this.steers(seat) && !this.calling(to);
       if (!steer && (busy(seat.status) || waiting)) return new Set<string>();
       const text = await this.compose(to, mine);
       const fresh = await this.seats.look(to).catch(() => undefined);
@@ -169,7 +177,7 @@ export class Outbox {
       const ids = new Set(mine.map((letter) => letter.id));
       this.update(ids, (letter) => { letter.state = "sending"; });
       try {
-        await this.seats.send(to, text, steer);
+        await this.seats.send(to, text, steer, [...new Set(mine.map((letter) => kindOf(letter.key)))]);
       } catch (error) {
         this.update(ids, (letter) => { letter.state = "unknown"; letter.detail = "SDK send failed without a provable delivery outcome. Inspect before retrying."; });
         return new Set<string>();

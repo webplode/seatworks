@@ -8,7 +8,7 @@ export const RECORD_KEEP_BYTES = 24 * 1024 * 1024;
 export const GATE_LOGS_PER_OWNER = 5;
 
 /** The newest roll stays text, because the retrospective greps a period that may straddle it. */
-export function appendRecord(state: string, name: "events" | "attention", line: string): void {
+export function appendRecord(state: string, name: "events" | "attention" | "checkpoints", line: string): void {
   const roll = { dir: state, current: `${name}.log`, prefix: `${name}.`, ext: ".log", rotateAt: RECORD_ROTATE_BYTES, keepBytes: RECORD_KEEP_BYTES, plain: 1 };
   appendRolling(roll, line).catch((error: unknown) => console.error(`seatworks-v2: packing a rolled ${name}.log failed:`, error));
 }

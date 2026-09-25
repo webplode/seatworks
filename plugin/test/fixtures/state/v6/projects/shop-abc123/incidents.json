@@ -1,0 +1,1 @@
+{ "next": 2, "items": { "I1": { "id": "I1", "seat": "agent-peer-1", "where": "L1-T1", "lane": "L1", "task": "L1-T1", "kind": "unverified_success", "level": "attend", "quote": "all tests pass", "facts": ["unverified"], "opened": 1790000000000, "last": 1790000000000, "count": 1, "open": false, "closed": 1790000100000 } } }

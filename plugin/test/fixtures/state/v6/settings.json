@@ -1,0 +1,17 @@
+{
+  "roles": {
+    "lead": {
+      "harness": "claude",
+      "model": "claude-opus-5",
+      "thinking": "medium"
+    }
+  },
+  "attention": {
+    "by": "seat"
+  },
+  "profiles": {
+    "disabled": [
+      "sw2-peer-devin"
+    ]
+  }
+}

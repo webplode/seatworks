@@ -27,10 +27,12 @@ type Fake = {
   archivedAt: string | null;
   updatedAt: string;
   sent: string[];
+  sentIds: string[];
   steered: string[];
   pending: Pending[];
   answered: { requestId: string; response: { behavior: string; updatedInput?: { answers?: Record<string, string> } } }[];
   prompt?: string;
+  promptId?: string;
   labels: Record<string, string>;
 };
 
@@ -58,8 +60,9 @@ function fakePaseo() {
       get pendingPermissions() { return agent?.pending ?? []; },
       async refresh() {},
       current() { return agent ? { id: agent.id, provider: agent.provider, cwd: agent.cwd, title: agent.title, workspaceId: agent.workspaceId } : null; },
-      async send(text: string, options?: { activeTurnBehavior?: string }) {
+      async send(text: string, options?: { activeTurnBehavior?: string; messageId?: string }) {
         agent?.sent.push(text);
+        if (options?.messageId) agent?.sentIds.push(options.messageId);
         if (options?.activeTurnBehavior === "steer") agent?.steered.push(text);
       },
       async respondToPermission({ requestId, response }: Fake["answered"][number]) {
@@ -73,7 +76,7 @@ function fakePaseo() {
   };
   const add = (provider: string, cwd: string, title: string, status = "idle", prompt?: string, labels: Record<string, string> = {}) => {
     const id = `agent-${++count}`;
-    agents.set(id, { id, provider, workspaceId: `workspace:${cwd}`, cwd, title, status, archivedAt: null, updatedAt: new Date().toISOString(), sent: [], steered: [], pending: [], answered: [], prompt, labels });
+    agents.set(id, { id, provider, workspaceId: `workspace:${cwd}`, cwd, title, status, archivedAt: null, updatedAt: new Date().toISOString(), sent: [], sentIds: [], steered: [], pending: [], answered: [], prompt, labels });
     return id;
   };
   const workspace = (id: string) => ({
@@ -84,8 +87,10 @@ function fakePaseo() {
       return path ? { id, projectId: projectOf(path).slug, workspaceDirectory: path, archivingAt: archivedWorkspaces.has(id) ? new Date().toISOString() : null } : null;
     },
     agents: {
-      async create(options: { config: { provider: string }; title: string; prompt: string; labels?: Record<string, string> }) {
-        return ref(add(options.config.provider, workspaces.get(id)!, options.title, "running", options.prompt, options.labels));
+      async create(options: { config: { provider: string }; title: string; prompt: string; clientMessageId?: string; labels?: Record<string, string> }) {
+        const made = add(options.config.provider, workspaces.get(id)!, options.title, "running", options.prompt, options.labels);
+        agents.get(made)!.promptId = options.clientMessageId;
+        return ref(made);
       },
     },
   });

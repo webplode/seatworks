@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Seats } from "../../server/core/ports.ts";
-import { Outbox } from "../../server/runtime/outbox.ts";
+import { Outbox, kindOf } from "../../server/runtime/outbox.ts";
 import { tempDir } from "../tempdir.ts";
 
-type FakeAgent = { status: string; pendingPermissions: { title?: string; name?: string }[]; archivedAt: string | null; sent: string[]; steered: string[] };
+type FakeAgent = { status: string; pendingPermissions: { title?: string; name?: string }[]; archivedAt: string | null; sent: string[]; steered: string[]; kinds: string[][] };
 
 function fakeSeats(agents: Record<string, FakeAgent>): Seats {
   return {
@@ -16,9 +16,13 @@ function fakeSeats(agents: Record<string, FakeAgent>): Seats {
       const agent = agents[id]!;
       return { id, status: agent.status, pendingPermissions: agent.pendingPermissions, archivedAt: agent.archivedAt };
     },
-    async send(id: string, text: string, steer?: boolean) {
+    async send(id: string, text: string, steer: boolean, kinds: string[]) {
       agents[id]!.sent.push(text);
+      agents[id]!.kinds.push(kinds);
       if (steer) agents[id]!.steered.push(text);
+    },
+    async typed() {
+      return [];
     },
     async respond() {},
     async archive() {},
@@ -28,7 +32,7 @@ function fakeSeats(agents: Record<string, FakeAgent>): Seats {
   };
 }
 
-const agent = (status: string): FakeAgent => ({ status, pendingPermissions: [], archivedAt: null, sent: [], steered: [] });
+const agent = (status: string): FakeAgent => ({ status, pendingPermissions: [], archivedAt: null, sent: [], steered: [], kinds: [] });
 
 const outboxOn = (agents: Record<string, FakeAgent>, compose: (to: string, list: { text: string }[]) => string, steers = false) =>
   new Outbox(join(tempDir(), "outbox.json"), compose, fakeSeats(agents), undefined, () => steers);
@@ -53,13 +57,15 @@ test("confirmed delivery deduplication survives a process restart", async () => 
 test("letters to a busy seat are held and go out together when its turn ends", async () => {
   const agents = { sup: agent("running") };
   const outbox = outboxOn(agents, (_to, list) => list.map((letter) => letter.text).join("|"));
-  assert.equal(await outbox.post({ to: "sup", key: "a", text: "first" }), "held");
-  assert.equal(await outbox.post({ to: "sup", key: "b", text: "second" }), "held");
+  assert.equal(await outbox.post({ to: "sup", key: "rework:L1-T1:1", text: "first" }), "held");
+  assert.equal(await outbox.post({ to: "sup", key: "amended:L1-T1:1", text: "second" }), "held");
+  assert.equal(await outbox.post({ to: "sup", key: "rework:L1-T1:2", text: "third" }), "held");
   agents.sup.status = "idle";
   outbox.turnEnded("sup");
   const sent = await outbox.pump("sup");
-  assert.equal(sent.size, 2);
-  assert.deepEqual(agents.sup.sent, ["first|second"]);
+  assert.equal(sent.size, 3);
+  assert.deepEqual(agents.sup.sent, ["first|second|third"]);
+  assert.deepEqual(agents.sup.kinds, [["rework", "amended"]], "each kind of letter in it named once");
   assert.deepEqual(outbox.pending("sup"), []);
 });
 
@@ -114,4 +120,10 @@ test("a harness that cannot take mail mid-turn, or a seat stopped on a permissio
   steering.turnStarted("asking", Date.now() - 2 * 60_000);
   assert.equal(await steering.post({ to: "asking", key: "a", text: "t" }), "held", "it has stopped until the permission is decided");
   assert.deepEqual([...agents.peer.sent, ...agents.asking.sent], []);
+});
+
+test("a letter's kind is read past the project a key starts with, so a slug's hyphen never cuts the id it is sent under", () => {
+  assert.equal(kindOf("notes-1249f7:answer:A1"), "answer");
+  assert.equal(kindOf("sw2-flow-repo-ic3dvz-c28a5c:idle:sw2-flow-repo-ic3dvz-c28a5c:L1:t"), "idle");
+  assert.equal(kindOf("binding:29"), "binding");
 });

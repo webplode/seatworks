@@ -7,7 +7,19 @@ import { paseoConfigPath } from "./paths.ts";
 import type { HostInventory } from "../../shared/supervision.ts";
 import type { PaseoApi, PendingPermission, PermissionResponse, SeatView } from "./paseo.ts";
 import type { SeatLook, SeatSpec, Seats, Workspace, Workspaces } from "./ports.ts";
+import { randomUUID } from "node:crypto";
 import { type TimelineHandle, follow } from "./stream.ts";
+
+/** The start of every message id the desk sends, which no person's client uses. */
+const DESK_MARK = "sw2-";
+
+const deskId = (kinds: string[]) => `${DESK_MARK}${kinds.join(".")}-${randomUUID()}`;
+
+/** Who a user message came from, by the id the desk gives every letter and every prompt it starts a seat with: the kinds of letter it carries, or a person. */
+export function sentBy(item: Record<string, unknown>): string[] {
+  const id = item.clientMessageId;
+  return typeof id === "string" && id.startsWith(DESK_MARK) ? id.slice(DESK_MARK.length).split("-")[0]!.split(".") : ["person"];
+}
 
 export type Bound = () => PaseoApi | undefined;
 
@@ -19,7 +31,7 @@ type Handle = {
   pendingPermissions?: PendingPermission[];
   refresh(): Promise<unknown>;
   current(): { id?: string; workspaceId?: string | null; labels?: Record<string, string>; provider?: string; cwd?: string | null; title?: string | null } | null | undefined;
-  send(text: string, options?: { activeTurnBehavior?: "steer" }): Promise<unknown>;
+  send(text: string, options?: { messageId?: string; activeTurnBehavior?: "steer" }): Promise<unknown>;
   respondToPermission(options: { requestId: string; response: PermissionResponse }): Promise<unknown>;
   archive(): Promise<unknown>;
   timeline: TimelineHandle;
@@ -81,9 +93,19 @@ export function seatsOn(bound: Bound): Seats {
       }
       return seat;
     },
-    async send(id: string, text: string, steer = false): Promise<void> {
-      // The daemon takes `activeTurnBehavior` though the SDK's type leaves it out.
-      await ref(id).send(text, steer ? { activeTurnBehavior: "steer" } : undefined);
+    async send(id: string, text: string, steer: boolean, kinds: string[]): Promise<void> {
+      // The daemon takes `activeTurnBehavior` though the SDK's type leaves it out; the id is how `typed` and `sentBy` know the desk sent it.
+      await ref(id).send(text, { messageId: deskId(kinds), ...(steer ? { activeTurnBehavior: "steer" } : {}) });
+    },
+    async typed(id: string): Promise<string[]> {
+      // The projected timeline holds one row per call, so a whole session fits.
+      const page = await ref(id).timeline.refetch({ direction: "tail", limit: 0, projection: "projected" });
+      return page.entries.flatMap(({ item }) => {
+        if (item.type === "user_message" && typeof item.text === "string") return sentBy(item)[0] === "person" ? [item.text] : [];
+        // What the person chose when a seat asked them is their word too.
+        const output = (item.detail as { output?: { output?: unknown } } | undefined)?.output?.output;
+        return item.type === "tool_call" && item.name === "AskUserQuestion" && item.status === "completed" && typeof output === "string" ? [output] : [];
+      });
     },
     async respond(id: string, requestId: string, response: PermissionResponse): Promise<void> {
       await ref(id).respondToPermission({ requestId, response });
@@ -237,6 +259,7 @@ export function workspacesOn(bound: Bound): Workspaces {
           parent: spec.parent,
           title: spec.title.slice(0, 60),
           prompt: spec.prompt,
+          clientMessageId: deskId(["brief"]),
           labels: spec.labels,
         })) as unknown as Handle;
       await handle.refresh();

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { gitCommonDir } from "../core/git.ts";
+import { LAND_AS, type LandAs, gitCommonDir } from "../core/git.ts";
 import { stateRoot } from "../core/paths.ts";
 import { SERIAL_ONLY } from "../core/scope.ts";
 import { readJson, writeJson } from "../core/store.ts";
@@ -10,7 +10,7 @@ export type Project = { root: string; slug: string; state: string };
 
 export type GateOn = "lane" | "task";
 
-export type ProjectConfig = { base?: string; gate?: string; gateTimeoutMinutes: number; gateOn: GateOn; serialOnly: string[] };
+export type ProjectConfig = { base?: string; gate?: string; gateTimeoutMinutes: number; gateOn: GateOn; serialOnly: string[]; landAs: LandAs };
 
 const cache = new Map<string, Project>();
 
@@ -101,6 +101,7 @@ export function loadConfig(state: string): ProjectConfig {
     gateTimeoutMinutes: Number.isFinite(minutes) && minutes > 0 ? minutes : 30,
     gateOn: stored.gateOn === "task" ? "task" : "lane",
     serialOnly: Array.isArray(stored.serialOnly) ? stored.serialOnly.map(String) : SERIAL_ONLY,
+    landAs: LAND_AS.find((as) => as === stored.landAs) ?? "squash",
   };
 }
 

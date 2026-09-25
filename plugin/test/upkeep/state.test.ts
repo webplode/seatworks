@@ -76,6 +76,57 @@ test("a task that waited, and why it was held, read back from format 4, and a ta
   assert.deepEqual([before.after, before.opening, before.held], [undefined, undefined, undefined]);
 });
 
+test("a project's plan check and a lane's count of plans read back from format 5, and a project from before chose neither", () => {
+  const { root, shop } = machineAt("v5");
+  upgradeState(root, undefined, undefined, NOW);
+  assert.equal(loadLedger(shop).lanes.L1!.plans, 1);
+  assert.deepEqual(readLayer(join(shop, "settings.json"), ProjectLayerSchema), { status: "ready", values: { rules: "Answer in English.", checkpoints: { plan: "on" } }, revision: readLayer(join(shop, "settings.json"), ProjectLayerSchema).revision });
+  assert.equal(carriedTo("v4").lanes.L1!.plans, undefined);
+});
+
+test("a plan held for the Human, who approves plans, and which plan a task came from read back from format 6", () => {
+  const { root, shop } = machineAt("v6");
+  upgradeState(root, undefined, undefined, NOW);
+  const ledger = loadLedger(shop);
+  assert.deepEqual([ledger.lanes.L1!.approval?.plan, ledger.lanes.L1!.approval?.by, ledger.tasks["L1-T2"]!.plan], [2, "human", 1]);
+  const layer = readLayer(join(shop, "settings.json"), ProjectLayerSchema);
+  assert.deepEqual(layer.status === "ready" ? layer.values.checkpoints : undefined, { plan: "on", approve: "risky", approver: "human" });
+  assert.equal(carriedTo("v5").lanes.L1!.approval, undefined);
+});
+
+test("how a project's lanes land reads back from format 7, and a project from before lands squashed", () => {
+  const { root, shop } = machineAt("v7");
+  upgradeState(root, undefined, undefined, NOW);
+  assert.equal(loadConfig(shop).landAs, "merge");
+  const before = machineAt("v6");
+  upgradeState(before.root, undefined, undefined, NOW);
+  assert.equal(loadConfig(before.shop).landAs, "squash");
+});
+
+test("a landing held for the Human and a project's land check read back from format 8", () => {
+  const { root, shop } = machineAt("v8");
+  upgradeState(root, undefined, undefined, NOW);
+  assert.deepEqual(loadLedger(shop).lanes.L1!.landApproval?.signals, ["db/migrations/002_cart.sql is a path this project counts as risky."]);
+  const layer = readLayer(join(shop, "settings.json"), ProjectLayerSchema);
+  const checks = layer.status === "ready" ? layer.values.checkpoints : undefined;
+  assert.deepEqual([checks?.land, checks?.landApprove, checks?.landLines], ["on", "risky", 800]);
+  assert.equal(carriedTo("v7").lanes.L1!.landApproval, undefined);
+});
+
+test("a project's Critic setting reads back from format 9", () => {
+  const { root, shop } = machineAt("v9");
+  upgradeState(root, undefined, undefined, NOW);
+  const layer = readLayer(join(shop, "settings.json"), ProjectLayerSchema);
+  assert.deepEqual(layer.status === "ready" ? layer.values.critic : undefined, { by: "off" });
+});
+
+test("when a lane was last reported ready reads back from format 10", () => {
+  const { root, shop } = machineAt("v10");
+  upgradeState(root, undefined, undefined, NOW);
+  assert.deepEqual(loadLedger(shop).lanes.L1!.ready, { at: 1790000000000 });
+  assert.equal(carriedTo("v9").lanes.L1!.ready, undefined);
+});
+
 test("a step carries every project and the machine, keeps a copy of the files first, and runs once", () => {
   const { root, shop } = machineAt("v1");
   const steps = [

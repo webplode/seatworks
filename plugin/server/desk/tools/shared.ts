@@ -78,10 +78,10 @@ async function ownCopy(root: string): Promise<OwnCopy> {
 }
 
 /** A supervisor also sees the Human's own checkout, read from git only here, when it asks. */
-export const status: Tool = async ({ roster }, caller) => {
+export const status: Tool = async ({ ctx, roster }, caller) => {
   const ledger = loadLedger(caller.project.state);
   const seats = new Map((await roster.open()).map((seat) => [seat.id, seat]));
   const lane = can(caller.role, "lead") ? laneOfLead(ledger, caller.id)?.id : undefined;
   const copy = can(caller.role, "supervise") ? await ownCopy(caller.project.root) : undefined;
-  return ok(statusText(caller.project, ledger, loadConfig(caller.project.state), seats, Date.now(), { laneId: lane, copy }));
+  return ok(statusText(caller.project, ledger, loadConfig(caller.project.state), seats, Date.now(), { laneId: lane, copy, checks: copy && ctx.team(caller.project).checkpoints }));
 };

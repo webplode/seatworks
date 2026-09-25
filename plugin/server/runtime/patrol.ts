@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type Kit, can, roleNamed, seatOf } from "../catalog/kit.ts";
 import { watchOn } from "../catalog/team.ts";
 import type { SeatView, Seats } from "../core/ports.ts";
+import { digestOf } from "../desk/checkpoints.ts";
 import type { Desk } from "../desk/desk.ts";
 import { loadIncidents, openFor, saidBefore } from "../desk/incidents.ts";
 import { type Ask, type Ledger, activeTasks, loadLedger, openAsksFrom } from "../desk/ledger.ts";
@@ -36,6 +37,7 @@ export class Patrol {
   private readonly deps: PatrolDeps;
   private readonly idleFlag = new Map<string, string>();
   private readonly goneFlag = new Set<string>();
+  private readonly digested = new Set<string>();
   private reaped = false;
   private round: Promise<void> | undefined;
 
@@ -71,6 +73,7 @@ export class Patrol {
       await this.step(project, "incidents held for nobody or for the sensor could not be told", async () => void (await desk.retell(project)));
       await this.step(project, "a task whose Peer is gone could not be recorded", () => this.goneTasks(project, loadLedger(project.state), seats));
       await this.step(project, "a lane whose Lead is gone could not be told", () => this.goneLeads(project, loadLedger(project.state), seats));
+      await this.step(project, "what the checkpoints' logs show could not be told", () => this.digest(project, now));
       await this.step(project, "asks due a reminder could not be sent", () => this.dueAsks(project, loadLedger(project.state), seats, now));
       await this.step(project, "what a lane's history shows could not be read", () => this.history(project, loadLedger(project.state), seats));
       await this.step(project, "the Watcher could not be settled", () => this.settleWatcher(project, loadLedger(project.state), seats));
@@ -190,6 +193,18 @@ export class Patrol {
   }
 
   /** Nothing restarts a lane whose Lead went, so whoever supervises is told once per Lead; an empty listing tells nothing. */
+  /** Told once a round sees a check turn ready or look rubber-stamped: a digest on a state change, not a page per run. */
+  private async digest(project: Project, now: number): Promise<void> {
+    const checks = this.deps.source.teamFor(project).checkpoints;
+    for (const checkpoint of ["plan", "land"] as const) {
+      const { lines, state } = digestOf(project, checkpoint, checks.forced ? "on" : checks[checkpoint], now);
+      const key = `${project.slug}:${checkpoint}:${state}`;
+      if (!state || this.digested.has(key)) continue;
+      const posted = await this.deps.desk.post(await this.deps.desk.supervisorFor(project), `digest:${key}`, letters.checkDigest(checkpoint, state, lines), project);
+      if (posted !== "nobody") this.digested.add(key);
+    }
+  }
+
   private async goneLeads(project: Project, ledger: Ledger, seats: SeatMap): Promise<void> {
     const { desk } = this.deps;
     if (seats.size === 0) return;
@@ -250,6 +265,6 @@ export class Patrol {
     );
     mkdirSync(project.state, { recursive: true });
     const held = this.deps.outbox.letters();
-    writeFileSync(join(project.state, "status.md"), statusText(project, loadLedger(project.state), loadConfig(project.state), seats, now, { waiting, held }));
+    writeFileSync(join(project.state, "status.md"), statusText(project, loadLedger(project.state), loadConfig(project.state), seats, now, { waiting, held, checks: this.deps.source.teamFor(project).checkpoints }));
   }
 }

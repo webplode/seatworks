@@ -10,6 +10,7 @@ import { seatProblems } from "../catalog/seats.ts";
 import { expandHome, guidesDir, home, stateRoot, worktreeRoot } from "../core/paths.ts";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { digestOf } from "../desk/checkpoints.ts";
 import { flowView } from "../desk/flow.ts";
 import type { CleanView, MigrateView, UpdateView, WatchView } from "../../shared/views.ts";
 import { removeGarbage, scanGarbage } from "../upkeep/clean.ts";
@@ -153,6 +154,17 @@ export function describeTeam(kit: Kit, team: Team, project?: Project): unknown {
     project: project?.slug ?? null,
     errors: team.errors,
     attention: team.attention,
+    checkpoints: { ...team.checkpoints, forced: team.checkpoints.forced ?? null },
+    critic: team.critic,
+    // A project's own log, read where its mode is chosen; the machine's defaults have none.
+    digest: project
+      ? Object.fromEntries(
+          (["plan", "land"] as const).map((checkpoint) => {
+            const { lines, state } = digestOf(project, checkpoint, team.checkpoints.forced ? "on" : team.checkpoints[checkpoint]);
+            return [checkpoint, { lines, state: state ?? null }];
+          }),
+        )
+      : null,
     rules: team.rules,
     mcp: Object.fromEntries(
       Object.entries(team.mcp).map(([id, state]) => [
@@ -200,6 +212,8 @@ export type ControlDeps = {
   folders: (query: string) => Promise<string[]>;
   /** Takes a detached project out of the Supervisor's scope too, so no agent keeps rights to it. */
   unbind?: (root: string) => void;
+  decidePlan: (project: Project, lane: string, approve: boolean, note: string) => Promise<{ ok: boolean; text: string }>;
+  decideLand: (project: Project, lane: string, approve: boolean, note: string) => Promise<{ ok: boolean; text: string }>;
 };
 
 export class SettingsControl implements Control {
@@ -309,9 +323,17 @@ export class SettingsControl implements Control {
     return { id: "", label: "", connect: direct };
   }
 
-  removeProject(slug: string): unknown {
+  async removeProject(slug: string): Promise<unknown> {
     const project = this.deps.source.named(slug);
     if (!project) return { error: unknownProject(slug) };
+    // A seat still working in the project records it again on the next round, so detaching it first would not hold.
+    let live: string[];
+    try {
+      live = (await this.deps.seats.open()).filter((seat) => !seat.archivedAt && seatOf(this.deps.kit, seat.provider)?.role.tools && projectOf(seat.cwd).slug === slug).map((seat) => seat.id);
+    } catch (error) {
+      return { error: `Paseo did not say which seats are working in ${slug} (${errorText(error)}), so its settings stay.` };
+    }
+    if (live.length > 0) return { error: `${slug} stays: ${live.length} seat${live.length === 1 ? " is" : "s are"} still working in it (${live.join(", ")}): archive ${live.length === 1 ? "it" : "them"} first, since a working seat puts the project back on record.` };
     // Live work only: lanes and tasks are never removed, so counting them made Detach impossible after the first lane.
     const ledger = loadLedger(project.state);
     const open = Object.values(ledger.lanes).filter((lane) => lane.status !== "closed").length;
@@ -373,7 +395,23 @@ export class SettingsControl implements Control {
     const waiting = [...seats.values()].filter(
       (seat) => can(seatOf(this.deps.kit, seat.provider)?.role, "supervise") && projectOf(seat.cwd).slug === project.slug && (seat.pendingPermissions?.length ?? 0) > 0,
     );
-    return { text: statusText(project, loadLedger(project.state), loadConfig(project.state), seats, Date.now(), { waiting, held: this.deps.held() }) };
+    return { text: statusText(project, loadLedger(project.state), loadConfig(project.state), seats, Date.now(), { waiting, held: this.deps.held(), checks: this.deps.source.teamFor(project).checkpoints }) };
+  }
+
+  /** The Human's own word on a held plan: the panel is the one place it comes from, since no seat may give it for them. */
+  async decidePlan(slug: string, lane: string, approve: boolean, note: string): Promise<unknown> {
+    const project = this.deps.source.named(slug);
+    if (!project) return { error: unknownProject(slug) };
+    const decided = await this.deps.decidePlan(project, lane, approve, note.trim());
+    return decided.ok ? { decided: decided.text } : { error: decided.text };
+  }
+
+  /** The Human's own word on a held landing, from the panel like a plan's: landing is already the Supervisor's call. */
+  async decideLand(slug: string, lane: string, approve: boolean, note: string): Promise<unknown> {
+    const project = this.deps.source.named(slug);
+    if (!project) return { error: unknownProject(slug) };
+    const decided = await this.deps.decideLand(project, lane, approve, note.trim());
+    return decided.ok ? { decided: decided.text } : { error: decided.text };
   }
 
   async flow(slug: string, since?: string, open?: string[]): Promise<unknown> {

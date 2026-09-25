@@ -6,6 +6,7 @@ import { mock, test } from "node:test";
 import { gunzipSync } from "node:zlib";
 import type { WatchView, WatchSeat } from "../../shared/views.ts";
 import { HOME, type Pending, harness, ideCalls, kit, laneWithPeer, repo } from "./harness.ts";
+import { sentBy } from "../../server/core/paseo-adapter.ts";
 
 const { placeProjectFiles } = await import("../../server/catalog/project-files.ts");
 const { saveLedger } = await import("../../server/desk/ledger.ts");
@@ -34,6 +35,8 @@ test("write sets overlap by path prefix and glob, and serial-only paths are caug
   assert.ok(firstOverlap(["app/a*.tsx"], ["app/*b.tsx"]), "app/ab.tsx satisfies both");
   assert.ok(firstOverlap(["src/?.ts"], ["src/a.*"]), "src/a.ts satisfies both");
   assert.equal(firstOverlap(["src/*.ts"], ["src/*.py"]), undefined, "and one extension cannot be the other");
+  assert.ok(firstOverlap(["**/*.{js,ts}"], ["src/a.js"]), "a choice of extensions overlaps the file it names");
+  assert.equal(firstOverlap(["src/*.{js,ts}"], ["src/*.py"]), undefined);
   // Rules and write sets are both globs, so rules resolve against tracked files, or every subtree lane would wait.
   const tracked = ["package-lock.json", "db/migrations/0001.sql", "src/app.ts", "Assets/Scenes/Main.unity"];
   const serial = serialPaths(tracked, SERIAL_ONLY);
@@ -128,6 +131,8 @@ test("a lane works serially in the project's own copy and hands it back on its b
   h.agents.get(lane.lead!)!.status = "idle";
   await h.endTurn(lane.lead!, "closing up");
   assert.equal(h.git(h.root, "branch", "--show-current").trim(), "main", "once the Lead stops, the project's copy is back on its base branch");
+  assert.equal(h.git(h.root, "branch", "--list", lane.branch).trim(), "", "and the landed branch goes, its commits kept under the lane's ref");
+  assert.equal(h.git(h.root, "log", "-1", "--format=%B", "main").trim(), [`${lane.title} (L1)`, "", lane.outcome, "", "- L1-T1 " + h.ledger().tasks["L1-T1"]!.title, "- L1-T3 Late break"].join("\n"), "one commit, naming the tasks that went in and not the one cut");
 
   const reopened = await h.call(sup, "supervisor", "open_lane", { title: "Next", outcome: "b.txt changes", acceptance: ["z"], outOfScope: ["anything else in the repository"] });
   assert.equal(reopened.ok, true, reopened.text);
@@ -433,15 +438,38 @@ test("a lane in the project's own copy lands after its base moved, once nobody i
   h.git(side, "commit", "-qm", "moved", "--allow-empty");
   h.git(h.project.root, "branch", "-f", "main", "side");
   h.git(h.project.root, "worktree", "remove", "--force", side);
+  const moved = h.git(h.root, "rev-parse", "main").trim();
 
-  // With the Lead stopped, main is merged into the lane where it stands and main moves up to it.
+  // With the Lead stopped, main is merged into the lane where it stands and lands on main as one commit.
   h.agents.get(lane.lead!)!.status = "idle";
   const closed = await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: true });
   assert.equal(closed.ok, true, closed.text);
   assert.match(h.git(h.root, "show", "main:a.txt"), /four/);
-  assert.equal(h.git(h.root, "log", "-1", "--format=%s", "main").trim(), `Bring main into ${lane.branch}`);
+  assert.equal(h.git(h.root, "rev-parse", "main^").trim(), moved);
+  assert.equal(h.git(h.root, "log", "-1", "--format=%s", "refs/seatworks/lanes/L1").trim(), `Bring main into ${lane.branch}`);
   assert.equal(h.git(h.root, "branch", "--show-current").trim(), "main");
-  assert.equal(h.git(h.root, "branch", "--list", lane.branch).trim(), "", "a landed branch is all in main, so it goes");
+  assert.equal(h.git(h.root, "branch", "--list", lane.branch).trim(), "", "a landed branch is all under its landed ref, so it goes");
+  h.runtime.dispose();
+});
+
+test("a project set to land by merge commit keeps the lane's commits on main under one merge", async () => {
+  const h = harness("outbox-land-merge.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const set = await h.call(sup, "supervisor", "set_project", { landAs: "merge" });
+  assert.match(set.text, /land as merge/);
+  assert.equal(loadConfig(h.project.state).landAs, "merge");
+  assert.match((await h.call(sup, "supervisor", "status", {})).text, /Lanes land as merge\./);
+  await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", acceptance: ["four"], outOfScope: ["anything else"] });
+  const lane = h.ledger().lanes.L1!;
+  const before = h.git(h.root, "rev-parse", "main").trim();
+  writeFileSync(join(h.project.root, "a.txt"), "one\nfour\n");
+  h.git(h.project.root, "commit", "-qam", "four");
+  const tip = h.git(h.root, "rev-parse", "HEAD").trim();
+  h.agents.get(lane.lead!)!.status = "idle";
+  const closed = await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: true });
+  assert.equal(closed.ok, true, closed.text);
+  assert.match(closed.text, /merged lane\/l1-numbers into main/);
+  assert.deepEqual(h.git(h.root, "log", "-1", "--format=%P", "main").trim().split(" "), [before, tip]);
   h.runtime.dispose();
 });
 
@@ -483,6 +511,20 @@ test("parallel work needs independent write sets and merges back from its own wo
   const fine = await h.call(sup, "supervisor", "open_lane", { title: "C", outcome: "c", acceptance: ["c"], outOfScope: ["anything else in the repository"], writeSet: ["c.txt"], isolate: true });
   assert.equal(fine.ok, true, fine.text);
   assert.ok(h.ledger().lanes.L2!.slot, "L1 is writing in the project's own copy, so the next lane is given one instead of switching the branch under it");
+  h.runtime.dispose();
+});
+
+test("what the desk sends a seat carries the kinds of its letters in its id, its first prompt too, so the watch tells it from a person's words", async () => {
+  const h = harness("outbox-kinds.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.call(sup, "supervisor", "open_lane", { title: "Kinds", outcome: "x", acceptance: ["y"], outOfScope: ["anything else in the repository"] });
+  const lead = h.ledger().lanes.L1!.lead!;
+  await h.idle(lead);
+  await h.call(lead, "lead", "ask", { kind: "question", text: "Round half up or down?", default: "half up" });
+  await h.call(sup, "supervisor", "answer", { ask: "A1", text: "Half up." });
+  await h.idle(lead);
+  assert.deepEqual(sentBy({ clientMessageId: h.agents.get(lead)!.promptId }), ["brief"]);
+  assert.deepEqual(sentBy({ clientMessageId: h.agents.get(lead)!.sentIds.at(-1) }), ["answer"]);
   h.runtime.dispose();
 });
 
@@ -771,6 +813,7 @@ test("one workspace carries a whole project, and the desk puts it away when the 
   await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: false, reason: "done" });
   h.agents.get(lane.lead!)!.archivedAt = new Date().toISOString();
   h.agents.get(sup)!.archivedAt = new Date().toISOString();
+  for (const agent of h.agents.values()) if (agent.provider.startsWith("sw2-critic-")) agent.archivedAt = new Date().toISOString();
   await tick();
 
   assert.equal(live().length, 0, "with the work finished and nobody seated, the desk takes back what it opened instead of leaving it for a human to delete");
@@ -1993,7 +2036,7 @@ test("a fact a Watcher vetoed and that is seen again is read to it again, once, 
   h.runtime.dispose();
 });
 
-test("a Watcher is told when what it raises was marked noise, and cannot raise about a seat that has gone", async () => {
+test("a Watcher is told when what it raises was marked noise, and cannot raise about a seat gone with its lane", async () => {
   const { h, sup, peer, timeline } = await laneWithPeer("outbox-raise-noise.json", bySeat({ watch: true }));
   const [watcher] = watchersOf(h);
   await h.idle(watcher!.id);
@@ -2011,7 +2054,9 @@ test("a Watcher is told when what it raises was marked noise, and cannot raise a
   const again = await raise("R1.S1");
   assert.match(again.text, /^Not raised: missing_mechanism on the Peer on L1-T1 \(Clean build\) in these words was marked noise before\.$/, "not told it was counted into I2, which it was not");
 
-  h.agents.get(peer)!.archivedAt = new Date().toISOString();
+  h.agents.get(peer)!.status = "idle";
+  assert.equal((await h.call(sup, "supervisor", "close_lane", { lane: "L1", land: false })).ok, true);
+  assert.notEqual(h.agents.get(peer)!.archivedAt, null);
   const gone = await raise("R1.S2");
   assert.equal(gone.ok, false);
   assert.match(gone.text, /has gone/);
@@ -2238,6 +2283,33 @@ test("each assessment is kept with the state, questions, facts and answers it wa
   assert.deepEqual(Object.keys(first.questions).sort(), bodies.slice(0, 3).flatMap((body) => Object.keys(body.questions)).sort(), "one request per view, each kept with the questions it asked");
   assert.ok(!("unverified_success" in first.questions), "a turn that ends without a word claims nothing, so nothing is asked about a claim");
   assert.doesNotMatch(JSON.stringify(kept), /sk-or-kept-test/);
+  h.runtime.dispose();
+});
+
+test("a turn is asked what applies to who sent its instruction, and kept with that turn", async (t) => {
+  const { h, peer, timeline } = await laneWithPeer("outbox-turn.json");
+  writeFileSync(join(HOME, ".local", "share", "seatworks-v2", "settings.json"), JSON.stringify({ sensor: { key: "sk-or-turn-test" }, attention: { by: "jev" } }));
+  const asked: string[][] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body) as { questions: Record<string, unknown> };
+    asked.push(Object.keys(body.questions));
+    return new Response(JSON.stringify({ answers: Object.fromEntries(Object.keys(body.questions).map((name) => [name, { type: "noul", noul: 0.1 }])), model: "m", id: "g", usage: { cost: 0 } }), { status: 200 });
+  });
+  const turn = async (id: string, message: Record<string, unknown>) => {
+    timeline.beat("turn_started", id);
+    timeline.add({ type: "user_message", text: "Carry on", ...message }, id);
+    timeline.add({ type: "tool_call", callId: `${id}-c`, name: "Edit", status: "completed", detail: { type: "edit", filePath: "a.txt", oldString: "x", newString: "y" } }, id);
+    timeline.beat("turn_completed", id);
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  };
+  await turn("t1", { clientMessageId: "sw2-amended-1", messageId: "sw2-amended-1" });
+  assert.ok(!asked.flat().includes("agreed_without_checking"), "the desk granting what the seat asked for doubts nothing");
+  await turn("t2", { clientMessageId: "c-2", messageId: "c-2" });
+  assert.ok(asked.flat().includes("agreed_without_checking"), "a person's word may");
+  const kept = readAssessments(h.project.state).kept.filter((record) => record.seat === peer);
+  assert.deepEqual(kept.map((record) => record.turn?.from), [["amended"], ["person"]]);
+  assert.deepEqual(kept[0]!.turn?.can, ["work", "write", "watched"]);
   h.runtime.dispose();
 });
 
@@ -2664,5 +2736,56 @@ test("a patrol round files finished lanes past the newest few into the archive, 
   const filed = gunzipSync(readFileSync(join(h.project.state, "archive", "L1.json.gz"))).toString("utf-8");
   assert.match(filed, /"id":"L1"/);
   assert.match(filed, /what L1 handed back/);
+  h.runtime.dispose();
+});
+
+test("a Watcher's finding on a Peer whose work was accepted while it read still reaches the Lead, while the lane is open", async () => {
+  const { h, lane, peer, timeline } = await laneWithPeer("outbox-raise-gone.json", bySeat({ watch: true }));
+  const [watcher] = watchersOf(h);
+  await h.idle(watcher!.id);
+  timeline.beat("turn_started", "t1");
+  timeline.add({ type: "user_message", text: "Clean the build" }, "t1");
+  timeline.add({ type: "reasoning", text: "The caller still wants the old shape, so a small adapter will keep it compiling." }, "t1");
+  timeline.add({ type: "tool_call", callId: "c1", name: "Write", status: "completed", detail: { type: "write", filePath: "src/legacy-adapter.ts", content: "export const old = () => fresh();\n" } }, "t1");
+  timeline.beat("turn_completed", "t1");
+  await read(h, watcher!.id);
+  // As seen live: the Lead accepts and the Peer is let go a minute before the Watcher's reading of its last turn is done.
+  assert.equal((await h.call(peer, "peer", "done", { outcome: "complete", summary: "done", checks: "none run" })).ok, true);
+  h.agents.get(peer)!.status = "idle";
+  const accepted = await h.call(lane.lead!, "lead", "accept", { task: "L1-T1" });
+  assert.equal(accepted.ok, true, accepted.text);
+  assert.notEqual(h.agents.get(peer)!.archivedAt, null);
+  const raised = await h.call(watcher!.id, "watcher", "raise", { kind: "missing_mechanism", step: "R1.S1", why: "a shim" });
+  assert.equal(raised.ok, true, raised.text);
+  await h.idle(lane.lead!);
+  assert.match(h.agents.get(lane.lead!)!.sent.join("\n"), /INCIDENT I1 \(missing_mechanism, attend\) on the Peer on L1-T1/);
+  h.runtime.dispose();
+});
+
+test("mail a call brings about is not steered into the caller's turn until the caller has taken the call's answer", async () => {
+  const h = harness("outbox-call-steer.json");
+  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  await h.call(sup, "supervisor", "open_lane", { title: "Build", outcome: "a.txt changes", acceptance: ["a"], outOfScope: ["anything else in the repository"] });
+  const lead = h.ledger().lanes.L1!.lead!;
+  const seat = h.agents.get(lead)!;
+  // As seen live: a Lead well into a long turn lays its plan out, and the plan's first task starts at once.
+  seat.status = "running";
+  h.runtime.outbox.turnStarted(lead, Date.now() - 2 * 60_000);
+  const spool = (h.runtime as unknown as { spool: string }).spool;
+  const replyFile = join(spool, "replies", "call-1.json");
+  mkdirSync(join(spool, "requests"), { recursive: true });
+  const task = { key: "build", title: "Clean build", goal: "g", acceptance: ["a"], owned: ["a.txt"], outOfScope: ["the rest of the repository"] };
+  writeFileSync(join(spool, "requests", "call-1.json"), JSON.stringify({ id: "call-1", agent: lead, role: "lead", tool: "plan_tasks", args: { tasks: [task] }, cwd: h.root, at: Date.now() }));
+  (h.runtime as unknown as { serveSpool(): void }).serveSpool();
+  for (let i = 0; i < 100 && !existsSync(replyFile); i++) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.match(readFileSync(replyFile, "utf-8"), /The plan is recorded/);
+  assert.equal(h.ledger().tasks["L1-T1"]?.status, "running");
+  assert.deepEqual([...seat.steered, ...seat.sent].filter((text) => /L1-T1/.test(text)), [], "a text arriving while a call waits is taken as the call being cut short");
+  await h.tick();
+  assert.deepEqual(seat.steered.filter((text) => /L1-T1/.test(text)), [], "answered is not taken: the bridge has not read it yet");
+  // The bridge takes the answer, and the next round delivers what waited.
+  rmSync(replyFile);
+  await h.tick();
+  assert.match(seat.steered.join("\n"), /L1-T1/);
   h.runtime.dispose();
 });

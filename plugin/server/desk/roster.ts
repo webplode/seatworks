@@ -33,6 +33,10 @@ export class Roster {
     return this.seats.look(agentId);
   }
 
+  typed(agentId: string): Promise<string[]> {
+    return this.seats.typed(agentId);
+  }
+
   /** A seat stopped on a question reads nothing until it is answered, so a message answers it. `waiting`: only the Human can. */
   async answerQuestion(agentId: string, text: string): Promise<"answered" | "waiting" | undefined> {
     let pending;

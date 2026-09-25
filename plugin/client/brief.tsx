@@ -3,9 +3,9 @@ import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { approvable, briefRpc, briefLabel, commitTeamFilesRpc, count, reloadSupervisorRpc, type TeamBrief } from "../shared/brief.ts";
-import { bindingRpc, supervisionRpc } from "../shared/rpc.ts";
+import { bindingRpc, landDecideRpc, planDecideRpc, supervisionRpc } from "../shared/rpc.ts";
 import type { SupervisionView } from "../shared/supervision.ts";
 import { Button } from "./bits.tsx";
 import { message } from "./data.ts";
@@ -17,7 +17,17 @@ type Item = TeamBrief["items"][number];
 function useCardActions(supervisor: string | null) {
   const paseo = usePaseo();
   const read = useRpc(supervisionRpc), bind = useRpc(bindingRpc), commit = useRpc(commitTeamFilesRpc), reload = useRpc(reloadSupervisorRpc);
+  const plan = useRpc(planDecideRpc), landing = useRpc(landDecideRpc);
   return {
+    /** A plan or a landing the project held for the Human: their word goes straight to the desk, not through the Supervisor. */
+    decide: async (item: Item, approve: boolean, note: string) => {
+      const view = await read({}) as unknown as SupervisionView;
+      const slug = view.binding.projects.find((p) => p.id === item.scope)?.slug;
+      if (!slug || !item.lane) throw new Error("This project is no longer supervised.");
+      const said = await (item.kind === "plan" ? plan : landing)({ project: slug, lane: item.lane, approve, note }) as { decided?: string; error?: string };
+      if (said.error) throw new Error(said.error);
+      return said.decided ?? "Done.";
+    },
     reload: async () => { await reload({}); },
     /** The click is the approval: each project gains landing, and the Supervisor is told to land these lines now. */
     land: async (items: Item[]) => {
@@ -41,7 +51,8 @@ function ItemCard({ item, theme, supervisor, onAgent, onModels }: { item: Item; 
   const [done, setDone] = useState<string | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
   const run = async (work: () => Promise<string>) => { setBusy(true); setTrouble(null); try { setDone(await work()); setConfirming(false); } catch (e) { setTrouble(message(e)); } finally { setBusy(false); } };
-  const tone = item.kind === "permission" ? c.statusWarning : item.kind === "land" ? c.statusSuccess : item.kind === "tests" || item.kind === "error" ? c.statusDanger : c.foreground;
+  const [note, setNote] = useState("");
+  const tone = item.kind === "permission" || item.kind === "plan" ? c.statusWarning : item.kind === "land" ? c.statusSuccess : item.kind === "tests" || item.kind === "error" ? c.statusDanger : c.foreground;
   const mark = item.kind === "land" ? "✓ " : item.kind === "tests" ? "✗ " : item.kind === "question" ? "? " : "";
   const [more, setMore] = useState(false);
   const open = onAgent && item.agent && !item.action ? <Button theme={theme} label={item.kind === "permission" ? "Open agent to answer" : item.kind === "question" ? "Answer" : item.kind === "land" || item.kind === "tests" ? "Open work chat" : "Open conversation"} onPress={() => onAgent(item.agent!)} /> : null;
@@ -58,7 +69,15 @@ function ItemCard({ item, theme, supervisor, onAgent, onModels }: { item: Item; 
       <Text selectable numberOfLines={item.plain ? undefined : 4} style={{ color: c.foregroundMuted, lineHeight: 20 }}>{item.detail}</Text>
     </> : null}
     {trouble ? <Text accessibilityRole="alert" style={{ color: c.statusDanger }}>{trouble}</Text> : null}
-    {done ? <Text style={{ color: c.foregroundMuted }}>{done}</Text> : confirming ? <View style={{ gap: 8 }}>
+    {done ? <Text style={{ color: c.foregroundMuted }}>{done}</Text> : item.held ? <View style={{ gap: 8 }}>
+      <TextInput accessibilityLabel="Note for the team" placeholder="Note for the team (needed to send it back)" placeholderTextColor={c.foregroundMuted} value={note} onChangeText={setNote} editable={!busy}
+        style={{ color: c.foreground, paddingHorizontal: 10, minHeight: 34, borderRadius: 8, borderWidth: 1, borderColor: c.border }} />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Button theme={theme} tone="accent" label={busy ? "Sending…" : item.kind === "plan" ? "Approve plan" : "Approve and merge"} disabled={busy} onPress={() => void run(async () => { await actions.decide(item, true, note.trim()); return item.kind === "plan" ? "Approved. The team starts on it now." : "Approved. It is being merged; follow along in chat."; })} />
+        <Button theme={theme} label="Send back" disabled={busy || !note.trim()} onPress={() => void run(async () => { await actions.decide(item, false, note.trim()); return "Sent back with your note."; })} />
+        {open}
+      </View>
+    </View> : confirming ? <View style={{ gap: 8 }}>
       <Text style={{ color: c.foreground }}>{item.stays
         ? `Finish this work? It stays on ${item.diff?.split(" · ")[0]?.replace("Stays on ", "") ?? "your branch"}: your Supervisor runs its tests and wraps it up, and nothing is merged.`
         : `Merge this work into ${item.diff?.split(" · ")[0]?.split(" → ")[1] ?? "your branch"}? Your Supervisor merges it and wraps it up.`} From now on your Supervisor may also merge work you approve in {item.project}.</Text>

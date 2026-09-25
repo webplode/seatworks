@@ -20,6 +20,8 @@ the open question.
 - Report every defect that changes behavior, misses acceptance, weakens security or risks data:
   severity P0–P3, file:line, the failure (which input or timing, for whom), the smallest durable fix,
   and how you confirmed it.
+- A change to stored data or its shape (a migration, a rewrite of a data file): trace what a second
+  run does to data already changed, and whether what was there before can be got back.
 - Also findings: tests that mirror the code or pin unnamed details, mocks around untouched code,
   narrating comments, unneeded docs, and any shim, adapter, re-export, dual path, flag or stub kept
   for unshipped code.

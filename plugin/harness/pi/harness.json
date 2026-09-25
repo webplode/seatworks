@@ -21,6 +21,7 @@
       "directTools": true
     }
   },
+  "mcpServerField": "output.details.server",
   "settings": {
     "file": "settings.json",
     "source": "settings.json",

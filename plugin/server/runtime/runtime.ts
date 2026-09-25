@@ -1,9 +1,9 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginHookContext, PluginLifecycleEvents, PluginServerContext } from "@getpaseo/plugin/server";
 import { renderPrompt } from "../catalog/content.ts";
-import { type Kit, type RoleSpec, can, seatOf } from "../catalog/kit.ts";
+import { type Kit, type RoleSpec, TEAM_SERVER, can, seatOf } from "../catalog/kit.ts";
 import { type Listed, type ModelCache, applyModels, fetchModels, listingProviders } from "../catalog/models.ts";
 import { type AgentConfig, type SessionOpen, applyRole, seatEnv } from "../catalog/launch.ts";
 import { applyReconcile, reloadDaemon } from "../catalog/providers.ts";
@@ -29,10 +29,10 @@ import { Patrol } from "./patrol.ts";
 import { Relink, reloadPlugin } from "./relink.ts";
 import { registerRpc } from "./rpc.ts";
 import { Seating } from "./seating.ts";
-import { spoolDirs, takeRequests, writeReply } from "./spool.ts";
+import { replyFile, spoolDirs, takeRequests, writeReply } from "./spool.ts";
 import { TeamSource } from "./team-source.ts";
 import { TurnRules } from "./turns.ts";
-import { FACT_TITLES, type Fact } from "./watch/facts.ts";
+import { FACT_TITLES, type Fact, callsTo } from "./watch/facts.ts";
 import { type Finding, type Verdict, decide } from "./watch/findings.ts";
 import { weigh } from "./watch/jev/rules.ts";
 import { keepAssessment, lastKept, readTally } from "./watch/jev/assessments.ts";
@@ -71,6 +71,7 @@ export class Runtime {
   readonly supervision: SupervisionControl;
   private readonly communication: CommunicationWatch;
   private readonly spool = spoolDir();
+  private readonly calls = new Map<string, { id: string; replied: boolean }[]>();
   private readonly seats: Seats;
   private readonly workspaces: Workspaces;
   private readonly source: TeamSource;
@@ -122,6 +123,7 @@ export class Runtime {
         return found?.harness.steers === true && !can(found.role, "watch");
       },
       (letter, seat) => letter.guard ? supervision.validate(letter.guard, seat) : undefined,
+      (agentId) => this.waitedOn(agentId).length > 0,
     );
     this.supervision = new SupervisionControl({ store: supervision, kit, seats: this.seats, workspaces: this.workspaces,
       outbox: this.outbox, inventory: () => inventoryOn(() => this.api), source: this.source,
@@ -191,6 +193,8 @@ export class Runtime {
         if (!binding.projects.some((p) => p.root === root)) return;
         this.supervision.store.change(binding.revision, (next) => { next.projects = next.projects.filter((p) => p.root !== root); });
       },
+      decidePlan: (project, lane, approve, note) => this.desk.decidePlan(project, lane, approve, "human", note),
+      decideLand: (project, lane, approve, note) => this.desk.decideLand(project, lane, approve, note),
     });
   }
 
@@ -225,11 +229,13 @@ export class Runtime {
       context,
       beside,
       role: [role.label, role.description].filter(Boolean).join(": "),
+      can: role.can ?? [],
       rules: {
         destructive: new RegExp(attention.destructive, "i"),
         testPath: new RegExp(attention.testPath, "i"),
         suppressed: new RegExp(attention.suppressed, "i"),
         exit: harness.exitPattern ? new RegExp(harness.exitPattern) : undefined,
+        desk: callsTo(harness.mcpCall, harness.mcpServerField, TEAM_SERVER),
         gates: gateCommands(seat.cwd, loadConfig(project.state).gate),
         cwd: seat.cwd,
         temp: tmpdir(),
@@ -237,12 +243,12 @@ export class Runtime {
         repeatsAt: attention.repeatsAt,
         recoverWithin: 10,
       },
-      heardSince: (at) => {
+      handedBack: (at) => {
         try {
           const handback = taskOfPeer(loadLedger(project.state), seat.id)?.handback;
-          return Boolean(handback && handback.at >= at && !handback.gate);
+          return handback && handback.at >= at && !handback.gate ? handback.outcome : undefined;
         } catch {
-          return false;
+          return undefined;
         }
       },
     };
@@ -261,8 +267,8 @@ export class Runtime {
     if (!sensor || !jevOn(team)) return undefined;
     const brief = watch.brief();
     if (!brief || brief.goal === null) return undefined;
-    const { goal, context, beside, role, rules } = brief;
-    return { spec: sensor.spec, key: sensor.key, brief: { goal, context, beside, role, gates: rules.gates, workingCopy: watch.seat.cwd }, rules: { exit: rules.exit, destructive: rules.destructive } };
+    const { goal, context, beside, role, can, rules } = brief;
+    return { spec: sensor.spec, key: sensor.key, brief: { goal, context, beside, role, can, gates: rules.gates, workingCopy: watch.seat.cwd }, rules: { exit: rules.exit, destructive: rules.destructive } };
   }
 
   private assessed(watch: SeatWatch, reading: Reading): void {
@@ -328,6 +334,7 @@ export class Runtime {
         found: findings.map((finding) => finding.kind),
         verdicts: verdicts.map(({ kind, question, says, p }) => ({ kind, question, says, p })),
         views: reading.views,
+        turn: reading.turn,
       }).catch(unkept);
     } catch (error) {
       unkept(error);
@@ -673,7 +680,8 @@ export class Runtime {
     this.malformedCalls(event);
     // Wrapped: a throw here left the seat's mail waiting until some unrelated event pumped it.
     try {
-      const archiving = this.desk.pendingArchive.has(event.agent.id);
+      // A Critic is one look: it goes when its turn ends, whether or not it handed its findings in.
+      const archiving = this.desk.pendingArchive.has(event.agent.id) || can(seatOf(this.kit, event.agent.provider)?.role, "critique");
       if (archiving) await this.desk.archive(event.agent.id, true);
       await this.desk.stopped(event.agent.id);
       if (archiving) return;
@@ -775,6 +783,14 @@ export class Runtime {
     });
   }
 
+  /** A call is waited on until the seat's bridge has taken its answer, which it deletes as it reads it. */
+  private waitedOn(agentId: string): { id: string; replied: boolean }[] {
+    const live = (this.calls.get(agentId) ?? []).filter((call) => !call.replied || existsSync(replyFile(this.spool, call.id)));
+    if (live.length > 0) this.calls.set(agentId, live);
+    else this.calls.delete(agentId);
+    return live;
+  }
+
   private serveSpool(): void {
     if (!this.api) return;
     let requests;
@@ -785,11 +801,16 @@ export class Runtime {
       return;
     }
     for (const request of requests) {
+      const call = { id: request.id, replied: false };
+      this.calls.set(request.agent, [...this.waitedOn(request.agent), call]);
       this.desk
         .answer(request)
         .catch((error) => ({ ok: false, text: `The desk failed: ${errorText(error)}` }))
         .then((reply) => writeReply(this.spool, request.id, reply))
-        .catch((error) => console.error("seatworks-v2: spool reply failed:", error));
+        .catch((error) => console.error("seatworks-v2: spool reply failed:", error))
+        .finally(() => {
+          call.replied = true;
+        });
     }
   }
 }

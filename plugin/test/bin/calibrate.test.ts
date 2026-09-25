@@ -32,6 +32,7 @@ const record = (at: number, seat: string, turnId: string, answers: Record<string
   found: [],
   verdicts: [],
   views: saying("noise"),
+  turn: { can: ["work", "write", "watched"], from: ["brief"] },
   ...extra,
 });
 
@@ -59,7 +60,7 @@ test("the report reads each question on its own incidents, each judging question
     items[`S${index}`] = { id: `S${index}`, seat: `stuck-${index}`, where: "x", kind: "stuck", level: "attend", quote: "q", facts: ["stuck"], opened: base, last: base, count: 1, open: false, label: useful ? "useful" : "noise", sensor: { question: "worker_stuck", p, model: "m", says: useful ? "confirms" : "vetoes" } };
   }
   items.I99 = { id: "I99", seat: "peer-0", where: "x", kind: "long-turn", level: "attend", quote: "q", facts: ["long-turn"], opened: base, last: base, count: 1, open: false, label: "noise" };
-  for (let index = 0; index < 3; index++) await keepAssessment(state, record(base + 50_000_000 + index, "peer-quiet", `q${index}`, { missing_mechanism: 0.1 }, { views: { work: { instruction: "Tidy the docs", steps: [{ id: "S1", kind: "ran", command: "ls", result: "ok", output: "a" }] } } }));
+  for (let index = 0; index < 3; index++) await keepAssessment(state, record(base + 50_000_000 + index, "peer-quiet", `q${index}`, { missing_mechanism: 0.1 }, { turn: undefined, views: { work: { instruction: "Tidy the docs", steps: [{ id: "S1", kind: "ran", command: "ls", result: "ok", output: "a" }] } } }));
   await keepAssessment(state, record(base + 50_000_100, "peer-old", "o1", { missing_mechanism: 0.99 }, { questions: { missing_mechanism: { view: "work", instructions: "Does this situation require human judgment?" } }, found: ["missing_mechanism"] }));
   writeFileSync(join(state, "incidents.json"), JSON.stringify({ next: 100, items }));
   writeFileSync(join(state, "events.log"), `${acks.join("\n")}\nnot json\n`);
@@ -95,6 +96,7 @@ test("the report reads each question on its own incidents, each judging question
   const again = await calibrate({ state, ask: true, fetcher: fetcher as never });
   assert.match(again, /asked again: 52 answered, 0 failed, cost 0\.002020; answered by typesafe\/jev-1\.13-20261001 \(52\)/);
   assert.match(again, /unsafe_action[\s\S]*?AUROC as kept: 0\.50; asked again: 1\.00 \(6 useful, 6 noise answered\)[\s\S]*?→ keep/);
+  assert.match(again, /missing_mechanism[^\n]*\n {2}answered 51 times as kept[^\n]*, 49 times asked again\n/, "a reading kept before its turn was does not say its role could write, so is not asked again what only a writer is");
 
   const refused = async () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({}), text: async () => "no" });
   const failing = await calibrate({ state, ask: true, fetcher: refused as never });

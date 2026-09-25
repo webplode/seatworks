@@ -77,8 +77,8 @@ export function SupervisionPanel({ theme, compact, catalog, machine, projects, a
   };
   const statusOf = (id: string) => brief?.projects.find((p) => p.id === id)?.status;
   // What the card's status line does not already say: approvals are counted there.
-  const needs = (name: string) => brief?.items.filter((item) => item.project === name && !["land", "commit", "review"].includes(item.kind)).length ?? 0;
-  const approvals = (name: string) => brief?.items.filter((item) => item.project === name && (item.kind === "land" || item.kind === "commit")).length ?? 0;
+  const needs = (name: string) => brief?.items.filter((item) => item.project === name && !["plan", "land", "commit", "review"].includes(item.kind)).length ?? 0;
+  const approvals = (name: string) => brief?.items.filter((item) => item.project === name && (item.kind === "plan" || item.kind === "land" || item.kind === "commit")).length ?? 0;
   const review = supervisor && onReview ? () => onReview(supervisor.agent, brief?.workspace ?? null) : undefined;
   const matching = projects.filter((p) => `${p.root} ${view?.binding.projects.find((s) => s.slug === p.slug)?.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()));
   const canCompose = Boolean(listFolders && attach && view);

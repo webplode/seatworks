@@ -1,13 +1,16 @@
 import { type Kit, can, seatOf } from "../../catalog/kit.ts";
 import type { Seen, SeatView, Seats, Stream } from "../../core/ports.ts";
 import type { Sibling } from "../../desk/ledger.ts";
-import { type Fact, Recovery, type Rules, afterChange, stuck, unverified } from "./facts.ts";
+import { type Fact, Recovery, type Rules, afterChange, contradicted, stuck, unverified } from "./facts.ts";
 import { Window } from "./window.ts";
 
 export type WatchedSeat = { id: string; provider: string; cwd: string; title?: string | null };
 
-/** `goal` is null when the ledger could not be read, and empty until it has placed the seat. */
-export type SeatContext = { rules: Rules; heardSince: (at: number) => boolean; goal: string | null; context: string; beside: Sibling[]; role: string };
+/**
+ * `goal` is null when the ledger could not be read, and empty until it has placed the seat. `handedBack` is the outcome of
+ * a hand-back made since `at` that the desk did not gate itself.
+ */
+export type SeatContext = { rules: Rules; handedBack: (at: number) => string | undefined; goal: string | null; context: string; beside: Sibling[]; role: string; can: string[] };
 
 const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -106,7 +109,8 @@ export class SeatWatch {
     this.startedAt = 0;
     const context = this.brief();
     if (phase !== "completed" || !context) return [];
-    const facts = unverified(this.window, context.rules, since ? context.heardSince(since) : false);
+    const handed = since ? context.handedBack(since) : undefined;
+    const facts = [...unverified(this.window, context.rules, handed !== undefined), ...contradicted(this.window, context.rules, handed)];
     const pattern = stuck(this.window.sinceInstruction(), context.rules);
     if (pattern) facts.push({ kind: "stuck", level: "attend", quote: pattern });
     return this.fresh(facts);

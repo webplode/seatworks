@@ -24,7 +24,7 @@ test("the shipped kit resolves to a complete team, and every role's seat builds 
   assert.deepEqual(Object.values(off.mcp).filter((state) => state.enabled), [], "the kit ships no server switched on");
   const team = resolveTeam(kit, { mcp: Object.fromEntries(Object.keys(kit.mcp).map((id) => [id, { enabled: true }])) });
   assert.deepEqual(team.errors, []);
-  assert.deepEqual(kit.roles.map((role) => role.role).sort(), ["lead", "peer", "reviewer", "supervisor", "watcher"]);
+  assert.deepEqual(kit.roles.map((role) => role.role).sort(), ["critic", "lead", "peer", "reviewer", "supervisor", "watcher"]);
   assert.deepEqual(Object.keys(kit.mcp).sort(), ["code-search", "context7", "intellij-index"]);
   const every = kit.roles.flatMap((role) => ["claude", "codex", "pi"].map((harness) => `${role.role}-${harness}`)).sort();
   assert.deepEqual(seatPairs(kit).map((pair) => `${pair.role.role}-${pair.harness.id}`).sort(), every, "every role can sit on every agent the kit ships");
@@ -78,7 +78,7 @@ test("every role builds on every agent the kit ships, each in that agent's own t
       assert.deepEqual(settings.features, { multi_agent: false, multi_agent_v2: false }, `${where}: Paseo is the only control plane`);
       assert.equal(settings.approval_policy, "never", `${where}: nobody is there to approve`);
       assert.equal(settings.skills.bundled.enabled, false, `${where}: only the role's skills, as on every other agent`);
-      assert.equal(settings.sandbox_mode, ["reviewer", "watcher"].includes(role.role) ? "read-only" : "workspace-write", where);
+      assert.equal(settings.sandbox_mode, ["reviewer", "watcher", "critic"].includes(role.role) ? "read-only" : "workspace-write", where);
       const catalog = JSON.parse(readFileSync(settings.model_catalog_json, "utf-8"));
       assert.ok(catalog.models.length > 0 && catalog.models.every((model: Record<string, unknown>) => model.multi_agent_version === null), `${where}: no model offers native agents`);
       assert.ok(settings.sandbox_workspace_write.writable_roots.every((path: string) => path.startsWith("/state/demo/")), `${where}: writes into the state only where its content says`);
@@ -89,7 +89,7 @@ test("every role builds on every agent the kit ships, each in that agent's own t
     if (harness.id === "pi") {
       assert.deepEqual(settings.packages, ["npm:pi-mcp-adapter"], `${where}: the desk's tools reach Pi only through the adapter`);
       assert.equal(settings.defaultProjectTrust, "never", `${where}: the repository's own .pi does not load in a seat`);
-      const tools = { reviewer: ["read", "bash", "grep", "find", "ls"], watcher: [] }[role.role as "reviewer"];
+      const tools = { reviewer: ["read", "bash", "grep", "find", "ls"], watcher: [], critic: [] }[role.role as "reviewer"];
       assert.deepEqual(settings.defaultTools, tools, where);
       // The adapter lists an unconnected server with no tools until first called, so a fresh Peer could not find `done`.
       const desk = readConfig<Record<string, any>>(join(dir, harness.mcp.file), {}).mcpServers?.team;

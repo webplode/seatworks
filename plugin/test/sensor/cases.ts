@@ -7,12 +7,12 @@ import type { Brief } from "../../server/runtime/watch/jev/views.ts";
 
 /**
  * A turn the sensor should read one way. `expect` pins every question the case touches, since a
- * second question firing spends a day's incident budget on one event.
+ * second question firing spends a day's incident budget on one event; `held` is one not asked of this turn at all.
  */
 export type SensorCase = {
   id: string;
   why: string;
-  expect: Record<string, "high" | "low">;
+  expect: Record<string, "high" | "low" | "held">;
   brief: Brief;
   trail: Trail;
 };

@@ -12,7 +12,7 @@ export interface Control {
   writeSettings(project: string | undefined, revision: string, values: unknown): WriteResult;
   projects(): unknown;
   addProject(root: string): unknown;
-  removeProject(project: string): unknown;
+  removeProject(project: string): Promise<unknown>;
   candidateProjects(roots: string[]): unknown;
   parseMcp(text: string): unknown;
   team(project?: string): unknown;
@@ -20,6 +20,8 @@ export interface Control {
   setGitIdentity(project: string, name: string, email: string): Check;
   status(project: string): Promise<unknown>;
   flow(project: string, since?: string, open?: string[]): Promise<unknown>;
+  decidePlan(project: string, lane: string, approve: boolean, note: string): Promise<unknown>;
+  decideLand(project: string, lane: string, approve: boolean, note: string): Promise<unknown>;
   listPaths(path?: string): unknown;
   findPaths(query: string): Promise<unknown>;
   refreshModels(): Promise<unknown>;
@@ -54,6 +56,8 @@ export function registerRpc(server: { handle: unknown }, control: Control, bind:
   handle(contracts.gitIdentity, (input) => control.setGitIdentity(input.project, input.name, input.email));
   handle(contracts.status, (input) => control.status(input.project));
   handle(contracts.flow, (input) => control.flow(input.project, input.since, input.open));
+  handle(contracts.planDecide, (input) => control.decidePlan(input.project, input.lane, input.approve, input.note));
+  handle(contracts.landDecide, (input) => control.decideLand(input.project, input.lane, input.approve, input.note));
   handle(contracts.paths, (input) => control.listPaths(input.path));
   handle(contracts.pathsFind, (input) => control.findPaths(input.query));
   handle(contracts.models, () => control.refreshModels());

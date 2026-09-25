@@ -113,3 +113,19 @@ test("agents failing on one model make one card with the way out, and the Leads'
   assert.equal(view.items.filter((i) => i.action === "models").length, 1);
   assert.equal(view.projects[0]!.streams![0]!.title, "Checkout", "the project's name is not repeated in its own work");
 });
+test("a plan or a landing held for the Human is its own card, needs the Human, and is left out of Approve all", () => {
+  const ledger = emptyLedger();
+  ledger.lanes.L1 = { id: "L1", title: "Cart", status: "open", branch: "sw/L1", base: "main", lead: "lead-1", approval: { plan: 1, by: "human", since: 0, signals: ["AUTH owns src/auth.ts."] } } as never;
+  ledger.lanes.L2 = { id: "L2", title: "Search", status: "open", branch: "sw/L2", base: "main", lead: "lead-2", landApproval: { since: 0, head: "abc", signals: [], evidence: ["1 commit."], overGate: false } } as never;
+  ledger.tasks["L1-T1"] = { id: "L1-T1", lane: "L1", title: "Add the cart", plan: 1, status: "planned" } as never;
+  const reports = new Map([["L2", { ready: true, gate: true }]]);
+  const view = teamBrief(binding(), [], () => ledger, [], { reports: () => reports, diff: () => null, teamFiles: () => [] });
+  const plan = view.items.find((i) => i.kind === "plan")!, land = view.items.filter((i) => i.kind === "land");
+  assert.match(plan.plain!, /planned "Cart" in 1 step\. Nothing starts until you approve it/);
+  assert.match(plan.detail, /• Add the cart/);
+  assert.equal(land.length, 1); assert.equal(land[0]!.held, true);
+  assert.equal(view.needsYou, 2);
+  assert.equal(view.items.filter(approvable).length, 0);
+  assert.equal(view.projects[0]!.status, "2 ready for your approval");
+  assert.deepEqual(view.projects[0]!.streams!.map((s) => s.state), ["plan waits for you", "ready for you"]);
+});

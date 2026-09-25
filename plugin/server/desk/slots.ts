@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { addWorktree, branchExists, cleanState, contains, currentBranch, excludeFromGit, git, removeWorktree } from "../core/git.ts";
+import { addWorktree, branchExists, cleanState, contains, currentBranch, excludeFromGit, git, landedRef, removeWorktree } from "../core/git.ts";
 import { workState } from "../catalog/project-files.ts";
 import type { Workspace, Workspaces } from "../core/ports.ts";
 import { worktreeRoot } from "../core/paths.ts";
@@ -103,9 +103,9 @@ export class Slots {
     this.ctx.event(project, { kind: "lane.gaveBack", branch, base });
   }
 
-  /** A landed lane's branch is all in its base by now: the desk's to clear, not the Human's to keep. */
-  private async dropLanded(project: Project, branch: string, base: string): Promise<void> {
-    if ((await contains(project.root, base, branch)) === true) await git(project.root, ["branch", "-D", branch]);
+  /** A landed lane's branch is all under its landed ref by now: the desk's to clear, not the Human's to keep. */
+  private async dropLanded(project: Project, branch: string, into: string): Promise<void> {
+    if ((await contains(project.root, into, branch)) === true) await git(project.root, ["branch", "-D", branch]);
   }
 
   async projectWorkspace(project: Project): Promise<Workspace> {
@@ -182,7 +182,7 @@ export class Slots {
       }
       // The record goes only once the copy is really back: it is the only token a later round can retry from.
       if (!(await this.restore(project, lane.restoring!.base, lane.restoring!.branch))) continue;
-      if (lane.restoring!.landed) await this.dropLanded(project, lane.restoring!.branch, lane.restoring!.base);
+      if (lane.restoring!.landed) await this.dropLanded(project, lane.restoring!.branch, landedRef(lane.id));
       await this.ctx.ledger(project, (ledger) => {
         const entry = ledger.lanes[lane.id];
         if (entry) delete entry.restoring;
@@ -208,7 +208,7 @@ export class Slots {
     if (teardown.restore) {
       // Recorded as a wait for nobody when it fails, so the round retries it and Detach sees it.
       return this.restore(teardown.project, teardown.restore, teardown.branch).then(async (back) => {
-        if (back && teardown.dropBranch) await this.dropLanded(teardown.project, teardown.dropBranch, teardown.restore!);
+        if (back && teardown.dropBranch && teardown.into) await this.dropLanded(teardown.project, teardown.dropBranch, teardown.into);
         if (back || !teardown.lane) return undefined;
         await this.ctx.ledger(teardown.project, (ledger) => {
           const lane = ledger.lanes[teardown.lane!];

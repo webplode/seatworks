@@ -24,6 +24,8 @@ export const doctorRpc = defineRpc({ name: "seatworks.doctor.run", input: z.obje
 export const gitIdentityRpc = defineRpc({ name: "seatworks.git.identity", input: z.object({ project: z.string().min(1), name: z.string().trim().min(1), email: z.string().trim().email() }), output: z.json() });
 export const statusRpc = defineRpc({ name: "seatworks.status.read", input: z.object({ project: z.string().min(1) }), output: z.json() });
 export const flowRpc = defineRpc({ name: "seatworks.flow.read", input: z.object({ project: z.string().min(1), since: z.string().optional(), open: z.array(z.string()).optional() }), output: z.json() });
+export const planDecideRpc = defineRpc({ name: "seatworks.plan.decide", input: z.object({ project: z.string().min(1), lane: z.string().min(1), approve: z.boolean(), note: z.string() }), output: z.json() });
+export const landDecideRpc = defineRpc({ name: "seatworks.land.decide", input: z.object({ project: z.string().min(1), lane: z.string().min(1), approve: z.boolean(), note: z.string() }), output: z.json() });
 export const modelsRpc = defineRpc({ name: "seatworks.models.refresh", input: z.object({}), output: z.json() });
 export const decideRpc = defineRpc({ name: "seatworks.upkeep.decide", input: z.object({ unit: z.string().min(1), choice: z.enum(["new", "mine", "seen"]) }), output: z.json() });
 export const cleanRpc = defineRpc({ name: "seatworks.upkeep.clean", input: z.object({ remove: z.array(z.string()).optional() }), output: z.json() });
@@ -46,6 +48,8 @@ export const contracts = {
   gitIdentity: gitIdentityRpc,
   status: statusRpc,
   flow: flowRpc,
+  planDecide: planDecideRpc,
+  landDecide: landDecideRpc,
   paths: pathsRpc,
   pathsFind: pathsFindRpc,
   models: modelsRpc,

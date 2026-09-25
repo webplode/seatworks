@@ -29,7 +29,7 @@ for (const entry of cases) {
   const views = viewsOf(entry.trail, entry.brief, spec.stateChars);
   const answers: Record<string, number[]> = {};
   for (let run = 0; run < runs; run++) {
-    const asking = await assessViews(spec, key, views, `eval:${entry.id}:${run}`);
+    const asking = await assessViews(spec, key, views, { can: entry.brief.can, from: entry.trail.from }, `eval:${entry.id}:${run}`);
     if (!asking) break;
     spent += asking.assessment.cost ?? 0;
     for (const [name, p] of Object.entries(asking.assessment.answers)) (answers[name] ??= []).push(p);
@@ -38,9 +38,10 @@ for (const entry of cases) {
   for (const [name, want] of Object.entries(entry.expect)) {
     if (values.question && values.question !== name) continue;
     const read = answers[name];
-    // A question its views cannot answer is held back on purpose, not a failure.
-    if (!read) {
-      said.push(`  · ${name} held back, so nothing was asked`);
+    if (want === "held" || !read) {
+      const ok = want === "held" && !read;
+      if (!ok) wrong += 1;
+      said.push(`  ${ok ? "✓" : "✗"} ${name} ${read ? `asked, ${median(read).toFixed(2)}` : "held back, so nothing was asked"} (wanted ${want})`);
       continue;
     }
     const answer = median(read);

@@ -32,6 +32,7 @@
       }
     }
   },
+  "mcpCall": "^mcp__{server}__",
   "settings": {
     "file": "settings.json",
     "source": "settings.json",

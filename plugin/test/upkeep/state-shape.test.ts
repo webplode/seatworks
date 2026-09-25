@@ -13,11 +13,12 @@ const KEPT: [string, string[]][] = [
   ["server/desk/ledger.ts", ["LaneStatus", "TaskStatus", "AskKind", "Amendment", "Lane", "Handback", "Task", "Ask", "Releasing", "Restoring", "Slot", "AgentRef", "Ledger"]],
   ["server/desk/incidents.ts", ["Held", "Judged", "Incident", "Incidents"]],
   ["server/desk/project.ts", ["GateOn", "ProjectConfig"]],
+  ["server/core/git.ts", ["LandAs"]],
   ["server/runtime/outbox.ts", ["LetterSchema", "Letter"]],
   ["shared/supervision.ts", ["Operation", "Association", "ScopeProject", "Binding", "Dependency"]],
   ["server/runtime/watch/jev/communication.ts", ["Budget"]],
   ["server/upkeep/content.ts", ["Taken"]],
-  ["server/catalog/settings.ts", ["Scalar", "RoleChoice", "Connect", "McpChoice", "Pattern", "AttentionChoice", "FlowChoice", "shared", "SensorChoice", "ProjectLayerSchema", "MachineLayerSchema"]],
+  ["server/catalog/settings.ts", ["Scalar", "RoleChoice", "CheckpointsChoice", "CriticChoice", "Connect", "McpChoice", "Pattern", "AttentionChoice", "FlowChoice", "shared", "SensorChoice", "ProjectLayerSchema", "MachineLayerSchema"]],
 ];
 
 const bare = (text: string) =>

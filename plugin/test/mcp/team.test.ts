@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
-import { connect } from "node:net";
+import { connect, createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { type TestContext, test } from "node:test";
@@ -33,7 +33,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string): Pro
 /** A lane with its Lead, the desk's socket listening as the plugin's start opens it, and the Lead's key bound as Paseo opens it. */
 async function lineUp(t: TestContext) {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", {
     title: "Build",
     outcome: "a.txt changes",
@@ -90,7 +90,7 @@ async function line(t: TestContext, h: Harness, key: string, role: string) {
 
 /** A gate that holds until `release` is called, so a call it runs is stopped or dropped while the desk is still at it. */
 function heldGate(t: TestContext) {
-  const go = join(tempDir("sw2-gate-"), "go");
+  const go = join(tempDir("sw3-gate-"), "go");
   const release = () => writeFileSync(go, "");
   t.after(release);
   return { command: `until [ -f '${go}' ]; do sleep 0.02; done`, release };
@@ -136,6 +136,55 @@ test("a seat's harness is shown its tools with the desk's choices, and its calls
   await until(() => !socket.calling(lead), "the harness took the answer, so no mail waits on the call");
   assert.equal((await seat.call("accept", { task: "L9-T9" })).isError, true, "a refusal is marked an error");
   await assert.rejects(seat.client.callTool({ name: "no_such_tool", arguments: {} }), "the protocol's own error");
+});
+
+test("a call and its answer holding a line or paragraph separator cross the line whole", async (t) => {
+  const { h, lead, socket } = await lineUp(t);
+  const seat = await served(t, h, "lead", "k-lead");
+  const title = "Clean\u2028build\u2029now";
+  const added = await seat.call("add_tasks", { tasks: [{ ...task, title }] });
+  assert.equal(added.isError, false, added.content[0]!.text);
+  assert.equal(h.ledger().tasks["L1-T1"]!.title, title, "the call was read as one line");
+  assert.ok(added.content[0]!.text.includes(title), "and so was its answer");
+  await until(() => !socket.calling(lead), "the harness took the answer");
+});
+
+test("a call the desk never answers is given up on in time, told to the desk, and an unreadable line is said", async (t) => {
+  const heard: { type: string; id?: string }[] = [];
+  const path = join(tempDir("sw3-desk-"), "desk.sock");
+  const desk = createServer((socket) => {
+    createInterface({ input: socket }).on("line", (text) => {
+      const said = JSON.parse(text) as { type: string; id?: string };
+      heard.push(said);
+      if (said.type === "hello") socket.write(`not json\n${JSON.stringify({ type: "welcome", choices: {} })}\n`);
+    });
+  });
+  await new Promise<void>((resolve) => desk.listen(path, resolve));
+  t.after(() => desk.close());
+  const client = new Client({ name: "probe", version: "0" });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [TEAM, "lead", "lead", path],
+    env: { PATH: process.env.PATH ?? "", SEATWORKS_DESK_KEY: "k", SEATWORKS_ANSWER_MS: "200" },
+    stderr: "pipe",
+  });
+  let said = "";
+  transport.stderr!.on("data", (chunk: Buffer) => (said += chunk.toString()));
+  await client.connect(transport);
+  t.after(() => client.close());
+
+  const replied = (await client.callTool({
+    name: "report",
+    arguments: { summary: "done", ready: true },
+  })) as Replied;
+  assert.equal(replied.isError, true);
+  assert.match(replied.content[0]!.text, /^The team desk did not answer report in time\./);
+  const call = heard.find((message) => message.type === "call")!;
+  await until(
+    () => heard.some((message) => message.type === "cancel" && message.id === call.id),
+    "the desk is told the call was given up",
+  );
+  assert.match(said, /team: an unreadable line from the desk: not json/);
 });
 
 test("a call its harness stops, or whose line drops, is answered by mail, and the next call finds the desk again", async (t) => {

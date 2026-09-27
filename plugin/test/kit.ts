@@ -12,9 +12,9 @@ function put(root: string, path: string, value: unknown): void {
 }
 
 export function makeKit(): Kit {
-  const dir = tempDir("sw2-kit-");
+  const dir = tempDir("sw3-kit-");
   put(dir, "roles.json", {
-    providerPrefix: "sw2-",
+    providerPrefix: "sw3-",
     roles: [
       {
         role: "supervisor",

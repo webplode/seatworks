@@ -111,9 +111,9 @@ test("a question's class decides what waits on it: an irreversible one holds its
 test("the Human's daily allowance of questions counts every project, on the Report and when a question is asked", async () => {
   const h = harness();
   h.machineSettings({ hitl: { on: true } });
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const elsewhere = repo().root;
-  const theirs = h.add("sw2-supervisor-claude/claude-opus-5", elsewhere, "sup-b");
+  const theirs = h.add("sw3-supervisor-claude/claude-opus-5", elsewhere, "sup-b");
   assert.match((await h.call(theirs, "supervisor", "ask_human", packet(), elsewhere)).text, /^Asked the Human as H1;/);
   assert.match((await h.call(sup, "supervisor", "ask_human", packet())).text, /^Asked the Human as H1;/);
   const report = await h.report();

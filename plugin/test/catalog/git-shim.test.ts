@@ -32,7 +32,7 @@ const ALLOWED = [
 ];
 
 test("a seat's shell, on the PATH the desk gives it, refuses what only the desk does however it is spelled, and runs the rest with the real git", () => {
-  const root = tempDir("sw2-shim-");
+  const root = tempDir("sw3-shim-");
   execFileSync("git", ["-C", root, "init", "-q", "-b", "main"]);
   execFileSync("git", [
     "-C",
@@ -47,7 +47,7 @@ test("a seat's shell, on the PATH the desk gives it, refuses what only the desk 
     "-m",
     "seed",
   ]);
-  const state = tempDir("sw2-shim-state-");
+  const state = tempDir("sw3-shim-state-");
   mkdirSync(join(state, "bin"));
   writeFileSync(join(state, "bin", "hub"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
   const kit = loadKit(PLUGIN);
@@ -133,7 +133,7 @@ test("a seat's shell, on the PATH the desk gives it, refuses what only the desk 
 });
 
 test("a seat settles what conflicts on its task's branch through its git: merging the base in, rebasing and backing out, resetting its own history", () => {
-  const root = tempDir("sw2-shim-own-");
+  const root = tempDir("sw3-shim-own-");
   const real = (...args: string[]) =>
     execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@x", ...args], { encoding: "utf-8" });
   real("init", "-q", "-b", "main");
@@ -146,7 +146,7 @@ test("a seat settles what conflicts on its task's branch through its git: mergin
   real("switch", "-q", "main");
   writeFileSync(join(root, "a.txt"), "base\n");
   real("commit", "-qam", "base");
-  const dir = seatBin(loadKit(PLUGIN), tempDir("sw2-shim-own-state-"))!;
+  const dir = seatBin(loadKit(PLUGIN), tempDir("sw3-shim-own-state-"))!;
   const git = (...args: string[]) =>
     spawnSync(join(dir, "git"), ["-C", root, "-c", "user.name=t", "-c", "user.email=t@x", ...args], {
       encoding: "utf-8",
@@ -165,25 +165,25 @@ test("a seat settles what conflicts on its task's branch through its git: mergin
 });
 
 test("a seat's git works only in its own copy of the project: the Human's checkout and other seats' copies are refused, any other repository is not", () => {
-  const root = tempDir("sw2-shim-own-copy-");
+  const root = tempDir("sw3-shim-own-copy-");
   const real = (...args: string[]) =>
     execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@x", ...args], { encoding: "utf-8" });
   real("init", "-q", "-b", "main");
   real("commit", "-q", "--allow-empty", "-m", "seed");
-  const copies = tempDir("sw2-shim-copies-");
+  const copies = tempDir("sw3-shim-copies-");
   const [mine, theirs] = [join(copies, "S0"), join(copies, "S1")];
   real("worktree", "add", "-q", "-b", "task/l1-t1", mine);
   real("worktree", "add", "-q", "-b", "task/l1-t2", theirs);
-  const scratch = tempDir("sw2-shim-scratch-");
+  const scratch = tempDir("sw3-shim-scratch-");
   execFileSync("git", ["-C", scratch, "init", "-q"]);
-  const dir = seatBin(loadKit(PLUGIN), tempDir("sw2-shim-own-copy-state-"))!;
+  const dir = seatBin(loadKit(PLUGIN), tempDir("sw3-shim-own-copy-state-"))!;
   const git = (cwd: string, ...args: string[]) =>
     spawnSync(join(dir, "git"), args, { cwd, encoding: "utf-8", env: { ...process.env, SEATWORKS_WORKTREE: mine } });
   for (const [where, cwd, args] of [
     ["its own copy", mine, ["status"]],
     ["its own copy, named from a folder inside it", join(mine, "."), ["log", "--oneline"]],
     ["a repository of its own making, as a test suite's", scratch, ["status"]],
-    ["no repository at all", tempDir("sw2-shim-bare-"), ["--version"]],
+    ["no repository at all", tempDir("sw3-shim-bare-"), ["--version"]],
   ] as const) {
     const ran = git(cwd, ...args);
     assert.equal(ran.status, 0, `${where}: ${ran.stderr}`);

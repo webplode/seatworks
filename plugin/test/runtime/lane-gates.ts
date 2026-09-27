@@ -40,7 +40,7 @@ export const heldLook = (h: ReturnType<typeof harness>, seat: string) => heldCal
  * call; git's other calls, and later ones, go straight through. `release` also takes that git off PATH.
  */
 export function heldGit(subcommand: string) {
-  const dir = tempDir("sw2-git-");
+  const dir = tempDir("sw3-git-");
   const real = execFileSync("git", ["--exec-path"], { encoding: "utf-8" }).trim();
   const hold = `if mkdir "${dir}/taken" 2>/dev/null; then touch "${dir}/reached"; while [ ! -f "${dir}/go" ]; do sleep 0.02; done; fi`;
   writeFileSync(

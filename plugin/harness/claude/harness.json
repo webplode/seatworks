@@ -41,7 +41,13 @@
   "settings": {
     "file": "settings.json",
     "source": "settings.json",
-    "roleSource": "settings/ROLE.settings.json"
+    "roleSource": "settings/ROLE.settings.json",
+    "inherits": {
+      "from": "HOME/.claude/settings.json",
+      "keys": [
+        "language"
+      ]
+    }
   },
   "login": {
     "run": ["auth", "status"],
@@ -74,6 +80,9 @@
     "forceFlags": {
       "--setting-sources": "user",
       "--thinking-display": "summarized"
+    },
+    "keychainEnv": {
+      "CLAUDE_CODE_OAUTH_TOKEN": "Seatworks Claude Code token"
     }
   },
   "contextFile": "CLAUDE.md",

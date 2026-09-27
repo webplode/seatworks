@@ -15,7 +15,7 @@ const KEEP = "refs/seatworks/lanes/L1";
 
 /** A repository on main with one commit, a.txt holding "one". */
 function repo() {
-  const root = tempDir("sw2-git-");
+  const root = tempDir("sw3-git-");
   const run = (...args: string[]) =>
     execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@x", ...args], { encoding: "utf-8" });
   const write = (file: string, text: string) => {

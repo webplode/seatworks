@@ -25,15 +25,15 @@ const owners = () =>
     providers: {
       claude: { env: { TOKEN: "keep" } },
       peer: { extends: "acp", command: ["peer"] },
-      "sw2-peer": { extends: "acp", command: ["x"] },
-      "sw2-peer-omp": {
+      "sw3-peer": { extends: "acp", command: ["x"] },
+      "sw3-peer-omp": {
         extends: "claude",
         env: { MY_KEY: "x", CLAUDE_CODE_DISABLE_CRON: "1", CLAUDE_CONFIG_DIR: "/old", SEATWORKS_SLUG: "old" },
         description: "stale",
         models: [{ id: "glm", label: "GLM" }],
       },
     },
-    agentProfiles: [{ id: "mine" }, { id: "sw2-peer" }, { id: "sw2-lead-claude", provider: "sw2-lead-claude" }],
+    agentProfiles: [{ id: "mine" }, { id: "sw3-peer" }, { id: "sw3-lead-claude", provider: "sw3-lead-claude" }],
   });
 
 /** One pass as the plugin makes it: Paseo's config read, and each change patched in through Paseo's API. */
@@ -46,7 +46,7 @@ async function pass(config: ReturnType<typeof fakeConfig>, kit: Kit, teams: Team
 const providers = (config: ReturnType<typeof fakeConfig>) => config.held().providers as Record<string, Provider>;
 const ours = (config: ReturnType<typeof fakeConfig>) =>
   Object.keys(providers(config))
-    .filter((id) => id.startsWith("sw2-"))
+    .filter((id) => id.startsWith("sw3-"))
     .sort();
 
 test("with no project attached, a load writes no provider of the kit's and takes off every one it wrote before, leaving the owner's own alone", async () => {
@@ -55,10 +55,10 @@ test("with no project attached, a load writes no provider of the kit's and takes
   const before = structuredClone(config.held());
   const { changed } = await pass(config, kit, []);
   assert.deepEqual(changed.sort(), [
-    "profile sw2-lead-claude removed",
-    "profile sw2-peer removed",
-    "provider sw2-peer removed",
-    "provider sw2-peer-omp removed",
+    "profile sw3-lead-claude removed",
+    "profile sw3-peer removed",
+    "provider sw3-peer removed",
+    "provider sw3-peer-omp removed",
   ]);
   assert.deepEqual(ours(config), [], "nothing is wanted until a project is attached");
   assert.deepEqual(
@@ -68,7 +68,7 @@ test("with no project attached, a load writes no provider of the kit's and takes
   assert.deepEqual(config.held().agentProfiles, [{ id: "mine" }]);
   assert.deepEqual((await pass(config, kit, [])).patches, [], "a second load changes nothing");
   assert.deepEqual(
-    (await pass(owners(), kit, [], new Set(["sw2-peer-omp"]))).changed.filter((line) => line.includes("peer-omp")),
+    (await pass(owners(), kit, [], new Set(["sw3-peer-omp"]))).changed.filter((line) => line.includes("peer-omp")),
     [],
     "a provider a live seat still runs on stays as it is",
   );
@@ -79,23 +79,23 @@ test("an attached project's team gets one provider per role, on the agent that r
   const config = owners();
   const { changed } = await pass(config, kit, [resolveTeam(kit)]);
   assert.deepEqual(changed.sort(), [
-    "profile sw2-lead-claude removed",
-    "profile sw2-peer removed",
-    "provider sw2-lead-claude",
-    "provider sw2-peer removed",
-    "provider sw2-peer-omp",
-    "provider sw2-scribe-omp",
-    "provider sw2-supervisor-claude",
+    "profile sw3-lead-claude removed",
+    "profile sw3-peer removed",
+    "provider sw3-lead-claude",
+    "provider sw3-peer removed",
+    "provider sw3-peer-omp",
+    "provider sw3-scribe-omp",
+    "provider sw3-supervisor-claude",
   ]);
   assert.deepEqual(
     ours(config),
-    ["sw2-lead-claude", "sw2-peer-omp", "sw2-scribe-omp", "sw2-supervisor-claude"],
+    ["sw3-lead-claude", "sw3-peer-omp", "sw3-scribe-omp", "sw3-supervisor-claude"],
     "exactly the pairs the default team seats, the Scribe on the agent of the Peer it follows",
   );
-  const lead = providers(config)["sw2-lead-claude"]!;
+  const lead = providers(config)["sw3-lead-claude"]!;
   assert.deepEqual(
     [lead.extends, lead.label, lead.command, lead.env?.SEATWORKS_ROLE, lead.env?.SEATWORKS_KIT],
-    ["claude", "Lead · Claude Code (sw2)", [nodeBin(), `${kit.dir}/bin/seat-room.mjs`], "lead", kit.dir],
+    ["claude", "Lead · Claude Code (sw3)", [nodeBin(), `${kit.dir}/bin/seat-room.mjs`], "lead", kit.dir],
   );
   assert.equal(
     lead.models,
@@ -103,7 +103,7 @@ test("an attached project's team gets one provider per role, on the agent that r
     "Paseo lists the agent's own models: replacing that list hid every model but the chosen one",
   );
   assert.deepEqual(lead.additionalModels, [{ id: "opus", label: "Opus", isDefault: true }]);
-  const peer = providers(config)["sw2-peer-omp"]!;
+  const peer = providers(config)["sw3-peer-omp"]!;
   assert.equal(peer.extends, "omp");
   assert.deepEqual(
     Object.keys(peer.env ?? {}).sort(),
@@ -123,14 +123,14 @@ test("an attached project's team gets one provider per role, on the agent that r
   assert.deepEqual((await pass(config, kit, [resolveTeam(kit)])).patches, [], "a second pass changes nothing");
 
   const haiku = await pass(config, kit, [resolveTeam(kit, { roles: { lead: { model: "haiku" } } })]);
-  assert.deepEqual(haiku.changed, ["provider sw2-lead-claude"]);
+  assert.deepEqual(haiku.changed, ["provider sw3-lead-claude"]);
   assert.deepEqual(
     haiku.patches.map((patch) => Object.keys(patch)),
     [["providers"]],
     "a change that drops no key is one patch, the provider never gone meanwhile",
   );
   assert.deepEqual(
-    providers(config)["sw2-lead-claude"]!.additionalModels,
+    providers(config)["sw3-lead-claude"]!.additionalModels,
     [{ id: "haiku", label: "Haiku", isDefault: true }],
     "the model it starts on is the one chosen",
   );
@@ -138,13 +138,13 @@ test("an attached project's team gets one provider per role, on the agent that r
   await pass(config, kit, [resolveTeam(kit), onOmp]);
   assert.deepEqual(
     ours(config),
-    ["sw2-lead-claude", "sw2-lead-omp", "sw2-peer-omp", "sw2-scribe-omp", "sw2-supervisor-claude"],
+    ["sw3-lead-claude", "sw3-lead-omp", "sw3-peer-omp", "sw3-scribe-omp", "sw3-supervisor-claude"],
     "two projects seat what either team uses",
   );
   await pass(config, kit, [onOmp]);
   assert.deepEqual(
     ours(config),
-    ["sw2-lead-omp", "sw2-peer-omp", "sw2-scribe-omp", "sw2-supervisor-claude"],
+    ["sw3-lead-omp", "sw3-peer-omp", "sw3-scribe-omp", "sw3-supervisor-claude"],
     "and what no team uses any more is taken off",
   );
 
@@ -162,7 +162,7 @@ test("an attached project's team gets one provider per role, on the agent that r
   const fresh = fakeConfig();
   await pass(fresh, listed, [resolveTeam(listed, { roles: { lead: { harness: "omp" } } })]);
   assert.deepEqual(
-    providers(fresh)["sw2-lead-omp"]!.additionalModels,
+    providers(fresh)["sw3-lead-omp"]!.additionalModels,
     [{ id: "glm", label: "GLM", isDefault: true }],
     "a role on an agent its preset does not name starts on another role's preset there, not the first listed",
   );

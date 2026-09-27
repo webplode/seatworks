@@ -260,7 +260,7 @@ test("a seat that ends a turn never having reached its team's tools is told of, 
 
 test("a seat's turn stays open through the late end of an older turn, and a message steered into a long turn does not make it long again", () => {
   const context = () => ({ rules: rules(), handedBack: () => undefined, heard: () => true, placed: true });
-  const seat = { id: "s1", provider: "sw2-peer-claude", cwd: "/work" };
+  const seat = { id: "s1", provider: "sw3-peer-claude", cwd: "/work" };
   const late = new SeatWatch(seat, context);
   late.see({ kind: "turn", phase: "started", turnId: "turn-2" }, 1_000);
   late.see({ kind: "turn", phase: "completed", turnId: "turn-1" }, 2_000);

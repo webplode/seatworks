@@ -55,7 +55,7 @@ function toSeen(message: StreamMessage, epochs: Map<string, number>): Exclude<Se
 
 /** A seat's watch over `context`, told recorded messages as the follower tells them: each fact carries the seq it came on. */
 export function watchOver(context: () => SeatContext | undefined, quirks?: Quirks) {
-  const watch = new SeatWatch({ id: "s1", provider: "sw2-peer-claude", cwd: "/work" }, context, quirks);
+  const watch = new SeatWatch({ id: "s1", provider: "sw3-peer-claude", cwd: "/work" }, context, quirks);
   const epochs = new Map<string, number>();
   let now = 1_000;
   return (messages: StreamMessage[]) => {

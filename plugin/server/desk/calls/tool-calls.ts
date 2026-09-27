@@ -5,7 +5,7 @@ import { errorText } from "../../core/errors.ts";
 import { KeyedQueue } from "../../core/keyed-queue.ts";
 import { sortKeys } from "../../core/json.ts";
 import { clip } from "../../core/text.ts";
-import { argsProblems, shapeOf, withoutNulls } from "./args.ts";
+import { argsProblems, shapeOf, typedArgs, withoutNulls } from "./args.ts";
 import { type Args, type Caller, type ToolReply, type ToolRequest, no } from "../context.ts";
 import { inTime } from "./in-time.ts";
 import { decisionFacts } from "../watch/decision-facts.ts";
@@ -107,7 +107,7 @@ export class ToolCalls {
     const shown = schemaOf(this.desk.kit, caller.role, request.tool);
     const tool = shown ? servedBy(this.tools, request.tool, shown) : undefined;
     if (!shown || !tool) return { reply: no(`Unknown tool ${request.tool}.`) };
-    const args = (request.args ?? {}) as Args;
+    const args = typedArgs(shown, request.args ?? {}) as Args;
     const problems = argsProblems(shown, args);
     if (problems.length > 0)
       return { reply: no(`${request.tool} was not carried out: it ${problems.join("; ")}. ${shapeOf(shown)}`) };

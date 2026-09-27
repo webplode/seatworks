@@ -25,9 +25,9 @@ function commit(dir: string, files: Record<string, string>, subject: string): vo
 
 /** A checkout following origin/main, and another clone that pushes to it. */
 function world() {
-  const origin = tempDir("sw2-origin-");
+  const origin = tempDir("sw3-origin-");
   git(origin, "init", "-q", "--bare", "-b", "main");
-  const upstream = tempDir("sw2-up-");
+  const upstream = tempDir("sw3-up-");
   git(upstream, "clone", "-q", origin, ".");
   git(upstream, "checkout", "-q", "-b", "main");
   commit(
@@ -36,7 +36,7 @@ function world() {
     "Start",
   );
   git(upstream, "push", "-q", "origin", "main");
-  const dir = tempDir("sw2-plugin-");
+  const dir = tempDir("sw3-plugin-");
   git(dir, "clone", "-q", origin, ".");
   const calls = { install: 0, reload: 0 };
   let installFails: string | undefined;
@@ -92,12 +92,12 @@ test("check says where the checkout stands and what the update will need, and mo
 
   const managed = await checkUpdate({
     ...ctx,
-    dir: "/home/me/.paseo/plugins/seatworks-v2/abc/checkout/plugin",
+    dir: "/home/me/.paseo/plugins/seatworks-v3/abc/checkout/plugin",
     managedRoot: "/home/me/.paseo/plugins",
   });
   assert.equal(
     managed.blocked,
-    "Paseo installed this copy from Git: run `paseo plugin update seatworks-v2 --ref <branch>`, naming the branch it came from, since without --ref Paseo takes the remote's default branch.",
+    "Paseo installed this copy from Git: run `paseo plugin update seatworks-v3 --ref <branch>`, naming the branch it came from, since without --ref Paseo takes the remote's default branch.",
     "a copy Paseo installed from Git is left to Paseo's own update",
   );
 });

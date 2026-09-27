@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { dirname, join } from "node:path";
 import { configFault, formatConfig, readConfig, readConfigStrict, writeConfigAtomic } from "../../core/config-file.ts";
 import { errorText } from "../../core/errors.ts";
+import { gitCommonDir } from "../../core/git.ts";
 import { LeftAlone, ensureLink, isLink, present, writeIfChanged } from "../../core/fs.ts";
 import { type Json, getPath, isRecord, layered, sameJson, setPath } from "../../core/json.ts";
 import { daemonLog } from "../../core/logger.ts";
@@ -10,6 +11,7 @@ import { expandHome } from "../../core/paths.ts";
 import { projectBlock, skillProblems, skillSources } from "../kit/content.ts";
 import type { HarnessSpec, Kit, McpServers, RoleSpec } from "../kit/kit.ts";
 import { harnessFileSources, roleSettingsFile } from "../kit/harness-files.ts";
+import { can } from "../kit/roles.ts";
 import { projectImports, stateWrites } from "./launch.ts";
 import { refusalLines, refusalSettings } from "./refusals.ts";
 import { snapshot } from "./snapshots.ts";
@@ -72,7 +74,7 @@ export function writeRoleSettings(
   kit: Kit,
   harness: HarnessSpec,
   role: RoleSpec,
-  seat: { dir: string; homeDir: string; state?: string },
+  seat: { dir: string; homeDir: string; state?: string; root?: string },
   record: Recorder,
   catalog: Json,
 ): void {
@@ -85,7 +87,7 @@ export function writeRoleSettings(
     readConfigStrict<Json>(roleFile),
   ) as Json;
   const extra = layered(
-    layered(catalog, stateWritesSetting(harness, role, seat.state, kitSettings)),
+    layered(catalog, stateWritesSetting(harness, role, seat.state, kitSettings, seat.root)),
     refusalSettings(kit, harness, role, seat.homeDir),
   ) as Json;
   const wanted = layered(layered(inherited(harness, seat.homeDir), kitSettings), extra) as Json;
@@ -134,10 +136,18 @@ export function writeModelCatalog(harness: HarnessSpec, dir: string, record: Rec
 }
 
 /** What the role writes under the project's state, as roots and, where its settings name a permission profile, as grants there, which reads no roots. */
-function stateWritesSetting(harness: HarnessSpec, role: RoleSpec, state: string | undefined, settings: Json): Json {
+function stateWritesSetting(
+  harness: HarnessSpec,
+  role: RoleSpec,
+  state: string | undefined,
+  settings: Json,
+  root?: string,
+): Json {
   const spec = harness.stateWrites;
   if (spec?.delivery !== "file" || !state) return {};
-  const paths = stateWrites(role, state);
+  // A role that commits needs the repository's own git directory: a worktree keeps its index and refs there.
+  const git = can(role, "write") && root ? gitCommonDir(root) : undefined;
+  const paths = [...stateWrites(role, state), ...(git ? [git] : [])];
   const setting: Json = {};
   setPath(setting, spec.path.split("."), paths);
   const profile = spec.profile && settings[spec.profile.key];

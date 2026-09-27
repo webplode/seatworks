@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, delimiter, extname, join, resolve } from "node:path";
 import { getPath, isRecord } from "./json.ts";
 
-export const PLUGIN_ID = "seatworks-v2";
+export const PLUGIN_ID = "seatworks-v3";
 
 export function home(): string {
   return process.env.HOME || homedir();

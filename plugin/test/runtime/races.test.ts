@@ -21,7 +21,7 @@ const task = (key: string, extra: Record<string, unknown>) => ({
 
 async function opened(isolate = false) {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Build", ...scope, isolate });
   return { h, sup, lead: h.ledger().lanes.L1!.lead! };
 }
@@ -51,7 +51,7 @@ test("two task calls at once put one writer in the lane's copy: the one that fin
 
 test("two lanes opened at once in the project's own copy open one there, and the other is told the copy is taken", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const looked = heldLook(h, sup);
   const cart = h.call(sup, "supervisor", "open_lane", { title: "Cart", ...scope });
   await looked.reached;
@@ -70,7 +70,7 @@ test("two lanes opened at once in the project's own copy open one there, and the
 
 test("a waiting lane opened by a round while a close opens another opens once, and a lane asked for meanwhile finds the project's copy taken", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown> = {}) =>
     h.call(sup, "supervisor", "open_lane", { title, ...scope, ...extra });
   await open("Cart", { isolate: true });
@@ -213,8 +213,8 @@ test("a lane closed twice at once is closed once, and the second call is told it
 
 test("a READY whose gate is still running when its lane closes is not recorded on the closed lane", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
-  const gate = tempDir("sw2-gate-");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
+  const gate = tempDir("sw3-gate-");
   await h.call(sup, "supervisor", "set_project", {
     gate: `: > ${gate}/reached; until test -f ${gate}/open; do sleep 0.02; done; true`,
     gateOn: "lane",

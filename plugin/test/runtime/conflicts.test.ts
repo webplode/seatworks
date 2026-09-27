@@ -15,7 +15,7 @@ const underWay = (h: Harness, copy: string) =>
 
 test("a base that conflicts with a lane leaves nothing in its copy, its Lead has the facts and the Supervisor chooses who takes the base in, and the lane lands once a task has", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const land = (lane: string) => h.call(sup, "supervisor", "land_lane", { lane });
   await h.call(sup, "supervisor", "set_project", { gate: "true" });
   await h.call(sup, "supervisor", "open_lane", {
@@ -89,7 +89,7 @@ test("a base that conflicts with a lane leaves nothing in its copy, its Lead has
 
 test("the merge queue hands a conflict to its Peer, merges nothing as nothing, waits out a busy copy or a hold, fails a task on a crash, and is tried once more by landing", async (t) => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Two", outcome: "x", ...scope, writeSet: ["*.txt"] });
   const lane = h.ledger().lanes.L1!;
   const lead = lane.lead!;
@@ -215,7 +215,7 @@ test("the merge queue hands a conflict to its Peer, merges nothing as nothing, w
 
 test("a landing tells each lane still open on its base what now conflicts with it, and whoever landed it which lanes", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { gate: "true" });
   const open = (title: string) =>
     h.call(sup, "supervisor", "open_lane", { title, outcome: "x", ...scope, writeSet: ["a.txt"], isolate: true });
@@ -248,7 +248,7 @@ test("a landing tells each lane still open on its base what now conflicts with i
 
 test("a base that git says conflicts with a lane without naming a file is a conflict too, told as git words it", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { gate: "true" });
   mkdirSync(join(h.root, "d"));
   writeFileSync(join(h.root, "d", "a.txt"), "a\n");

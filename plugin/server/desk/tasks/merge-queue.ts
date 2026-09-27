@@ -19,8 +19,9 @@ export class MergeQueue {
     this.merge = new TaskMerge(desk, merged);
   }
 
-  settled(project: Project): Promise<unknown> {
-    return this.queues.idle(`${project.slug}\n`);
+  /** Settles once what is queued now has: the lane's merges when a lane is named, every lane's otherwise. */
+  settled(project: Project, lane?: string): Promise<unknown> {
+    return lane === undefined ? this.queues.idle(`${project.slug}\n`) : this.queues.idleAt(`${project.slug}\n${lane}`);
   }
 
   enqueue(project: Project, taskId: string): void {
@@ -39,18 +40,20 @@ export class MergeQueue {
    * What a stop left accepted and unmerged goes through again, in the order it was accepted. Each lane's waits its turn
    * in that lane's queue, so a task it finds merging was cut off by the stop and is not one this run is merging.
    */
-  async resume(project: Project): Promise<void> {
-    const queued = Object.values(loadLedger(project.state).tasks).filter((task) => IN_QUEUE.includes(task.status));
+  async resume(project: Project, lane?: string): Promise<void> {
+    const queued = Object.values(loadLedger(project.state).tasks).filter(
+      (task) => IN_QUEUE.includes(task.status) && (lane === undefined || task.lane === lane),
+    );
     const lanes = new Set(queued.map((task) => task.lane));
     await Promise.all([...lanes].map((lane) => this.after(project, lane, () => this.takeUp(project, lane))));
   }
 
   /** What waits for a lane's copy to be clean goes again at a turn's end, when a writer there may have committed. */
-  retry(project: Project): Promise<void> {
+  retry(project: Project, lane?: string): Promise<void> {
     const waiting = Object.values(loadLedger(project.state).tasks).some(
-      (task) => task.status === "queued" && task.mergeHeld,
+      (task) => task.status === "queued" && task.mergeHeld && (lane === undefined || task.lane === lane),
     );
-    return waiting ? this.resume(project) : Promise.resolve();
+    return waiting ? this.resume(project, lane) : Promise.resolve();
   }
 
   private after(project: Project, lane: string, run: () => Promise<void>): Promise<void> {

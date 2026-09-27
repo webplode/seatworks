@@ -59,10 +59,10 @@ const addTask = (id: string, title: string, holds: string) => ({
 });
 
 test("a seat's line to the desk carries its choices and its calls, and a call stopped on either side, or made before a reload is reached, is carried out and mailed", async (t) => {
-  const go = join(tempDir("sw2-line-"), "go");
+  const go = join(tempDir("sw3-line-"), "go");
   t.after(() => writeFileSync(go, ""));
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   // The lane's gate waits for the test, so a report is still being worked on when its caller stops it.
   await h.call(sup, "supervisor", "set_project", { gate: `until [ -f ${go} ]; do sleep 0.05; done`, gateOn: "lane" });
   await h.call(sup, "supervisor", "open_lane", {
@@ -195,13 +195,13 @@ test("a seat Paseo starts again after it was archived is served nothing, and tol
     h.runtime.sessionOpen({
       agentId: "agent-9",
       reason: key ? "create" : "resume",
-      provider: "sw2-lead-claude",
+      provider: "sw3-lead-claude",
       cwd: h.root,
       env: key ? { SEATWORKS_DESK_KEY: key } : {},
     });
   open("k-9");
   assert.equal((await hello("k-9")).type, "welcome");
-  await h.runtime.archived({ id: "agent-9", provider: "sw2-lead-claude", cwd: h.root });
+  await h.runtime.archived({ id: "agent-9", provider: "sw3-lead-claude", cwd: h.root });
   const revived = open().env.SEATWORKS_DESK_KEY ?? "";
   const refused = await hello(revived);
   assert.equal(refused.type, "refused");

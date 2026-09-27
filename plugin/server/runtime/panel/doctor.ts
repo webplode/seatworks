@@ -136,7 +136,7 @@ async function loginCheck(harness: HarnessSpec, roles: string[], providerEnv: Pr
   const { login, configDirEnv } = harness;
   if (!login || !configDirEnv || !bin || !onPath(bin)) return undefined;
   const id = `harness:${harness.id}:login`;
-  const dir = mkdtempSync(join(tmpdir(), "sw2-login-"));
+  const dir = mkdtempSync(join(tmpdir(), "sw3-login-"));
   try {
     const seat = { ...(await providerEnv(harness.baseProvider)), ...harness.provider.env, [configDirEnv]: dir };
     const env = { ...process.env, ...seat };

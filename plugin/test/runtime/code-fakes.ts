@@ -166,14 +166,14 @@ export async function fakeIde(t: TestContext, options: IdeOptions = {}) {
 }
 
 export function repo(): string {
-  const dir = tempDir("sw2-code-");
+  const dir = tempDir("sw3-code-");
   execFileSync("git", ["init", "-q", dir]);
   return realpathSync(dir);
 }
 
 /** A code search server over stdio that writes its pid beside itself; `listMs` holds its first tool list back that long after a quick handshake. */
 export function fakeSemble(listMs = 0): string {
-  const file = join(tempDir("sw2-semble-"), "semble.mjs");
+  const file = join(tempDir("sw3-semble-"), "semble.mjs");
   writeFileSync(
     file,
     `import { writeFileSync } from "node:fs";

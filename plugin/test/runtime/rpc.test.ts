@@ -59,11 +59,11 @@ test("the plugin finds its own directory where Paseo's home is, and one that can
     if (given === undefined) delete process.env.PASEO_HOME;
     else process.env.PASEO_HOME = given;
   });
-  const moved = tempDir("sw2-paseo-home-");
+  const moved = tempDir("sw3-paseo-home-");
   process.env.PASEO_HOME = moved;
   writeFileSync(
     join(moved, "config.json"),
-    JSON.stringify({ plugins: { "seatworks-v2": { source: "directory", path: "/kit" } } }),
+    JSON.stringify({ plugins: { "seatworks-v3": { source: "directory", path: "/kit" } } }),
   );
   assert.equal(pluginDir(), "/kit", "Paseo's home is where PASEO_HOME says, when the daemon was given one");
 
@@ -82,7 +82,7 @@ test("the plugin finds its own directory where Paseo's home is, and one that can
     [],
     "every panel call is still served, rather than none and the panel left guessing",
   );
-  const why = (text: string) => text.includes(join(moved, "config.json")) && text.includes("plugins.seatworks-v2");
+  const why = (text: string) => text.includes(join(moved, "config.json")) && text.includes("plugins.seatworks-v3");
   await assert.rejects(
     async () => handlers.get(contracts.projects.name)!(),
     (error: Error) => why(error.message),
@@ -103,7 +103,7 @@ test("settings: machine and project layers saved by revision, checked before sav
   const machine = await team();
   assert.deepEqual(machine.roles.lead!.mcp, ["ide", "docs"], "a server turned on for the machine");
   assert.match(machine.roles.lead!.rules, /Look library APIs up in the docs\./);
-  assert.equal(machine.roles.lead!.provider, "sw2-lead-claude");
+  assert.equal(machine.roles.lead!.provider, "sw3-lead-claude");
   onRecord("shop-abc123", "/work/shop");
   assert.deepEqual(await call(contracts.projects, {}), [{ slug: "shop-abc123", root: "/work/shop" }]);
   const projectRead = which(await call(contracts.settingsRead, { project: "shop-abc123" }), "values");
@@ -122,7 +122,7 @@ test("settings: machine and project layers saved by revision, checked before sav
   const shop = await team("shop-abc123");
   assert.deepEqual(
     [shop.roles.lead!.harness, shop.roles.lead!.provider, shop.roles.lead!.mcp],
-    ["omp", "sw2-lead-omp", ["docs"]],
+    ["omp", "sw3-lead-omp", ["docs"]],
   );
   assert.match(shop.roles.lead!.rules, /Look library APIs up in the docs\./);
   assert.equal((await team()).roles.lead!.harness, "claude", "a role's harness switched for one project only");
@@ -237,7 +237,7 @@ test("the panel's Refresh lists each agent's models through its built-in provide
     provider === "claude" ? { models: [{ id: "opus", label: "Opus 5" }] } : { models: [{ id: "glm", label: "GLM" }] };
   const paseo = daemon(fakeConfig(), [], listed);
   const { call, providers } = served(paseo);
-  const root = realpathSync(tempDir("sw2-rpc-models-"));
+  const root = realpathSync(tempDir("sw3-rpc-models-"));
   which(await call(contracts.projectsAdd, { root }), "slug");
   await call(contracts.catalog, {});
   assert.equal(paseo.asked.length, 0, "only the Human's Refresh sends Paseo to its agents: each ask probes them");
@@ -255,7 +255,7 @@ test("the panel's Refresh lists each agent's models through its built-in provide
     "an agent's own provider answers for it, so listing needs no provider of the kit's",
   );
   assert.deepEqual(
-    (await providers())["sw2-lead-claude"]?.additionalModels,
+    (await providers())["sw3-lead-claude"]?.additionalModels,
     [{ id: "opus", label: "Opus 5", isDefault: true }],
     "a changed list reaches the providers of the attached projects' seats",
   );

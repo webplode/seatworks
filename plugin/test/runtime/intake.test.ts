@@ -19,7 +19,7 @@ const oneTask = (key: string, title: string, extra: Record<string, unknown> = {}
 
 test("a lane that waits is recorded, amended, opened off a base holding the work it waited for, or dropped", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown> = {}) =>
     h.call(sup, "supervisor", "open_lane", lane(title, extra));
   await h.call(sup, "supervisor", "set_project", { gate: "true" });
@@ -94,7 +94,7 @@ test("a lane that waits is recorded, amended, opened off a base holding the work
 
 test("a waiting lane held at its turn is told why once, retried by each close and round, and opens when what held it clears", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown> = {}) =>
     h.call(sup, "supervisor", "open_lane", lane(title, extra));
   const now = () => h.ledger().lanes;
@@ -165,7 +165,7 @@ test("a waiting lane held at its turn is told why once, retried by each close an
 
 test("a lane waiting to carry on a branch carries on the branch the lane before it carries, and is held while the Human's copy is elsewhere", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown> = {}) =>
     h.call(sup, "supervisor", "open_lane", lane(title, extra));
   await h.call(sup, "supervisor", "set_project", { gate: "true" });

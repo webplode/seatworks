@@ -55,7 +55,7 @@ const KEPT = ["roles.json", "refused.json", "own/**", "projects/*/ledger.json", 
 test("every role builds on every agent the kit ships, each in that agent's own terms", (t) => {
   const kit = loadKit(PLUGIN);
   const base = resolveTeam(kit, { mcp: Object.fromEntries(Object.keys(kit.mcp).map((id) => [id, { enabled: true }])) });
-  const home = tempDir("sw2-every-home-");
+  const home = tempDir("sw3-every-home-");
   const project = { root: "/work/demo", slug: "demo-000000", state: "/state/demo" };
   const agents = Object.values(kit.harnesses).flatMap((harness) => harness.provider.env?.SEATWORKS_AGENT_BIN ?? []);
   for (const { role, harness } of seatPairs(kit)) {

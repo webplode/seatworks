@@ -52,8 +52,8 @@ async function readyBlocked(desk: DeskServices, project: Project, lane: Lane): P
   const held = holdRefusal(lane);
   if (held) return held;
   // What ready claims is what the gate runs on: the merges accepted before it land first, and nobody writes under it.
-  await desk.merges.retry(project);
-  await desk.merges.settled(project);
+  await desk.merges.retry(project, lane.id);
+  await desk.merges.settled(project, lane.id);
   const inCopy = tasksOf(loadLedger(project.state), lane.id).filter(
     (task) => task.kind === "code" && task.mode !== "parallel",
   );

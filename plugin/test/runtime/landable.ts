@@ -15,7 +15,7 @@ export async function laneWith(
 ) {
   const h = harness();
   h.projectSettings({ hitl: { on: hitl } });
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { base: "main", gate: "true", askFirst });
   const opened = await h.call(sup, "supervisor", "open_lane", {
     title: "Cart",

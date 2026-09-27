@@ -1,6 +1,6 @@
 // A seat's agent, started only on the seat's own settings and with the flags its harness forces on it; Paseo's version
 // probe, which starts no session, passes unconfigured.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 
@@ -10,19 +10,32 @@ function fail(message) {
 }
 
 const bin = process.env.SEATWORKS_AGENT_BIN;
-if (!bin) fail("env.SEATWORKS_AGENT_BIN is unset on this seat's provider; reload the seatworks-v2 plugin.");
+if (!bin) fail("env.SEATWORKS_AGENT_BIN is unset on this seat's provider; reload the seatworks-v3 plugin.");
 const manifest = join(process.env.SEATWORKS_KIT ?? "", "harness", process.env.SEATWORKS_HARNESS ?? "", "harness.json");
 let harness;
 try {
   harness = JSON.parse(readFileSync(manifest, "utf-8"));
 } catch {
-  fail(`${manifest} can't be read; set env.SEATWORKS_KIT and env.SEATWORKS_HARNESS on this seat's provider and reload the seatworks-v2 plugin.`);
+  fail(`${manifest} can't be read; set env.SEATWORKS_KIT and env.SEATWORKS_HARNESS on this seat's provider and reload the seatworks-v3 plugin.`);
 }
 
 let args = process.argv.slice(2);
 const configDir = harness.configDirEnv;
 if (configDir && !process.env[configDir] && !(args.length === 1 && args[0] === "--version"))
-  fail(`${configDir} is unset, so this seat would run on your own settings instead of its role's. The seatworks-v2 plugin did not configure this launch: reload it, or start this agent from a provider it does not own.`);
+  fail(`${configDir} is unset, so this seat would run on your own settings instead of its role's. The seatworks-v3 plugin did not configure this launch: reload it, or start this agent from a provider it does not own.`);
+// A seat's own config directory has no login of its own: a token kept in the owner's keychain signs it in.
+for (const [name, service] of Object.entries(harness.provider?.keychainEnv ?? {})) {
+  if (process.env[name]) continue;
+  try {
+    const secret = execFileSync("security", ["find-generic-password", "-s", String(service), "-w"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (secret) process.env[name] = secret;
+  } catch {
+    // No matching keychain entry, or no macOS `security` command: the agent starts signed out.
+  }
+}
 if (!configDir || process.env[configDir])
   for (const [flag, value] of Object.entries(harness.provider?.forceFlags ?? {})) {
     const forced = [];

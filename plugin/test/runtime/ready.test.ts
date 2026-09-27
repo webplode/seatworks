@@ -84,7 +84,7 @@ test("a READY is what the lane's copy holds with nobody writing there, and whate
   assert.match(h.heard(sup).join("\n"), /test -f c\.txt passed on the lane branch/);
 
   // Amended while its gate runs, the lane is not ready: what READY would claim changed under it.
-  const dir = tempDir("sw2-amend-");
+  const dir = tempDir("sw3-amend-");
   const [started, go] = [join(dir, "started"), join(dir, "go")];
   await h.call(sup, "supervisor", "set_project", { gate: `touch ${started}; until [ -f ${go} ]; do sleep 0.05; done` });
   const reporting = report();
@@ -104,7 +104,7 @@ test("a READY is what the lane's copy holds with nobody writing there, and whate
 
 test("a review started on a lane reported ready takes the READY back and calls off its ordered landing, and whoever supervises hears both", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const scope = { acceptance: ["a"], outOfScope: ["anything else"] };
   await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", ...scope });
   const lane = h.ledger().lanes.L1!;

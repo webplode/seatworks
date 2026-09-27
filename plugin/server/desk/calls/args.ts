@@ -67,6 +67,30 @@ function problems(schema: ArgSchema, args: Record<string, unknown>, missing: (va
   return found;
 }
 
+/** A value some harnesses send as text, read as the type its field asks for. Anything else is left as sent. */
+function asTyped(schema: ArgSchema, value: unknown): unknown {
+  if (typeof value !== "string" || !schema.type || schema.type === "string") return value;
+  const text = value.trim();
+  if (schema.type === "boolean") return text === "true" ? true : text === "false" ? false : value;
+  if (schema.type === "number" || schema.type === "integer")
+    return text !== "" && Number.isFinite(Number(text)) ? Number(text) : value;
+  if (schema.type !== "array" && schema.type !== "object") return value;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeOf(parsed) === schema.type ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
+/** `args` with each text value read as its field's type, for harnesses that do not type their calls. */
+export function typedArgs(schema: ArgSchema, args: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema.properties ?? {};
+  return Object.fromEntries(
+    Object.entries(args).map(([name, value]) => [name, properties[name] ? asTyped(properties[name], value) : value]),
+  );
+}
+
 /** Why `args` miss the schema the seat was shown; empty when they fit. Some harnesses never check their own calls. */
 export function argsProblems(schema: ArgSchema, args: Record<string, unknown>): string[] {
   return problems(schema, args, blank);

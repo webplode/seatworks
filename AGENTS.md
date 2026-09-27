@@ -117,7 +117,7 @@ These eight rules settle most questions about where a behaviour belongs.
 cd plugin && npm run check                                 # typecheck, lint, format check, every test: before every commit
 cd plugin && npm run format                                # lays the code out as Prettier wants it
 cd plugin && node --test --import ./test/setup.ts <file>   # one test file, set up as the suite is
-paseo plugin reload seatworks-v2                           # after a client change, to see it in the panel
+paseo plugin reload seatworks-v3                           # after a client change, to see it in the panel
 ```
 
 There is no build step. `test/setup.ts` runs before every test file: each test gets a HOME of its

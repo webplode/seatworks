@@ -16,7 +16,7 @@ const lane = (title: string, extra: Record<string, unknown> = {}) => ({
 test("where a lane works is carried by open_lane or laneHome; with neither, a copy off its base or dirty leaves the lane in a copy of its own, decided for them and said so", async () => {
   const h = harness();
   h.projectSettings({ hitl: { on: true } });
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const status = async () => (await h.call(sup, "supervisor", "status", {})).text;
   const branch = () => h.git(h.root, "branch", "--show-current").trim();
   const open = (title: string, extra: Record<string, unknown> = {}) =>
@@ -139,7 +139,7 @@ test("where a lane works is carried by open_lane or laneHome; with neither, a co
 
 test("with the Human out of the loop, where a lane works is the Supervisor's to choose, status says so, and a lane nothing chose for opens in a copy of its own", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { base: "main", gate: "true" });
   h.git(h.root, "switch", "-qc", "fix/login");
   const status = (await h.call(sup, "supervisor", "status", {})).text;
@@ -163,7 +163,7 @@ test("with the Human out of the loop, where a lane works is the Supervisor's to 
 
 test("a lane takes the project's own copy while it is free; one that finds it taken, or still being given back, is told both ways out, and a copy of its own is filed under the project", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown> = {}) =>
     h.call(sup, "supervisor", "open_lane", lane(title, extra));
   assert.equal((await open("Authorization", { outcome: "roles gate the api" })).ok, true);
@@ -273,7 +273,7 @@ const failed: { where: string; on?: string; ask: Record<string, unknown>; fault?
 test("an open that fails gives back everything it took, wherever it took it, and keeps the Human's branch and work", async () => {
   for (const row of failed) {
     const h = harness();
-    const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+    const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
     const paseo = h.paseo as {
       workspaces: {
         list: unknown;
@@ -321,7 +321,7 @@ test("an open that fails gives back everything it took, wherever it took it, and
 
 test("a detour gets a Lead and a copy of its own without asking, and the lane it clears hears how it ended", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const money = lane("Money type", { outcome: "money is not a float" });
   await h.call(sup, "supervisor", "open_lane", lane("Checkout", { outcome: "an order can be paid for" }));
   const waiting = h.ledger().lanes.L1!;
@@ -359,7 +359,7 @@ test("a detour gets a Lead and a copy of its own without asking, and the lane it
 
 test("a Lead's directive says what its lane writes, depends on and keeps to one writer, how the project gates, and where the Human's concept is", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown> = {}) =>
     h.call(sup, "supervisor", "open_lane", lane(title, { isolate: true, ...extra }));
   const directive = (id: string) => h.agents.get(h.ledger().lanes[id]!.lead!)!.prompt ?? "";
@@ -440,7 +440,7 @@ test("a Lead's directive says what its lane writes, depends on and keeps to one 
   assert.doesNotMatch(directive("L6"), /package-lock/);
 
   // Where git cannot list what a copy holds, every one-writer rule counts, rather than none.
-  const bin = tempDir("sw2-git-");
+  const bin = tempDir("sw3-git-");
   const real = h.git(h.root, "--exec-path").trim();
   writeFileSync(
     join(bin, "git"),
@@ -463,7 +463,7 @@ test("a Lead's directive says what its lane writes, depends on and keeps to one 
 
 test("the Supervisor's status names the Human's uncommitted files as they are: a space in a name, and a rename by where it went", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { base: "main", gate: "true" });
   writeFileSync(join(h.root, "my notes.txt"), "half done\n");
   h.git(h.root, "mv", "a.txt", "moved -> here.txt");
@@ -473,7 +473,7 @@ test("the Supervisor's status names the Human's uncommitted files as they are: a
 
 test("the Human's own words a lane comes from reach its Lead beside the Supervisor's reading of them, and only words they wrote", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const said = "Guests should check out without making an account, but keep the order history for members.";
   h.humanSays(sup, said);
   const opened = await h.call(

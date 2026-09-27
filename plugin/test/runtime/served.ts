@@ -72,7 +72,7 @@ export function served(paseo: unknown = daemon()) {
   const providers = async () => {
     const { config } = await (paseo as ReturnType<typeof daemon>).config.get();
     return Object.fromEntries(
-      Object.entries(config.providers as Record<string, Provider>).filter(([id]) => id.startsWith("sw2-")),
+      Object.entries(config.providers as Record<string, Provider>).filter(([id]) => id.startsWith("sw3-")),
     );
   };
   const call = async <C extends Contract>(contract: C, input: z.input<C["input"]>): Promise<z.output<C["output"]>> => {

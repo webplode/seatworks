@@ -148,11 +148,11 @@ test("a task in the lane's copy is read from where its branch meets the lane's, 
 });
 
 test("a merge that cannot take its lane safely waits, says why, and goes round again", async (t) => {
-  const signals = tempDir("sw2-merge-waits-");
+  const signals = tempDir("sw3-merge-waits-");
   const [armed, go] = [join(signals, "armed"), join(signals, "go")];
   t.after(() => writeFileSync(go, ""));
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Beside only", outcome: "c", ...scope });
   const lane = h.ledger().lanes.L1!;
   const lead = lane.lead!;
@@ -230,12 +230,12 @@ test("a merge that cannot take its lane safely waits, says why, and goes round a
 
 /** Two lanes, each with a task beside others handed back green; the first lane has moved, and its merge's gate waits on `go`. */
 async function heldLanes(t: { after(fn: () => void): void }) {
-  const signals = tempDir("sw2-queues-");
+  const signals = tempDir("sw3-queues-");
   const [armed, go] = [join(signals, "armed"), join(signals, "go")];
   // Let go of the held gate whatever the test found, or it would wait out the gate's timeout.
   t.after(() => writeFileSync(go, ""));
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", {
     gate: `if [ -f ${armed} ]; then while [ ! -f ${go} ]; do sleep 0.05; done; fi`,
     gateOn: "task",
@@ -248,11 +248,11 @@ async function heldLanes(t: { after(fn: () => void): void }) {
   writeFileSync(armed, "");
   await h.call(lanes[0]!.lead!, "lead", "accept", { task: "L1-T1" });
   assert.ok(await within(5000, () => h.ledger().tasks["L1-T1"]!.status === "merging"));
-  return { h, lanes, go };
+  return { h, lanes, go, armed };
 }
 
 test("each lane merges in its own queue, and a merge under way is neither cut nor released nor taken for one a stop cut off", async (t) => {
-  const { h, lanes, go } = await heldLanes(t);
+  const { h, lanes, go, armed } = await heldLanes(t);
   const [one, two] = lanes.map((lane) => lane.lead!);
   const cut = await h.call(one!, "lead", "cut", { task: "L1-T1", reason: "changed my mind" });
   assert.equal(cut.ok, false);
@@ -273,6 +273,11 @@ test("each lane merges in its own queue, and a merge under way is neither cut no
   void h.runtime.desk.resumeMerges(h.project);
   assert.ok(await within(5000, () => h.ledger().tasks["L2-T1"]!.status === "merged"));
   assert.equal(h.ledger().tasks["L1-T1"]!.status, "merging", "the first lane's merge is still its own, running");
+  rmSync(armed);
+  const report = h.call(two!, "lead", "report", { summary: "Two is done.", ready: true });
+  const reported = await Promise.race([report, new Promise((resolve) => setTimeout(resolve, 5000, undefined))]);
+  assert.ok(reported, "the second lane reports ready without waiting on the first lane's gate");
+  assert.equal(h.ledger().lanes.L2!.ready !== undefined, true);
   writeFileSync(go, "");
   await h.runtime.desk.settled(h.project);
   assert.equal(h.ledger().tasks["L1-T1"]!.status, "merged");

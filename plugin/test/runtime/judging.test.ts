@@ -52,7 +52,7 @@ function judgedBy(brain: "off" | "sensor" | "seat", key?: string): void {
 }
 
 const watchersOf = (h: ReturnType<typeof harness>) =>
-  [...h.agents.values()].filter((agent) => agent.provider.startsWith("sw2-watcher-"));
+  [...h.agents.values()].filter((agent) => agent.provider.startsWith("sw3-watcher-"));
 
 type Kept = {
   at: string;
@@ -94,7 +94,7 @@ after(() =>
 );
 
 async function lane(h: ReturnType<typeof harness>, hint: string) {
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", {
     title: "Rounding",
     outcome: "money rounds correctly",
@@ -117,7 +117,7 @@ function turn(
   ...calls: Record<string, unknown>[]
 ) {
   timeline.beat("turn_started", id);
-  timeline.add({ type: "user_message", text: instruction, clientMessageId: `sw2-${from}-${id}` }, id);
+  timeline.add({ type: "user_message", text: instruction, clientMessageId: `sw3-${from}-${id}` }, id);
   calls.forEach((detail, index) =>
     timeline.add(
       {
@@ -393,7 +393,7 @@ test("the Flow tab says which of the watch's brains read and how that stands, fr
   const thinks = async () => {
     const id = `t${++turns}`;
     timeline.beat("turn_started", id);
-    timeline.add({ type: "user_message", text: "Go on.", clientMessageId: `sw2-message-${id}` }, id);
+    timeline.add({ type: "user_message", text: "Go on.", clientMessageId: `sw3-message-${id}` }, id);
     timeline.add({ type: "reasoning", text: `Thought ${id}: the rounding is next.` }, id);
     timeline.beat("turn_completed", id);
     await settle();

@@ -67,7 +67,7 @@ test("an irreversible command is paged the moment it is known, quoted where it i
     paged(`cat > "$TMPDIR/msg" <<'EOF'\nfix: merge\nEOF\ngit commit -F "$TMPDIR/msg" && rm -f "$TMPDIR/msg"`, temp),
     [],
   );
-  assert.deepEqual(paged("rm -rf /tmp/sw2-probe ${TMPDIR}/x /var/folders/xy/T/y", temp), []);
+  assert.deepEqual(paged("rm -rf /tmp/sw3-probe ${TMPDIR}/x /var/folders/xy/T/y", temp), []);
   assert.match(
     paged(`rm -f "$TMPDIR/msg" && rm -rf src`, temp).join(),
     /rm -rf src/,
@@ -121,7 +121,7 @@ test("in a seat's own desk-made copy, removing relative paths is not a page, whi
   for (const isolate of [true, false]) {
     const h = harness();
     const noticed = noticesOf(h, t);
-    const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+    const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
     const scope = { acceptance: ["a"], outOfScope: ["the rest"] };
     await h.call(sup, "supervisor", "open_lane", { title: "Server", outcome: "a server", ...scope, isolate });
     const lead = h.ledger().lanes.L1!.lead!;

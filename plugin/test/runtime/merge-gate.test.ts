@@ -100,9 +100,9 @@ test("a task that goes red with its lane brought in stays out until its Lead acc
 });
 
 test("what the gate did reaches the Lead: with the hand-back, when its verdict is used again, and with each merge", async () => {
-  const runs = join(tempDir("sw2-gate-runs-"), "runs");
+  const runs = join(tempDir("sw3-gate-runs-"), "runs");
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const gate = (settings: Record<string, unknown>) => h.call(sup, "supervisor", "set_project", settings);
   await gate({ gate: "test ! -f BROKEN", gateOn: "task" });
   await h.call(sup, "supervisor", "open_lane", {
@@ -230,7 +230,7 @@ test("a change a risk rule reaches is rehearsed with its gate, and a red rehears
 test("a task's red gate comes with the same gate on its lane's tip, in a copy made as a task's is, run once for each tip", async () => {
   const { h, sup, lane } = await laneWithPeer();
   const lead = lane.lead!;
-  const runs = join(tempDir("sw2-tip-runs-"), "runs");
+  const runs = join(tempDir("sw3-tip-runs-"), "runs");
   await h.call(sup, "supervisor", "set_project", { gate: `echo run >> '${runs}'; test ! -f BROKEN`, gateOn: "task" });
   const tip = () => h.git(h.root, "rev-parse", "--short=7", lane.branch).trim();
   await handedBack(h, lead, "Breaks", "BROKEN");
@@ -265,7 +265,7 @@ test("no more gates run at once than the machine's gatesAtOnce, the rest waiting
   const lead = lane.lead!;
   h.machineSettings({ gatesAtOnce: 1 });
   // Red when another gate runs beside it: the second mkdir finds the first one's folder.
-  const busy = join(tempDir("sw2-gates-at-once-"), "busy");
+  const busy = join(tempDir("sw3-gates-at-once-"), "busy");
   await h.call(sup, "supervisor", "set_project", {
     gate: `mkdir '${busy}' && sleep 0.3 && rmdir '${busy}'`,
     gateOn: "task",

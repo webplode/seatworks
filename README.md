@@ -179,7 +179,7 @@ what you pick.
    project uses them.
 3. Open **Health** and choose **Run**.
 4. In Paseo, open that project, start an agent with the Supervisor's provider, such as
-   **Supervisor · Claude Code (sw2)**, and tell it what you want.
+   **Supervisor · Claude Code (sw3)**, and tell it what you want.
 
 The plugin starts everyone else as the work needs them. A lane works in your checkout on a new
 branch, unless the Supervisor or your standing order (`laneHome`) keeps it on the branch you are on or

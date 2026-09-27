@@ -89,7 +89,7 @@ test("what the seat did while nobody listened is read back from where the sequen
   const idle = watching(beats);
   await idle.stream.ready;
   beats.beat("turn_started");
-  beats.add({ type: "plugin", pluginId: "seatworks-v2", text: "note" });
+  beats.add({ type: "plugin", pluginId: "seatworks-v3", text: "note" });
   beats.add({ type: "assistant_message", text: "x" });
   beats.beat("turn_failed", "turn-1", "boom");
   await settle();
@@ -210,7 +210,7 @@ test("a rewind or a reload starts the timeline again as replay, whether or not i
 
 test("a follower lets go of a seat that is gone or never answers, and reads back what a reconnect missed", async (t) => {
   const reconnected = new FakeTimeline();
-  const watch = new SeatWatch({ id: "p1", provider: "sw2-peer-claude", cwd: "/work" }, () => undefined);
+  const watch = new SeatWatch({ id: "p1", provider: "sw3-peer-claude", cwd: "/work" }, () => undefined);
   const followed = follow(reconnected, (seen) => seen.kind !== "lost" && watch.see(seen));
   await followed.ready;
   reconnected.beat("turn_started");

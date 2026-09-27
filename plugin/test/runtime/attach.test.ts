@@ -20,7 +20,7 @@ test("a project attached by path, set up, opened in Paseo's own project list, de
   const paseo = daemon();
   const { call } = served(paseo);
   const listed = async () => (await call(contracts.projects, {})).map((entry) => entry.slug);
-  const root = realpathSync(tempDir("sw2-rpc-attach-"));
+  const root = realpathSync(tempDir("sw3-rpc-attach-"));
   git(root, "init", "-q");
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(join(root, "AGENTS.md"), "Use pnpm.\n");
@@ -88,7 +88,7 @@ test("a project attached by path, set up, opened in Paseo's own project list, de
     ["omp", "glm", "omp"],
     "the draft over the project's own layer, as the seats would run on it",
   );
-  const fresh = realpathSync(tempDir("sw2-rpc-fresh-"));
+  const fresh = realpathSync(tempDir("sw3-rpc-fresh-"));
   git(fresh, "init", "-q");
   assert.equal(
     which(await call(contracts.teamPreview, { root: fresh, values: {} }), "roles").roles.peer!.harness,
@@ -143,12 +143,12 @@ test("a project attached by path, set up, opened in Paseo's own project list, de
   assert.ok((await listed()).includes(added.slug), "an attach that reports a slug is one the rest of the plugin finds");
   assert.equal((await call(contracts.settingsRead, { project: added.slug })).status, "ready");
 
-  const repo = realpathSync(tempDir("sw2-rpc-live-"));
+  const repo = realpathSync(tempDir("sw3-rpc-live-"));
   git(repo, "init", "-q");
   git(repo, "commit", "-q", "--allow-empty", "-m", "init");
-  const linked = join(realpathSync(tempDir("sw2-rpc-linked-")), "wt");
+  const linked = join(realpathSync(tempDir("sw3-rpc-linked-")), "wt");
   git(repo, "worktree", "add", "-q", "-b", "side", linked);
-  const plain = realpathSync(tempDir("sw2-rpc-plain-"));
+  const plain = realpathSync(tempDir("sw3-rpc-plain-"));
   const ours = join(stateRoot(), "worktrees/shop-ef484b/S0");
   mkdirSync(ours, { recursive: true });
   const roots = [repo, linked, plain, ours, join(repo, "nowhere"), root];
@@ -158,7 +158,7 @@ test("a project attached by path, set up, opened in Paseo's own project list, de
     "a setup screen is offered no worktree, gone or plain directory, nor a project already set up",
   );
 
-  const walk = realpathSync(tempDir("sw2-rpc-browse-"));
+  const walk = realpathSync(tempDir("sw3-rpc-browse-"));
   mkdirSync(join(walk, "plain"), { recursive: true });
   git(walk, "init", "-q", "repo");
   const folders = which(await call(contracts.paths, { path: walk }), "folders");
@@ -191,8 +191,8 @@ test("a project attached by path, set up, opened in Paseo's own project list, de
 
 test("Paseo holds a provider for each role and agent an attached project's team seats: none at load with no project attached, set up on attach, following each settings save, and taken off on detach, though never from under a live seat", async () => {
   const config = fakeConfig({
-    providers: { claude: { env: { TOKEN: "keep" } }, "sw2-peer-codex": { extends: "codex", label: "x" } },
-    agentProfiles: [{ id: "sw2-lead-claude", provider: "sw2-lead-claude" }],
+    providers: { claude: { env: { TOKEN: "keep" } }, "sw3-peer-codex": { extends: "codex", label: "x" } },
+    agentProfiles: [{ id: "sw3-lead-claude", provider: "sw3-lead-claude" }],
   });
   const live: { provider: string }[] = [];
   const { call, runtime, providers } = served(daemon(config, live));
@@ -204,12 +204,12 @@ test("Paseo holds a provider for each role and agent an attached project's team 
     {},
     "a load with no project attached leaves no provider of the kit's, once a panel call brings Paseo's API",
   );
-  const root = realpathSync(tempDir("sw2-rpc-providers-"));
+  const root = realpathSync(tempDir("sw3-rpc-providers-"));
   git(root, "init", "-q");
   const added = which(await call(contracts.projectsAdd, { root }), "slug");
   assert.deepEqual(
     Object.keys(await providers()).sort(),
-    ["sw2-lead-claude", "sw2-peer-omp", "sw2-scribe-omp", "sw2-supervisor-claude"],
+    ["sw3-lead-claude", "sw3-peer-omp", "sw3-scribe-omp", "sw3-supervisor-claude"],
     "attaching sets up exactly what the project's team seats, so its Supervisor can be started at once",
   );
   const own = which(await call(contracts.settingsRead, { project: added.slug }), "values");
@@ -218,21 +218,21 @@ test("Paseo holds a provider for each role and agent an attached project's team 
   assert.equal(ownSaved.status, "saved", JSON.stringify(ownSaved));
   assert.deepEqual(
     Object.keys(await providers()).sort(),
-    ["sw2-lead-omp", "sw2-peer-omp", "sw2-scribe-omp", "sw2-supervisor-claude"],
+    ["sw3-lead-omp", "sw3-peer-omp", "sw3-scribe-omp", "sw3-supervisor-claude"],
     "a project's own save moves its seats",
   );
   const machine = which(await call(contracts.settingsRead, {}), "values");
-  live.push({ provider: "sw2-lead-omp/glm" });
+  live.push({ provider: "sw3-lead-omp/glm" });
   const haiku = { roles: { supervisor: { model: "haiku" } } };
   assert.equal((await call(contracts.settingsWrite, { revision: machine.revision, values: haiku })).status, "saved");
   assert.deepEqual(
-    (await providers())["sw2-supervisor-claude"]?.additionalModels?.map((model) => model.id),
+    (await providers())["sw3-supervisor-claude"]?.additionalModels?.map((model) => model.id),
     ["haiku"],
     "and so does the machine's",
   );
   const back = which(await call(contracts.settingsRead, { project: added.slug }), "values");
   await call(contracts.settingsWrite, { project: added.slug, revision: back.revision, values: {} });
-  assert.ok("sw2-lead-omp" in (await providers()), "a Lead still working on its agent keeps its provider");
+  assert.ok("sw3-lead-omp" in (await providers()), "a Lead still working on its agent keeps its provider");
   live.splice(0);
   assert.deepEqual(await call(contracts.projectsRemove, { project: added.slug }), { removed: added.slug });
   assert.deepEqual(await providers(), {}, "detached, its seats' providers go with it, and one no seat runs on");
@@ -244,7 +244,7 @@ test("Paseo holds a provider for each role and agent an attached project's team 
   );
   assert.equal(
     config.patches.some(
-      (patch) => "providers" in patch && Object.keys(patch.providers!).some((id) => !id.startsWith("sw2-")),
+      (patch) => "providers" in patch && Object.keys(patch.providers!).some((id) => !id.startsWith("sw3-")),
     ),
     false,
     "and no patch touches them",
@@ -254,10 +254,10 @@ test("Paseo holds a provider for each role and agent an attached project's team 
 test("while Paseo cannot say which seats are live, a provider the team no longer seats stays, since a seat may still run on it", async () => {
   const paseo = daemon();
   const { call, providers } = served(paseo);
-  const root = realpathSync(tempDir("sw2-rpc-unlisted-"));
+  const root = realpathSync(tempDir("sw3-rpc-unlisted-"));
   git(root, "init", "-q");
   const added = which(await call(contracts.projectsAdd, { root }), "slug");
-  assert.ok("sw2-lead-claude" in (await providers()));
+  assert.ok("sw3-lead-claude" in (await providers()));
   paseo.agents.list = async () => {
     throw new Error("the daemon did not answer");
   };
@@ -269,7 +269,7 @@ test("while Paseo cannot say which seats are live, a provider the team no longer
   );
   assert.deepEqual(
     Object.keys(await providers()).sort(),
-    ["sw2-lead-claude", "sw2-lead-omp", "sw2-peer-omp", "sw2-scribe-omp", "sw2-supervisor-claude"],
+    ["sw3-lead-claude", "sw3-lead-omp", "sw3-peer-omp", "sw3-scribe-omp", "sw3-supervisor-claude"],
     "the Lead's new agent is set up, and its old one stays until Paseo can say nobody runs on it",
   );
 });
@@ -303,7 +303,7 @@ test("a level is the machine's: one that breaks a seat is refused by name, a pro
     "a level moves no seat until a project is set up from it",
   );
 
-  const root = realpathSync(tempDir("sw2-rpc-level-"));
+  const root = realpathSync(tempDir("sw3-rpc-level-"));
   git(root, "init", "-q");
   const added = which(await call(contracts.projectsAdd, { root, values: { roles: cheap } }), "slug");
   assert.equal(added.refused, undefined);

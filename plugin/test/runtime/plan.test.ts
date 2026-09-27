@@ -17,7 +17,7 @@ const task = (key: string, paths: string[], extra: Record<string, unknown> = {})
 /** A lane with a Lead and nothing started. */
 async function lane() {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", {
     title: "Cart",
     outcome: "a cart",
@@ -256,7 +256,7 @@ test("a call is carried out only for the role that holds its tool, in the shape 
 
 test("a directive and a brief keep apart what must hold, what was chosen and may be questioned, and what nobody knows yet", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const three = {
     constraints: ["the bike stops within 5 m at 20 km/h"],
     choices: ["a parachute slows it, because it was the first design drawn"],

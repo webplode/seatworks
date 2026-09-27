@@ -26,7 +26,7 @@ test("what was held because nobody could read it is told once somebody can, and 
   const told = (id: string) => h.heard(sup).filter((text) => text.includes(`INCIDENT ${id} `));
   const second = repo();
   const other = projectOf(second.root);
-  const supB = h.add("sw2-supervisor-claude/claude-opus-5", second.root, "sup-b");
+  const supB = h.add("sw3-supervisor-claude/claude-opus-5", second.root, "sup-b");
 
   seated(false);
   await notice(h, peer, "destructive", "page", "rm -rf build");
@@ -82,7 +82,7 @@ test("what was held because nobody could read it is told once somebody can, and 
 
   await notice(
     h,
-    { id: "p-b", provider: "sw2-peer-claude/claude-opus-5" },
+    { id: "p-b", provider: "sw3-peer-claude/claude-opus-5" },
     "destructive",
     "page",
     "rm -rf build",

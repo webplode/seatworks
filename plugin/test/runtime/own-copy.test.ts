@@ -14,7 +14,7 @@ const work = (title: string, hint: string) => ({
 
 test("a lane works in the project's own copy from open to landing, and hands it back on its base", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const root = h.project.root;
   const branch = () => h.git(root, "branch", "--show-current").trim();
   await h.call(sup, "supervisor", "set_project", { gate: "test ! -f BROKEN", gateOn: "lane" });
@@ -127,7 +127,7 @@ test("a lane works in the project's own copy from open to landing, and hands it 
 
 test("a lane whose base moved lands only once nobody writes in its copy: the desk lands it itself when their turn ends, main brought in there as one commit, and a project may land by merge", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const land = (lane: string) => h.call(sup, "supervisor", "land_lane", { lane });
   const numbers = { title: "Numbers", outcome: "a.txt gains words", ...scope };
   await h.call(sup, "supervisor", "open_lane", numbers);
@@ -184,7 +184,7 @@ test("a lane whose base moved lands only once nobody writes in its copy: the des
 
 test("a landing ordered while a turn was in the way is not carried out on a lane that changed since, and whoever ordered it hears what changed", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", ...scope });
   const lane = h.ledger().lanes.L1!;
   h.commit(h.root, "a.txt", "one\ntwo\nthree\nfour\n");
@@ -208,7 +208,7 @@ test("a landing ordered while a turn was in the way is not carried out on a lane
 
 test("a landing ordered while a turn was in the way that its gate then refuses is told NOT LANDED, with why", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { gate: "test -f NEVER", gateOn: "lane" });
   await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", ...scope });
   const lane = h.ledger().lanes.L1!;
@@ -232,7 +232,7 @@ test("a landing ordered while a turn was in the way that its gate then refuses i
 
 test("an ordered landing that fails when the desk carries it out wakes whoever ordered it with NOT LANDED and the error, and is not ordered again", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", ...scope });
   const lane = h.ledger().lanes.L1!;
   h.commit(h.root, "a.txt", "one\ntwo\nthree\nfour\n");
@@ -260,7 +260,7 @@ test("an ordered landing that fails when the desk carries it out wakes whoever o
 
 test("a review already reading when a landing was ordered is new evidence once it comes back, so the landing waits for the Supervisor's word again", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Numbers", outcome: "a.txt gains words", ...scope });
   const lane = h.ledger().lanes.L1!;
   h.commit(h.root, "a.txt", "one\ntwo\nthree\nfour\n");
@@ -287,7 +287,7 @@ test("a review already reading when a landing was ordered is new evidence once i
 test("a lane carrying on the Human's branch is refused where there is none, started as a new branch that takes their work along, drawn without a base, and landed where it is", async () => {
   const h = harness();
   h.projectSettings({ hitl: { on: true } });
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const open = (title: string, extra: Record<string, unknown>) =>
     h.call(sup, "supervisor", "open_lane", { title, outcome: "the login fix is finished", ...scope, ...extra });
   const branch = () => h.git(h.root, "branch", "--show-current").trim();

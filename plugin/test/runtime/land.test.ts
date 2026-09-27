@@ -24,7 +24,7 @@ function commitAll(h: Harness, cwd: string, files: Record<string, string>) {
 
 test("a lane lands after another moved main, gated with main's newer work in it, even while a third holds the project's copy", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { gate: "test ! -f b/b.txt || test -f c/c.txt" });
   for (const [title, path] of [
     ["Part A", "a/**"],
@@ -158,7 +158,7 @@ test("a gate that could not run because work nobody committed turned up while th
 
 test("in the Human's own checkout, files git does not track are theirs: a fact for whoever lands, never a stop, while changes to tracked files still stop READY and landing", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "set_project", { gate: "true" });
   writeFileSync(join(h.root, "notes.txt"), "the Human's own notes\n");
   const opened = await h.call(sup, "supervisor", "open_lane", { title: "Cart", outcome: "a cart", ...scope });
@@ -183,7 +183,7 @@ test("in the Human's own checkout, files git does not track are theirs: a fact f
 
 /** Runs `during` with a git first on PATH that fails the `nth` call whose words hold `words`, as git fails when it cannot read. */
 async function withGitFailing<T>(h: Harness, words: string, nth: number, during: () => Promise<T>): Promise<T> {
-  const bin = tempDir("sw2-git-");
+  const bin = tempDir("sw3-git-");
   const real = h.git(h.root, "--exec-path").trim();
   const count = `n=$(($(cat "${bin}/n" 2>/dev/null || echo 0) + 1)); echo $n > "${bin}/n"`;
   const fail = `if [ $n = ${nth} ]; then echo "fatal: cannot read" >&2; exit 128; fi`;
@@ -351,8 +351,8 @@ test("what the record holds of a lane goes to whoever lands it, and never to the
 
 test("two lanes landed at once each stay on the base: the second waits for the first, and a landing never erases another", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
-  const gate = tempDir("sw2-gate-");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
+  const gate = tempDir("sw3-gate-");
   const hold = `test ! -f hold || test ! -f ${gate}/armed || { : > ${gate}/reached; until test -f ${gate}/open; do sleep 0.02; done; }`;
   await h.call(sup, "supervisor", "set_project", { gate: hold });
   for (const [title, file] of [
@@ -397,7 +397,7 @@ test("two lanes landed at once each stay on the base: the second waits for the f
 
 test("with the Human out of the loop, getting what landed out is the Supervisor's: push sends the base where git would, and a release tag, never forced", async () => {
   const { h, sup, land } = await laneWith({ "a.txt": "cart\n" });
-  const remote = tempDir("sw2-remote-");
+  const remote = tempDir("sw3-remote-");
   h.git(remote, "init", "-q", "--bare");
   h.git(h.root, "remote", "add", "origin", remote);
   const landed = await land();
@@ -432,7 +432,7 @@ test("with the Human out of the loop, getting what landed out is the Supervisor'
   );
   assert.match((await push({ tag: "bad..tag" })).text, /bad\.\.tag is not a name git takes for a tag/);
 
-  const fork = tempDir("sw2-fork-");
+  const fork = tempDir("sw3-fork-");
   h.git(fork, "init", "-q", "--bare");
   h.git(h.root, "remote", "add", "fork", fork);
   h.git(h.root, "config", "remote.pushDefault", "fork");
@@ -440,7 +440,7 @@ test("with the Human out of the loop, getting what landed out is the Supervisor'
   assert.equal(h.git(fork, "rev-parse", "main").trim(), head());
   h.git(h.root, "config", "--unset", "remote.pushDefault");
 
-  const elsewhere = tempDir("sw2-elsewhere-");
+  const elsewhere = tempDir("sw3-elsewhere-");
   h.git(elsewhere, "clone", "-q", remote, ".");
   h.git(elsewhere, "commit", "-q", "--allow-empty", "-m", "elsewhere");
   h.git(elsewhere, "push", "-q", "origin", "main");
@@ -465,7 +465,7 @@ test("with the Human out of the loop, getting what landed out is the Supervisor'
 
 test("the lane that audits what goes out hears of each landing on its base, as mail that asks it to look", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const scope = { acceptance: ["a"], outOfScope: ["the rest"] };
   await h.call(sup, "supervisor", "open_lane", { title: "Work", outcome: "a.txt changes", ...scope });
   const audit = await h.call(sup, "supervisor", "open_lane", {

@@ -6,7 +6,7 @@ import { runGate } from "../../server/core/gate.ts";
 import { tempDir } from "../tempdir.ts";
 
 test("the gate reports exit, output tail and timeouts", async () => {
-  const dir = tempDir("sw2-gate-");
+  const dir = tempDir("sw3-gate-");
   const pass = await runGate("echo ok", dir, join(dir, "g1.log"), 10_000);
   assert.equal(pass.ok, true);
   assert.match(pass.tail, /ok/);

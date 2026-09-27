@@ -17,7 +17,7 @@ const opus = {
 
 test("the models are what Paseo lists for each agent, not what the plugin marked as default, and an agent Paseo cannot list keeps its last list and says why", async () => {
   const kit = makeKit();
-  const state = tempDir("sw2-state-");
+  const state = tempDir("sw3-state-");
   const asked: string[] = [];
   const first = await fetchModels(
     kit,

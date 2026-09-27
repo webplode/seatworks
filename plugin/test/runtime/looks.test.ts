@@ -295,7 +295,7 @@ test("after a restart the eye reads only what is new: neither a seat's past word
   const lead = h.timelineOf(lane.lead!);
   const turn = (stream: typeof timeline, id: string, item: Record<string, unknown>) => {
     stream.beat("turn_started", id);
-    stream.add({ type: "user_message", text: "Go on.", clientMessageId: `sw2-message-${id}` }, id);
+    stream.add({ type: "user_message", text: "Go on.", clientMessageId: `sw3-message-${id}` }, id);
     stream.add(item, id);
     stream.beat("turn_completed", id);
   };
@@ -352,7 +352,7 @@ test("a gap the words name is found at the hand-back only when the hand-back its
   const asked = () => sensed.asked.filter((entry) => "withholds-gap" in entry.questions);
   const turn = async (id: string, thought: string, summary?: string) => {
     timeline.beat("turn_started", id);
-    timeline.add({ type: "user_message", text: "Go on.", clientMessageId: `sw2-message-${id}` }, id);
+    timeline.add({ type: "user_message", text: "Go on.", clientMessageId: `sw3-message-${id}` }, id);
     timeline.add({ type: "reasoning", text: thought }, id);
     if (summary) await h.call(peer, "peer", "done", { outcome: "complete", summary });
     timeline.beat("turn_completed", id);
@@ -391,7 +391,7 @@ test("a seat whose looks carry words but never thinking is recorded once, so wha
   const looked = looksOf(h, t);
   for (const id of ["t1", "t2", "t3", "t4"]) {
     timeline.beat("turn_started", id);
-    timeline.add({ type: "user_message", text: "Go on.", clientMessageId: `sw2-message-${id}` }, id);
+    timeline.add({ type: "user_message", text: "Go on.", clientMessageId: `sw3-message-${id}` }, id);
     timeline.add({ type: "assistant_message", text: `Working on it, ${id}.`, messageId: id }, id);
     timeline.beat("turn_completed", id);
     await looked();
@@ -498,7 +498,7 @@ test("the seat judges only what a first stage flagged: the items the sensor flag
   const stream = h.timelineOf(lane.lead!);
   const lead = (id: string, ...items: Record<string, unknown>[]) => {
     stream.beat("turn_started", id);
-    stream.add({ type: "user_message", text: "Go on.", clientMessageId: `sw2-message-${id}` }, id);
+    stream.add({ type: "user_message", text: "Go on.", clientMessageId: `sw3-message-${id}` }, id);
     for (const item of items) stream.add(item, id);
     stream.beat("turn_completed", id);
   };
@@ -530,7 +530,7 @@ test("with the seat alone reading, a sensor set up is never asked, and the seat 
   const stream = h.timelineOf(lane.lead!);
   const write = { type: "write", filePath: "src/cart.js", content: "x" };
   stream.beat("turn_started", "l1");
-  stream.add({ type: "user_message", text: "Go on.", clientMessageId: "sw2-message-l1" }, "l1");
+  stream.add({ type: "user_message", text: "Go on.", clientMessageId: "sw3-message-l1" }, "l1");
   stream.add({ type: "reasoning", text: "I will stub the cart myself." }, "l1");
   stream.add({ type: "tool_call", callId: "w", name: "Write", status: "completed", detail: write }, "l1");
   stream.beat("turn_completed", "l1");
@@ -552,7 +552,7 @@ test("in a decision case what the sensor is unsure of goes to the seat too; in a
   const looked = looksOf(h, t);
   const stream = h.timelineOf(lane.lead!);
   stream.beat("turn_started", "l1");
-  stream.add({ type: "user_message", text: "Go on.", clientMessageId: "sw2-message-l1" }, "l1");
+  stream.add({ type: "user_message", text: "Go on.", clientMessageId: "sw3-message-l1" }, "l1");
   stream.add({ type: "reasoning", text: "Not sure what settled means here." }, "l1");
   stream.beat("turn_completed", "l1");
   await looked();

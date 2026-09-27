@@ -4,7 +4,7 @@ import { harness } from "./harness.ts";
 
 test("a lane that spends past what it was worth sends whoever supervises to the Human, in the loop or out of it", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const opened = await h.call(sup, "supervisor", "open_lane", {
     title: "Brakes",
     outcome: "the bike stops",

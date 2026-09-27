@@ -41,7 +41,7 @@ test("a Peer measuring holds the machine: the desk's gates wait, and whoever ask
 test("the Supervisor reads every project on the machine at a glance, beside the machine's own state", async () => {
   const { h, sup } = await laneWith({ "a.txt": "one\n" });
   const second = repo().root;
-  const other = h.add("sw2-supervisor-claude/claude-opus-5", second, "sup-b");
+  const other = h.add("sw3-supervisor-claude/claude-opus-5", second, "sup-b");
   await h.call(other, "supervisor", "open_lane", { title: "Tax", outcome: "tax rounds", ...scope }, second);
   const across = await h.call(sup, "supervisor", "status", { across: true });
   assert.equal(across.ok, true, across.text);

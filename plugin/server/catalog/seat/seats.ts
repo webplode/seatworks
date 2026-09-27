@@ -77,7 +77,7 @@ export function materialize(
   if (problems.length > 0) throw new Error(problems.join("; "));
   const record = recorder();
   mkdirSync(dir, { recursive: true });
-  const built = { dir, homeDir, state: project?.state };
+  const built = { dir, homeDir, state: project?.state, root: project?.root };
   writeRoleSettings(kit, seat.harness, seat.role, built, record, writeModelCatalog(seat.harness, dir, record));
   writeFiles(kit, seat.harness, seat.role, dir, record);
   linkShared(seat.harness, dir, homeDir, record);

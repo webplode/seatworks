@@ -6,7 +6,7 @@ const scope = { acceptance: ["a"], outOfScope: ["the rest"] };
 
 test("the Report weighs each mechanism by what it changed: reviews that changed the work, challenges that changed the plan, asks sent up by kind", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Rounding", outcome: "money rounds", ...scope });
   const lane = h.ledger().lanes.L1!;
   const lead = lane.lead!;

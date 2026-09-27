@@ -6,7 +6,7 @@ const scope = { outcome: "x", acceptance: ["a"], outOfScope: ["anything else in 
 
 test("a stop while seats were being started takes on what Paseo seated and gives back what it never seated", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Cart", ...scope, isolate: true });
   await h.call(sup, "supervisor", "open_lane", { title: "Order", ...scope, after: ["L1"], isolate: true });
   const order = heldCreate(h, /^L2 · Lead/);
@@ -61,7 +61,7 @@ test("a stop while seats were being started takes on what Paseo seated and gives
 
 test("a round leaves alone a lane or a task whose seat is still being started", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   const lead = heldCreate(h, /^L1 · Lead/);
   const opening = h.call(sup, "supervisor", "open_lane", { title: "Slow", ...scope, isolate: true });
   await lead.reached;
@@ -141,7 +141,7 @@ test("a lane whose Lead is gone gets one where it stands, with the asks that wai
     /LEAD GONE L1 \(Build\): its Lead [^ ]+ is no longer seated[^]*replace_lead puts a new Lead on it where it stands/,
   );
 
-  const orphan = h.add("sw2-lead-claude/claude-opus-5", lane.worktree!, "L1 Build", "idle", undefined, {
+  const orphan = h.add("sw3-lead-claude/claude-opus-5", lane.worktree!, "L1 Build", "idle", undefined, {
     "seatworks.project": h.project.slug,
     "seatworks.lane": "L1",
     "seatworks.role": "lead",

@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, rmSync } from "node:fs";
 import { type Server, type Socket, createServer } from "node:net";
-import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ToolReply, ToolRequest } from "../../desk/context.ts";
 import { daemonLog } from "../../core/logger.ts";
+import { clip } from "../../core/text.ts";
 
 const Heard = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hello"), key: z.string(), role: z.string(), cwd: z.string() }),
@@ -80,19 +80,27 @@ export class TeamSocket {
   private serve(socket: Socket): void {
     const line: Line = { socket, role: "", cwd: "", calls: new Map() };
     this.lines.add(line);
-    // readline passes on the socket's errors: a line that fails is closed, and `dropped` sees to its calls.
-    createInterface({ input: socket })
-      .on("line", (text) => this.heard(line, text))
-      .on("error", () => {});
+    // A message ends at "\n" alone: separators that are legal inside JSON strings stay inside the message.
+    let rest = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk: string) => {
+      const said = (rest + chunk).split("\n");
+      rest = said.pop()!;
+      for (const text of said) this.heard(line, text);
+    });
     socket.on("error", () => {});
     socket.on("close", () => this.dropped(line));
   }
 
   private heard(line: Line, text: string): void {
+    if (!text.trim()) return;
     let said: z.infer<typeof Heard>;
     try {
       said = Heard.parse(JSON.parse(text));
     } catch {
+      daemonLog.error(
+        `the desk's socket heard an unreadable line from ${line.agent ?? "an unknown seat"}: ${clip(text, 200)}`,
+      );
       return;
     }
     if (said.type === "hello") return this.hello(line, said);

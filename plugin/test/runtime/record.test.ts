@@ -96,7 +96,7 @@ test("a Lead reads its lane and its Peers' records and keeps its own pages, and 
   const letter = timeline.add({
     type: "user_message",
     text: "HANDBACK L1-T1 wanted\nthe rest",
-    clientMessageId: "sw2-rework-1",
+    clientMessageId: "sw3-rework-1",
   });
   const thought = timeline.add({ type: "reasoning", text: "The empty cart\nneeds a test first." });
   const call = (callId: string, name: string, detail: Record<string, unknown>, more: Record<string, unknown> = {}) =>
@@ -142,6 +142,12 @@ test("a Lead reads its lane and its Peers' records and keeps its own pages, and 
   assert.match(two, new RegExp(`\\n#${human} the Human wrote: Name it total\\n#${said} said:`));
   assert.match(await say(lead, "lead", "record", { of: "L1-T1", limit: 0 }), /limit must be at least 1/);
   assert.match(await say(lead, "lead", "record", { of: "L1-T1", limit: 2.5 }), /limit must be a whole number/);
+  assert.equal(
+    await say(lead, "lead", "record", { of: "L1-T1", limit: "2" }),
+    two,
+    "a harness that sends a number as text is read as the number",
+  );
+  assert.match(await say(lead, "lead", "record", { of: "L1-T1", limit: "two" }), /limit must be a whole number/);
 
   h.commit(lane.worktree!, "a.txt", "changed\n");
   await h.call(peer, "peer", "done", { outcome: "complete", summary: "a.txt now says changed." });

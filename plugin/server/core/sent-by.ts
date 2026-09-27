@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 /** The start of every message id the desk sends, which no person's client uses. */
-const DESK_MARK = "sw2-";
+const DESK_MARK = "sw3-";
 
 export const deskId = (kinds: string[]) => `${DESK_MARK}${kinds.join(".")}-${randomUUID()}`;
 

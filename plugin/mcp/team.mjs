@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
@@ -15,6 +14,9 @@ const instructions = read("instructions.json")[toolSet];
 const { version } = read("../package.json");
 // Retry a dropped line after that; a first list waits that long for the desk's choices, well within a harness's start.
 const RETRY_MS = 2_000;
+// The desk answers within five minutes, with the result or with word that it comes as mail; past this a call it never
+// heard, or that hangs inside it, is given up on here, since a seat waiting on it is neither working nor silent.
+const ANSWER_MS = Number(process.env.SEATWORKS_ANSWER_MS ?? 300_000);
 const WELCOME_MS = 300;
 
 /** A copy of `schema` where each field the desk named a fixed set for takes it as its enum, however deep the field sits. */
@@ -53,8 +55,14 @@ class Desk {
         this.#line = line;
         this.#write({ type: "hello", key: process.env.SEATWORKS_DESK_KEY ?? "", role, cwd: process.cwd() });
       });
-      // readline passes on the line's errors: a line that fails is closed, which is handled below.
-      createInterface({ input: line }).on("line", (text) => this.#heard(text, done)).on("error", () => {});
+      // A message ends at "\n" alone: separators that are legal inside JSON strings stay inside the message.
+      let rest = "";
+      line.setEncoding("utf8");
+      line.on("data", (chunk) => {
+        const said = (rest + chunk).split("\n");
+        rest = said.pop();
+        for (const text of said) this.#heard(text, done);
+      });
       line.on("error", () => {});
       line.on("close", () => {
         if (this.#line === line) this.#line = undefined;
@@ -83,19 +91,32 @@ class Desk {
     };
     const { signal } = ctx.mcpReq;
     signal.addEventListener("abort", stop, { once: true });
+    let late = false;
+    const deadline = setTimeout(() => {
+      late = true;
+      stop();
+    }, ANSWER_MS).unref();
     const progress = ticker(ctx, `The desk is still working on ${tool}.`);
     const reply = await answered;
+    clearTimeout(deadline);
     progress?.stop();
     signal.removeEventListener("abort", stop);
     if (reply) this.#write({ type: "taken", id });
+    if (late)
+      return {
+        ok: false,
+        text: `The team desk did not answer ${tool} in time. If it took the call, its answer comes as mail: look before calling ${tool} again, since a second call may do it twice.`,
+      };
     return reply ?? { ok: false, text: `The line to the team desk dropped while ${tool} ran, so its answer did not come back here. If the desk took the call, its answer comes as mail: look before calling ${tool} again, since a second call may do it twice.` };
   }
 
   #heard(text, done) {
+    if (!text.trim()) return;
     let said;
     try {
       said = JSON.parse(text);
     } catch {
+      process.stderr.write(`team: an unreadable line from the desk: ${text.slice(0, 200)}\n`);
       return;
     }
     if (said.type === "welcome" || said.type === "choices") {

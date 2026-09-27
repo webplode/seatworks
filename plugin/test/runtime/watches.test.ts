@@ -12,7 +12,7 @@ test("a seat is followed once while it is seated and watched, let go when it goe
   const followed = (id: string) => h.timelineOf(id).subscriptions;
   assert.deepEqual([lead, peer, sup].map(followed), [1, 1, 0], "Leads and Peers are watched; a Supervisor is not");
   await h.runtime.created(hookAgent(h, peer));
-  const reviewer = h.add("sw2-reviewer-claude/claude-opus-5", h.root, "rev");
+  const reviewer = h.add("sw3-reviewer-claude/claude-opus-5", h.root, "rev");
   await h.tick();
   assert.deepEqual(
     [followed(peer), followed(reviewer)],
@@ -20,7 +20,7 @@ test("a seat is followed once while it is seated and watched, let go when it goe
     "followed once however often it is seen; a Reviewer not",
   );
 
-  const slow = h.add("sw2-peer-claude/claude-opus-5", h.root, "slow");
+  const slow = h.add("sw3-peer-claude/claude-opus-5", h.root, "slow");
   let open = () => {};
   h.timelineOf(slow).ready = new Promise((resolve) => (open = resolve));
   await h.runtime.created(hookAgent(h, slow));
@@ -31,7 +31,7 @@ test("a seat is followed once while it is seated and watched, let go when it goe
   await h.tick();
   assert.equal(followed(slow), 2, "and is followed again if it comes back");
 
-  const broken = h.add("sw2-peer-claude/claude-opus-5", h.root, "broken");
+  const broken = h.add("sw3-peer-claude/claude-opus-5", h.root, "broken");
   h.timelineOf(broken).refetch = async () => ({ epoch: "e", entries: [], error: "no such agent" });
   await h.tick();
   await settle();

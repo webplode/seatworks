@@ -72,7 +72,7 @@ test("a call or a proxy its harness stops stops what it started", async (t) => {
   );
 
   // Never answers, like a cold start still fetching its package; the list once waited out init's budget, then its own.
-  const pidFile = join(tempDir("sw2-slow-"), "pid");
+  const pidFile = join(tempDir("sw3-slow-"), "pid");
   const silent = [
     process.execPath,
     "-e",

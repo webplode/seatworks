@@ -35,67 +35,67 @@ const LAUNCHED: [string, Layer, Omit<AgentConfig, "cwd">, [string, string, strin
   [
     "a Lead asked for a model its agent does not list gets the one its settings choose, with its agent's mode",
     {},
-    { provider: "sw2-lead-claude", model: "made-up", modeId: "default" },
+    { provider: "sw3-lead-claude", model: "made-up", modeId: "default" },
     ["opus", "bypassPermissions", "medium", "ROLE PROMPT"],
   ],
   [
     "and the thinking its settings choose",
     { roles: { lead: { thinking: "high" } } },
-    { provider: "sw2-lead-claude", model: "made-up" },
+    { provider: "sw3-lead-claude", model: "made-up" },
     ["opus", "bypassPermissions", "high", "ROLE PROMPT"],
   ],
   [
     "a model the settings choose outside the agent's list is kept, with the thinking they choose for it",
     { roles: { lead: { model: "opus-next", thinking: "max" } } },
-    { provider: "sw2-lead-claude" },
+    { provider: "sw3-lead-claude" },
     ["opus-next", "bypassPermissions", "max", "ROLE PROMPT"],
   ],
   [
     "a Lead asked for a model its agent does not list gets its own settings' model, not another role's",
     { roles: { lead: { model: "haiku" } } },
-    { provider: "sw2-lead-claude", model: "made-up" },
+    { provider: "sw3-lead-claude", model: "made-up" },
     ["haiku", "bypassPermissions", "none", "ROLE PROMPT"],
   ],
   [
     "the thinking chosen for one model is not carried to another the agent asks for",
     { roles: { lead: { model: "opus-next", thinking: "high" } } },
-    { provider: "sw2-lead-claude", model: "opus" },
+    { provider: "sw3-lead-claude", model: "opus" },
     ["opus", "bypassPermissions", "medium", "ROLE PROMPT"],
   ],
   [
     "a valid model and thinking option are kept, and a caller's prompt comes after the role's",
     {},
-    { provider: "sw2-supervisor-claude/opus", model: "opus", thinkingOptionId: "medium", systemPrompt: "extra" },
+    { provider: "sw3-supervisor-claude/opus", model: "opus", thinkingOptionId: "medium", systemPrompt: "extra" },
     ["opus", "bypassPermissions", "medium", "ROLE PROMPT\n\nextra"],
   ],
   [
     "a model that lists no thinking options is given none",
     {},
-    { provider: "sw2-peer-omp", thinkingOptionId: "high" },
+    { provider: "sw3-peer-omp", thinkingOptionId: "high" },
     ["glm", "full", "none", "ROLE PROMPT"],
   ],
   [
     "a Lead opened on another agent takes that agent's model, whatever the settings choose",
     {},
-    { provider: "sw2-lead-omp", model: "opus" },
+    { provider: "sw3-lead-omp", model: "opus" },
     ["glm", "full", "none", "ROLE PROMPT"],
   ],
   [
     "on the agent the settings put a role on, the model they choose",
     onOmp,
-    { provider: "sw2-lead-omp" },
+    { provider: "sw3-lead-omp" },
     ["glm", "full", "none", "ROLE PROMPT"],
   ],
   [
     "and on its own agent, the kit's model and thinking there",
     onOmp,
-    { provider: "sw2-lead-claude" },
+    { provider: "sw3-lead-claude" },
     ["opus", "bypassPermissions", "medium", "ROLE PROMPT"],
   ],
   [
     "and a model its own agent lists is kept",
     onOmp,
-    { provider: "sw2-lead-claude", model: "haiku" },
+    { provider: "sw3-lead-claude", model: "haiku" },
     ["haiku", "bypassPermissions", "none", "ROLE PROMPT"],
   ],
 ];
@@ -107,14 +107,14 @@ test("a seat is created on the model, mode, thinking and prompt its role and age
   }
   const outside = { provider: "claude", cwd: "/repo", model: "x" };
   assert.equal(applyRole(kit, team, outside, render), outside);
-  const bare = { provider: "sw2-lead", cwd: "/repo" };
+  const bare = { provider: "sw3-lead", cwd: "/repo" };
   assert.equal(applyRole(kit, team, bare, render), bare, "a prefixed id naming no agent is no seat");
 });
 
 test("a seat is handed its servers where its agent takes them at launch, its own working directory once and a state grant of only what its role writes, and an agent that takes none of these is handed nothing", () => {
   const servers = { team: { type: "stdio", command: "node", args: ["team.mjs", "lead", "/spool"] } };
   const config: AgentConfig = {
-    provider: "sw2-lead-claude",
+    provider: "sw3-lead-claude",
     cwd: "/repo",
     mcpServers: { other: { type: "stdio", command: "x" } },
     providerOptions: {
@@ -149,7 +149,7 @@ test("a seat is handed its servers where its agent takes them at launch, its own
     ],
     "a seat opened again is not handed either twice",
   );
-  const peer = applyRole(kit, team, { provider: "sw2-peer-omp", cwd: "/repo" }, render, "/state/repo", servers);
+  const peer = applyRole(kit, team, { provider: "sw3-peer-omp", cwd: "/repo" }, render, "/state/repo", servers);
   assert.deepEqual(
     [peer.mcpServers, peer.providerOptions],
     [undefined, undefined],
@@ -183,7 +183,7 @@ test("a seat is handed its servers where its agent takes them at launch, its own
 
 test("a Claude seat's file tools are kept off what the desk owns and what sets up the machine's agents and the plugin, and its reads off every key and login", () => {
   const real = loadKit(PLUGIN);
-  const homeDir = tempDir("sw2-claude-home-");
+  const homeDir = tempDir("sw3-claude-home-");
   const seat = resolveTeam(real).roles.peer!;
   assert.equal(seat.harness.id, "claude", "the Peer the kit seats on Claude, which edits files");
   const shop = { root: "/work/shop", slug: "shop-1a2b", state: join(stateRoot(homeDir), "projects", "shop-1a2b") };
@@ -225,7 +225,7 @@ test("a Claude seat's file tools are kept off what the desk owns and what sets u
       "another seat's settings, which hold that seat's own denials",
       "Edit",
       Object.values(real.harnesses).map(
-        (harness) => `${home(harness.profileRoot)}/sw2-supervisor-${harness.id}-shop-1a2b/${harness.settings.file}`,
+        (harness) => `${home(harness.profileRoot)}/sw3-supervisor-${harness.id}-shop-1a2b/${harness.settings.file}`,
       ),
     ],
     [
@@ -250,7 +250,7 @@ test("a Claude seat's file tools are kept off what the desk owns and what sets u
     [
       "a login, through the link to it in a seat's directory",
       "Read",
-      ["~/.codex/seats/sw2-peer-codex-shop-1a2b/auth.json"],
+      ["~/.codex/seats/sw3-peer-codex-shop-1a2b/auth.json"],
     ],
     ["git's own configuration, which the desk's git reads too", "Edit", ["~/.gitconfig", "~/.config/git/config"]],
   ];
@@ -282,7 +282,7 @@ test("a seat's session gets its harness's environment, its config directory, pro
   const request = {
     agentId: "a",
     reason: "create" as const,
-    provider: "sw2-peer-omp",
+    provider: "sw3-peer-omp",
     cwd: "/repo",
     env: { KEEP: "1", PATH: "/usr/bin", TMPDIR: "/scratch" },
   };

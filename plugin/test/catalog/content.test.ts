@@ -91,7 +91,7 @@ test("a seat whose text shows its role a hidden word, an unfilled placeholder or
     if (file) put(kit, file, text!);
     const team = resolveTeam(kit, layer);
     assert.deepEqual(team.errors, [], `${refusal}: nothing the schema or the team resolution objects to`);
-    const home = tempDir("sw2-home-");
+    const home = tempDir("sw3-home-");
     assert.throws(() => materialize(kit, team, role, home, project), { message: refusal });
     const dir = seatDir(kit, team.roles[role]!.role, team.roles[role]!.harness, home, project);
     assert.deepEqual(filesIn(dir), [], `${refusal}: nothing at all is written, because half a seat is worse than none`);
@@ -113,7 +113,7 @@ test("a seat whose text shows its role a hidden word, an unfilled placeholder or
     "Put the plan in /Users/supervisor/x/plans/cart.md; the history is in $SEATWORKS_STATE/events.log.\n",
     "a hidden word in a path the desk puts in is not the role's text, and the role names what it writes or the desk's own record",
   );
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   const human = resolveTeam(kit, {
     rules: "Leave the Paseo config alone.",
     roles: { peer: { rules: "Keep notes in $SEATWORKS_STATE/peer-notes.md." } },

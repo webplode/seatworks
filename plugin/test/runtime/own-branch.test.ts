@@ -100,7 +100,7 @@ test("a task in the lane's copy works on a branch of its own, and the lane branc
 
 test("a task in the lane's copy that waits on its Lead, fails to merge, is cut or never starts keeps the copy to itself, and leaves it on the lane branch with no empty branch behind", async () => {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Two in a row", outcome: "a and b change", ...scope });
   const lane = h.ledger().lanes.L1!;
   const lead = lane.lead!;
@@ -140,7 +140,7 @@ test("a task in the lane's copy that waits on its Lead, fails to merge, is cut o
   await h.call(second.peer!, "peer", "done", { outcome: "complete", summary: "b" });
   h.agents.get(second.peer!)!.status = "idle";
   await add("d", "D", { hints: ["d.txt"] });
-  const elsewhere = join(tempDir("sw2-elsewhere-"), "wt");
+  const elsewhere = join(tempDir("sw3-elsewhere-"), "wt");
   h.git(h.root, "worktree", "add", "-q", elsewhere, lane.branch);
   await h.call(lead, "lead", "accept", { task: "L1-T3" });
   await h.runtime.desk.settled(h.project);
@@ -166,7 +166,7 @@ test("a task in the lane's copy that waits on its Lead, fails to merge, is cut o
 /** A lane with its first task at work in the lane's copy: the project's, one of its own, or the Human's fix/login with their edit to b.txt uncommitted. */
 async function taskInCopy(where: "own" | "isolate" | "theirs") {
   const h = harness();
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   if (where === "theirs") {
     h.git(h.root, "switch", "-qc", "fix/login");
     writeFileSync(join(h.root, "b.txt"), "bee, still being edited\n");

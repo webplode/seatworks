@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
@@ -43,11 +45,11 @@ function withAgent(id: string, files: Record<string, string>): Kit {
 test("a Claude seat per project writes shared plus role settings, links skills and clears MCP files", () => {
   const kit = makeKit();
   const team = resolveTeam(kit);
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   mkdirSync(join(home, ".claude", "projects"), { recursive: true });
   const lead = team.roles.lead!;
   const dir = seatDir(kit, lead.role, lead.harness, home, project);
-  assert.equal(basename(dir), "sw2-lead-claude-shop-abc123");
+  assert.equal(basename(dir), "sw3-lead-claude-shop-abc123");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, ".claude.json"),
@@ -108,7 +110,7 @@ test("a seat whose harness reads its servers from a file gets that file and its 
     "settings/peer.settings.toml": 'approval = "never"\n',
     "settings/scribe.settings.toml": "",
   });
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   const rows: [string, string, object][] = [
     [
       "omp",
@@ -124,7 +126,7 @@ test("a seat whose harness reads its servers from a file gets that file and its 
     const dir = seatDir(kit, role, harness, home, project);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, harness.settings.file), own);
-    const outside = join(tempDir("sw2-outside-"), "AGENTS.md");
+    const outside = join(tempDir("sw3-outside-"), "AGENTS.md");
     writeFileSync(outside, "project rules that must not change");
     symlinkSync(outside, join(dir, "AGENTS.md"));
 
@@ -185,7 +187,7 @@ test("every seat's own rules refuse starting any agent the kit ships and any com
     "settings/lead.settings.json": "{}",
     "settings/peer.settings.json": "{}",
   });
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   const deniedTo = (role: string) => {
     const team = withHarness(resolveTeam(kit), role, kit.harnesses.acme!);
     materialize(kit, team, role, home, project);
@@ -232,7 +234,7 @@ test("every seat's own rules refuse starting any agent the kit ships and any com
 test("an unreadable MCP file is written again when the plugin owns it, and left alone when the harness does", (t) => {
   const said = reported(t);
   const kit = makeKit();
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   const team = resolveTeam(kit);
   const peer = team.roles.peer!;
   assert.equal(peer.harness.mcp.delivery, "file", "the Peer's harness takes its servers from this file alone");
@@ -276,7 +278,7 @@ test("an unreadable MCP file is written again when the plugin owns it, and left 
 test("a real directory where a skill link should go is left alone, not turned into a seat that cannot start", (t) => {
   const said = reported(t);
   const kit = makeKit();
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   const team = resolveTeam(kit);
   const dir = seatDir(kit, team.roles.peer!.role, team.roles.peer!.harness, home, project);
   mkdirSync(join(dir, "skills", "test-first"), { recursive: true });
@@ -331,7 +333,7 @@ test("an agent configured in its own file format gets its catalog trimmed, its s
   });
   put(kit, "content/prompts/LEAD.md", "# Lead\n\nWrite a plan in {{state}}/plans/ first.\n");
   const team = withHarness(resolveTeam(kit), "lead", kit.harnesses.cx!);
-  const home = tempDir("sw2-cx-home-");
+  const home = tempDir("sw3-cx-home-");
   materialize(kit, team, "lead", home, project, serversFor(kit, team, "lead", context));
   const dir = seatDir(kit, team.roles.lead!.role, kit.harnesses.cx!, home, project);
   type Seat = {
@@ -379,7 +381,7 @@ test("an agent configured in its own file format gets its catalog trimmed, its s
     "rules/lead.rules": "",
   });
   const refused = withHarness(resolveTeam(blind), "lead", blind.harnesses.cx!);
-  const elsewhere = tempDir("sw2-cx-home-");
+  const elsewhere = tempDir("sw3-cx-home-");
   assert.throws(() => materialize(blind, refused, "lead", elsewhere, project, {}), {
     message: /^Cx's model list could not be read from `node -e process\.exit\(3\)`/,
   });
@@ -395,7 +397,7 @@ test("an agent configured in its own file format gets its catalog trimmed, its s
   });
   const unread = withHarness(resolveTeam(garbled), "lead", garbled.harnesses.cx!);
   assert.throws(
-    () => materialize(garbled, unread, "lead", tempDir("sw2-cx-home-"), project, {}),
+    () => materialize(garbled, unread, "lead", tempDir("sw3-cx-home-"), project, {}),
     { message: /lead\.settings\.toml could not be read/ },
     "a role's settings that cannot be read seat no one, rather than a seat without its sandbox",
   );
@@ -413,7 +415,7 @@ test("an owner's own agent config a seat takes keys from, when it cannot be read
     "rules/lead.rules": "",
   });
   const team = withHarness(resolveTeam(kit), "lead", kit.harnesses.cx!);
-  const home = tempDir("sw2-cx-home-");
+  const home = tempDir("sw3-cx-home-");
   mkdirSync(join(home, ".cx"), { recursive: true });
   writeFileSync(join(home, ".cx", "config.toml"), 'model_provider = "mine\n');
   const said = reported(t);
@@ -426,9 +428,35 @@ test("an owner's own agent config a seat takes keys from, when it cannot be read
   );
 });
 
+test("a seat that commits may write the repository's git directory, where a working copy keeps its index, and one that does not may not", () => {
+  const kit = withAgent("cx", {
+    "harness.json": cx(["node", "-e", "process.stdout.write(JSON.stringify({models:[{slug:'a'}]}))"]),
+    "settings.toml": "",
+    "settings/lead.settings.toml": "",
+    "settings/peer.settings.toml": "",
+    "rules/all.rules": "",
+    "rules/lead.rules": "",
+    "rules/peer.rules": "",
+  });
+  kit.roles.find((role) => role.role === "peer")!.can = ["work", "write"];
+  const repo = tempDir("sw3-cx-repo-");
+  execFileSync("git", ["init", "-q", repo]);
+  const here = { ...project, root: repo };
+  const home = tempDir("sw3-cx-home-");
+  const roots = (role: "lead" | "peer") => {
+    const team = withHarness(resolveTeam(kit), role, kit.harnesses.cx!);
+    materialize(kit, team, role, home, here, {});
+    const dir = seatDir(kit, team.roles[role]!.role, kit.harnesses.cx!, home, here);
+    return readConfig<{ sandbox_workspace_write?: { writable_roots?: string[] } }>(join(dir, "config.toml"), {})
+      .sandbox_workspace_write?.writable_roots;
+  };
+  assert.deepEqual(roots("peer"), [join(realpathSync(repo), ".git")]);
+  assert.deepEqual(roots("lead"), [join(project.state, "plans")]);
+});
+
 test("a changed skill reaches the seat as a new copy, the one read before stays as it was, and a copy nobody touches for two weeks goes", () => {
   const kit = makeKit();
-  const home = tempDir("sw2-home-");
+  const home = tempDir("sw3-home-");
   const team = resolveTeam(kit);
   const link = join(
     seatDir(kit, team.roles.peer!.role, team.roles.peer!.harness, home, project),

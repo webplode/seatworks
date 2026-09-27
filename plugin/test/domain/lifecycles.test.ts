@@ -92,7 +92,7 @@ test("a task, a lane and an incident move only as their tables allow, and a move
   assert.equal(lane.status, "closed");
 
   const ctx = new LedgerStore(() => {});
-  const project = { root: tempDir("sw2-context-"), slug: "p", state: tempDir("sw2-context-state-") };
+  const project = { root: tempDir("sw3-context-"), slug: "p", state: tempDir("sw3-context-state-") };
   const ledger = emptyLedger();
   const task: Task = {
     id: "L1-T1",

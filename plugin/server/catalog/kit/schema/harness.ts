@@ -102,6 +102,7 @@ export const HarnessFile = z
       profileModeId: text.optional(),
       command: texts.optional(),
       forceFlags: z.record(z.string(), z.string()).optional(),
+      keychainEnv: z.record(z.string(), z.string()).optional(),
     }),
   })
   .refine((harness) => harness.mcp.delivery !== "file" || harness.mcp.key, {

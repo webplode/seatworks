@@ -9,7 +9,7 @@ import { tempDir } from "../tempdir.ts";
 const NOW = Date.parse("2026-09-22T07:12:30Z");
 
 function world(): OlderContext {
-  return { kit: makeKit(), home: tempDir("sw2-home-"), live: [], now: NOW };
+  return { kit: makeKit(), home: tempDir("sw3-home-"), live: [], now: NOW };
 }
 
 test("the seats started before this version are named, and nothing about them changes", () => {
@@ -27,13 +27,13 @@ test("the seats started before this version are named, and nothing about them ch
   );
   ctx.live.push(
     {
-      provider: "sw2-lead-claude",
+      provider: "sw3-lead-claude",
       slug: "shop-abc123",
       createdAt: new Date(NOW).toISOString(),
       name: "Lead · Claude Code",
     },
     {
-      provider: "sw2-peer-omp",
+      provider: "sw3-peer-omp",
       slug: "shop-abc123",
       createdAt: new Date(NOW + 120_000).toISOString(),
       name: "Peer · Oh My Pi",

@@ -19,7 +19,7 @@ function put(dir: string, path: string, value: unknown): void {
 
 /** A kit of the test's own over the shipped ecosystem, Paseo's tools, the watch's thresholds and questions and refused commands, and no patterns. */
 function kitDir(files: Record<string, unknown>): string {
-  const dir = tempDir("sw2-kit-");
+  const dir = tempDir("sw3-kit-");
   mkdirSync(join(dir, "catalog"), { recursive: true });
   for (const name of ["ecosystem.json", "paseo.json", "attention.json", "checks.json", "refused.json"])
     copyFileSync(new URL(`../../catalog/${name}`, import.meta.url), join(dir, "catalog", name));
@@ -241,7 +241,7 @@ test("a roles or refused file in the state root replaces the shipped one, and a 
     skills: null,
   };
   const bare = { ...harness, provider: { profileModeId: "full" } };
-  const dir = kitDir({ [HARNESS]: bare, "roles.json": { providerPrefix: "sw2-", roles: [lead] } });
+  const dir = kitDir({ [HARNESS]: bare, "roles.json": { providerPrefix: "sw3-", roles: [lead] } });
   const kit = loadKit(dir);
   assert.deepEqual(
     [kit.roles.map((role) => role.role), kit.refused],
@@ -249,11 +249,11 @@ test("a roles or refused file in the state root replaces the shipped one, and a 
     "with nothing of the owner's, the kit runs what it ships",
   );
 
-  const mine = tempDir("sw2-preset-mine-");
+  const mine = tempDir("sw3-preset-mine-");
   const prompt = join(mine, "DRIVER.md");
   writeFileSync(prompt, "# Driver\n\nYou drive.\n");
   put(mine, "roles.json", {
-    providerPrefix: "sw2-",
+    providerPrefix: "sw3-",
     roles: [
       { ...lead, role: "driver", label: "Driver", prompt, skills: "driving" },
       { ...lead, role: "navigator", label: "Navigator", prompt, skills: "routes" },
@@ -340,7 +340,7 @@ test("a capability several roles hold can name which of them, and a stored name 
         reviewer: [{ name: "done" }],
       },
       "roles.json": {
-        providerPrefix: "sw2-",
+        providerPrefix: "sw3-",
         roles: [
           role("architecture", ["supervise"], "supervisor", "architecture"),
           role("safety", ["supervise"], "supervisor", "safety"),

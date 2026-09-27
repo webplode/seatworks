@@ -24,7 +24,7 @@ async function laneWriting(writeSet: string[], settings?: Record<string, unknown
     mkdirSync(h.project.state, { recursive: true });
     writeFileSync(join(h.project.state, "settings.json"), JSON.stringify(settings));
   }
-  const sup = h.add("sw2-supervisor-claude/claude-opus-5", h.root, "sup");
+  const sup = h.add("sw3-supervisor-claude/claude-opus-5", h.root, "sup");
   await h.call(sup, "supervisor", "open_lane", { title: "Cart", outcome: "a cart", ...scope, writeSet });
   return { h, sup, lead: h.ledger().lanes.L1!.lead! };
 }
@@ -199,7 +199,7 @@ test("a one-writer path a lane changed is noted where an open lane beside it may
 
 test("git the desk runs never runs a hook or a command a seat could plant in the repository it shares", async () => {
   const { h, lead } = await laneWriting(["src/**"]);
-  const marks = tempDir("sw2-planted-");
+  const marks = tempDir("sw3-planted-");
   const plant = (name: string) => `sh -c 'touch "${join(marks, name)}"; cat'`;
   const hook = join(h.root, ".git", "hooks", "post-checkout");
   writeFileSync(hook, `#!/bin/sh\ntouch "${join(marks, "hook")}"\n`);
@@ -222,7 +222,7 @@ test("git the desk runs never runs a hook or a command a seat could plant in the
 
 test("git the desk runs never runs a command planted in a copy's own worktree config either", async () => {
   const { h, lead } = await laneWriting(["src/**"]);
-  const marks = tempDir("sw2-planted-");
+  const marks = tempDir("sw3-planted-");
   const copy = h.ledger().lanes.L1!.worktree!;
   h.git(h.root, "config", "core.repositoryFormatVersion", "1");
   h.git(h.root, "config", "extensions.worktreeConfig", "true");

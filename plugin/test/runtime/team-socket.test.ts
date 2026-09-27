@@ -10,6 +10,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import type { ToolReply } from "../../server/desk/context.ts";
 import { TeamSocket } from "../../server/runtime/seat/team-socket.ts";
+import { reported } from "../console.ts";
 import { tempDir } from "../tempdir.ts";
 
 const TEAM = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "mcp", "team.mjs");
@@ -24,7 +25,7 @@ async function until(check: () => boolean, what: string): Promise<void> {
 
 test("the line's ends: no desk, a socket file left behind, a pipe closed under a server, and a line that fails", async (t) => {
   const client = new Client({ name: "probe", version: "0" });
-  const nowhere = join(tempDir("sw2-desk-"), "none.sock");
+  const nowhere = join(tempDir("sw3-desk-"), "none.sock");
   await client.connect(
     new StdioClientTransport({
       command: process.execPath,
@@ -45,7 +46,7 @@ test("the line's ends: no desk, a socket file left behind, a pipe closed under a
   );
 
   const cancelled: AbortSignal[] = [];
-  const path = join(tempDir("sw2-sock-"), "d.sock");
+  const path = join(tempDir("sw3-sock-"), "d.sock");
   writeFileSync(path, "left behind");
   const socket = new TeamSocket(path, {
     whose: (key) => (key === "k1" ? { agent: "agent-1" } : { refused: "unknown" }),
@@ -66,7 +67,7 @@ test("the line's ends: no desk, a socket file left behind, a pipe closed under a
 
   const lines: Socket[] = [];
   const open = createServer((line) => lines.push(line));
-  const held = join(tempDir("sw2-desk-"), "held.sock");
+  const held = join(tempDir("sw3-desk-"), "held.sock");
   await new Promise<void>((resolve) => open.listen(held, resolve));
   t.after(() => {
     for (const line of lines) line.destroy();
@@ -86,6 +87,8 @@ test("the line's ends: no desk, a socket file left behind, a pipe closed under a
     "a server whose harness closes its pipe exits, though its line is open",
   );
 
+  // The desk's own welcome echoes back on this fake pipe, and is logged as a line it cannot read.
+  reported(t);
   const failing = Object.assign(new PassThrough(), { destroyed: false, destroy() {} }) as unknown as Socket;
   (socket as unknown as { serve(line: Socket): void }).serve(failing);
   failing.write(`${JSON.stringify({ type: "hello", key: "k1", role: "lead", cwd: "/work" })}\n`);

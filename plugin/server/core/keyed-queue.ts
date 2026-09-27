@@ -15,6 +15,11 @@ export class KeyedQueue {
     return result;
   }
 
+  /** Settles once the work queued now under `key` alone has. */
+  idleAt(key: string): Promise<unknown> {
+    return this.tails.get(key) ?? Promise.resolve();
+  }
+
   /** Settles once the work queued now under every key starting with `prefix` has. */
   idle(prefix = ""): Promise<unknown> {
     return Promise.all([...this.tails].filter(([key]) => key.startsWith(prefix)).map(([, tail]) => tail));

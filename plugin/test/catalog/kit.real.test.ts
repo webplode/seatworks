@@ -58,7 +58,7 @@ test("the shipped kit resolves to a complete team, and every role's seat builds 
     [],
     "every harness delta speaks to a role the kit has",
   );
-  const home = tempDir("sw2-real-home-");
+  const home = tempDir("sw3-real-home-");
   for (const [name, seat] of Object.entries(team.roles)) {
     const { role, harness } = seat;
     materialize(kit, team, name, home, project, serversFor(kit, team, name, context));
@@ -92,7 +92,7 @@ test("the shipped kit resolves to a complete team, and every role's seat builds 
 
 test("nothing a seat or its guides lead it to read resolves into a git repository", async () => {
   const kit = loadKit(PLUGIN);
-  const home = tempDir("sw2-outside-home-");
+  const home = tempDir("sw3-outside-home-");
   const roots = [guidesDir(home)];
   placeGuides(kit, home);
   for (const { role, harness } of seatPairs(kit)) {
@@ -121,7 +121,7 @@ test("a Codex seat runs on the model provider the owner's own Codex names, and o
   const pair = seatPairs(kit).find((entry) => entry.harness.id === "codex" && entry.role.role === "lead")!;
   if (!installed(pair.harness)) return t.skip("codex is not installed here");
   const team = withHarness(resolveTeam(kit), "lead", pair.harness);
-  const home = tempDir("sw2-codex-home-");
+  const home = tempDir("sw3-codex-home-");
   materialize(kit, team, "lead", home, project);
   const file = join(seatDir(kit, pair.role, pair.harness, home, project), "config.toml");
   type Seat = {
@@ -142,6 +142,54 @@ test("a Codex seat runs on the model provider the owner's own Codex names, and o
   assert.equal(seat.model_providers?.ZAI?.base_url, "https://example.invalid");
   assert.equal(seat.model, undefined, "the model is the role's, set at launch, not the owner's default");
   assert.equal(seat.approval_policy, "never", "and the kit's own settings still hold");
+});
+
+test("a Pi seat loads the owner's own Pi packages beside the adapter, and nothing else of the owner's settings", () => {
+  const kit = loadKit(PLUGIN);
+  const pair = seatPairs(kit).find((entry) => entry.harness.id === "pi" && entry.role.role === "peer")!;
+  const team = withHarness(resolveTeam(kit), "peer", pair.harness);
+  const home = tempDir("sw3-pi-home-");
+  mkdirSync(join(home, ".pi", "agent"), { recursive: true });
+  writeFileSync(
+    join(home, ".pi", "agent", "settings.json"),
+    JSON.stringify({
+      packages: ["npm:pi-antigravity"],
+      defaultModel: "gemini-3.8-flash",
+      defaultProjectTrust: "always",
+    }),
+  );
+  materialize(kit, team, "peer", home, project);
+  const seat = readConfig<Record<string, unknown>>(
+    join(seatDir(kit, pair.role, pair.harness, home, project), "settings.json"),
+    {},
+  );
+  assert.deepEqual(seat.packages, ["npm:pi-antigravity", "npm:pi-mcp-adapter"]);
+  assert.equal(seat.defaultModel, undefined, "the model is the role's, set at launch");
+  assert.equal(seat.defaultProjectTrust, "never", "and the kit's own settings still hold");
+});
+
+test("a Claude Code seat replies in the owner's own language, and takes nothing else of the owner's settings", () => {
+  const kit = loadKit(PLUGIN);
+  const pair = seatPairs(kit).find((entry) => entry.harness.id === "claude" && entry.role.role === "lead")!;
+  const team = withHarness(resolveTeam(kit), "lead", pair.harness);
+  const settingsOf = (home: string) => {
+    materialize(kit, team, "lead", home, project);
+    return readConfig<Record<string, unknown>>(
+      join(seatDir(kit, pair.role, pair.harness, home, project), "settings.json"),
+      {},
+    );
+  };
+  const home = tempDir("sw3-claude-home-");
+  mkdirSync(join(home, ".claude"), { recursive: true });
+  writeFileSync(
+    join(home, ".claude", "settings.json"),
+    JSON.stringify({ language: "japanese", model: "haiku", autoMemoryEnabled: true }),
+  );
+  const seat = settingsOf(home);
+  assert.equal(seat.language, "japanese");
+  assert.equal(seat.model, undefined, "the model is the role's, set at launch");
+  assert.equal(seat.autoMemoryEnabled, false, "and the kit's own settings still hold");
+  assert.equal(settingsOf(tempDir("sw3-claude-home-")).language, undefined, "an owner who set none gets the default");
 });
 
 test("a Codex seat has every desk and proxy tool it is given approved ahead, and other agents get no such list", () => {
@@ -249,9 +297,9 @@ test("a Claude seat reads the project's own CLAUDE.md and takes in its AGENTS.md
       `${role.role}: the seat's own directory is the one added`,
     );
   }
-  const root = tempDir("sw2-agents-only-");
+  const root = tempDir("sw3-agents-only-");
   writeFileSync(join(root, "AGENTS.md"), "Use pnpm.\n");
-  const home = tempDir("sw2-agents-home-");
+  const home = tempDir("sw3-agents-home-");
   const own = { root, slug: "demo-000000", state: join(root, ".state") };
   const peer = pairs.find((pair) => pair.role.role === "peer")!;
   materialize(kit, team, "peer", home, own);
@@ -264,7 +312,7 @@ test("a Claude seat reads the project's own CLAUDE.md and takes in its AGENTS.md
 
 test("project records are seeded once and never overwritten", () => {
   const kit = loadKit(PLUGIN);
-  const state = tempDir("sw2-state-");
+  const state = tempDir("sw3-state-");
   assert.ok(seedRecords(kit, state).includes("notebook.md"));
   writeFileSync(join(state, "notebook.md"), "The owner's own notes.\n");
   assert.deepEqual(seedRecords(kit, state), []);

@@ -38,8 +38,8 @@ test("whoever supervises is shown by the capability the kit gives, one per conce
   ledger.agents["seat-arch"] = { id: "seat-arch", role: "architecture" };
   ledger.agents["seat-safety"] = { id: "seat-safety", role: "safety" };
   const seats = new Map([
-    ["seat-sup", seat("seat-sup", "sw2-supervisor-claude")],
-    ["seat-arch", seat("seat-arch", "sw2-architecture-claude")],
+    ["seat-sup", seat("seat-sup", "sw3-supervisor-claude")],
+    ["seat-arch", seat("seat-arch", "sw3-architecture-claude")],
   ]);
   const labels: Record<string, string> = {
     supervisor: "Supervisor",

@@ -38,31 +38,31 @@ test("a seat as Paseo creates, opens and archives it: prompt, key, seat director
 
   const create = (provider: string, env: Record<string, string> = {}) =>
     hook("agent.create", { request: { config: { provider, cwd: h.root }, env } }) as Made;
-  const made = create("sw2-lead-claude", { KEPT: "yes" });
+  const made = create("sw3-lead-claude", { KEPT: "yes" });
   assert.equal(await settled(host.reached()), true, "the hook brought Paseo's API");
   const key = made.env[SEAT_KEY]!;
   assert.match(key, /^[0-9a-f]{48}$/);
   assert.equal(made.env.KEPT, "yes", "what Paseo passed stays");
   assert.equal((made.config.mcpServers?.team as { env?: Record<string, string> }).env?.[SEAT_KEY], key);
-  assert.notEqual(create("sw2-lead-claude").env[SEAT_KEY], key, "each seat its own");
+  assert.notEqual(create("sw3-lead-claude").env[SEAT_KEY], key, "each seat its own");
   assert.match(
-    create("sw2-peer-omp").env[SEAT_KEY]!,
+    create("sw3-peer-omp").env[SEAT_KEY]!,
     /^[0-9a-f]{48}$/,
     "a harness reading servers from a file shared by its seats gets the key through the env alone",
   );
   const prompt = (provider: string) => create(provider).config.systemPrompt ?? "";
-  const [own = "", told = ""] = prompt("sw2-peer-claude").split(/\n\n(?=# Working rules\n)/);
+  const [own = "", told = ""] = prompt("sw3-peer-claude").split(/\n\n(?=# Working rules\n)/);
   assert.match(own, /^# Peer\n/, "created with its role's prompt");
   assert.match(told, /^# Working rules\n[^]*`search`/, "then what it is told of its servers");
   const delta = readFileSync(join(import.meta.dirname, "..", "..", "harness", "codex", "delta", "peer.md"), "utf-8");
   assert.equal(
-    prompt("sw2-peer-codex"),
+    prompt("sw3-peer-codex"),
     `${own}\n\n${delta.trimEnd()}\n\n${told}`,
     "and what its harness needs said comes between",
   );
 
   const open = (agentId: string, reason: string, env: Record<string, string> = {}, cwd = h.root) =>
-    (hook("agent.session_open", { request: { agentId, reason, provider: "sw2-lead-claude", cwd, env } }) as Made).env;
+    (hook("agent.session_open", { request: { agentId, reason, provider: "sw3-lead-claude", cwd, env } }) as Made).env;
   assert.equal(open("agent-9", "create", { [SEAT_KEY]: "k9" })[SEAT_KEY], "k9");
   assert.equal(open("agent-9", "resume")[SEAT_KEY], "k9", "a resumed seat's server starts again with its key");
   assert.equal(open("agent-0", "resume")[SEAT_KEY], undefined, "a seat never given one gets none");
@@ -87,7 +87,7 @@ test("a seat as Paseo creates, opens and archives it: prompt, key, seat director
   assert.equal(lstatSync(link).isSymbolicLink(), true, "a login made after a seat was built reaches it when it opens");
 
   // A seat's own directory is added, and Claude reads an added directory's CLAUDE.md but never its AGENTS.md.
-  const root = tempDir("sw2-supervisor-project-");
+  const root = tempDir("sw3-supervisor-project-");
   writeFileSync(
     join(root, "AGENTS.md"),
     "Use pnpm.\n\n<!-- seatworks:begin: an older kit -->\nOld rules.\n<!-- seatworks:end -->\n\nUse Node 26.\n",
@@ -116,16 +116,16 @@ test("a seat as Paseo creates, opens and archives it: prompt, key, seat director
   open("agent-7", "resume", {}, root);
   assert.doesNotMatch(rules(), /AGENTS\.md/, "but not twice, where the project's CLAUDE.md takes it in itself");
 
-  await hook("agent.archived", { agent: { id: "agent-9", provider: "sw2-lead-claude", cwd: h.root } });
+  await hook("agent.archived", { agent: { id: "agent-9", provider: "sw3-lead-claude", cwd: h.root } });
   assert.equal(open("agent-9", "resume")[SEAT_KEY], undefined, "a seat archived lets its key go");
 
   const ways: [string, unknown][] = [
-    ["agent.create", { request: { config: { provider: "sw2-lead-claude", cwd: h.root }, env: {} } }],
+    ["agent.create", { request: { config: { provider: "sw3-lead-claude", cwd: h.root }, env: {} } }],
     [
       "agent.session_open",
-      { request: { agentId: "agent-8", reason: "resume", provider: "sw2-lead-claude", cwd: h.root, env: {} } },
+      { request: { agentId: "agent-8", reason: "resume", provider: "sw3-lead-claude", cwd: h.root, env: {} } },
     ],
-    ["agent.turn_started", { agent: { id: "agent-8", provider: "sw2-lead-claude", cwd: h.root } }],
+    ["agent.turn_started", { agent: { id: "agent-8", provider: "sw3-lead-claude", cwd: h.root } }],
   ];
   for (const [name, input] of ways) {
     const fresh = new PaseoHost();
@@ -138,7 +138,7 @@ test("a seat as Paseo creates, opens and archives it: prompt, key, seat director
 
 test("the create that first brings Paseo's API waits for the provider pass it unblocks, twenty seconds at most", async (t) => {
   const h = harness();
-  const request = { request: { config: { provider: "sw2-lead-claude", cwd: h.root }, env: {} } };
+  const request = { request: { config: { provider: "sw3-lead-claude", cwd: h.root }, env: {} } };
   const connected = (providers: Promise<void>) => {
     const host = new PaseoHost();
     const hooks = new Map<string, Hook>();

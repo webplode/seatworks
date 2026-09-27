@@ -42,8 +42,8 @@ export async function closeLane(desk: DeskServices, project: Project, by: string
     return no(`Lane ${lane.id} is already being closed by another call; read status once that call has answered.`);
   try {
     // Queued merges run in the copy closing gates, lands and removes: wait for them, one more try included.
-    await merges.retry(project);
-    await merges.settled(project);
+    await merges.retry(project, lane.id);
+    await merges.settled(project, lane.id);
     // One landing at a time moves a project's base; the next reads it again, bringing in what the last one landed.
     const landing = () => {
       const now = loadLedger(project.state);

@@ -220,7 +220,7 @@ test("an open lane is never archived; a seat with no lane keeps its role's newes
 });
 
 test("a lane leaves as one file with its entries, every hand-back and each owner's last gate run with its rehearsals, and filing it again changes nothing", (t) => {
-  const state = tempDir("sw2-archive-");
+  const state = tempDir("sw3-archive-");
   const ledger = busyLedger(KEEP_CLOSED_LANES + 1);
   ledger.seq.lane = 30;
   mkdirSync(join(state, "gates"));
@@ -293,7 +293,7 @@ test("a lane leaves as one file with its entries, every hand-back and each owner
 });
 
 test("records left by a crash between the ledger and the files are filed on the next look, and the oldest lanes' files go past the budget", () => {
-  const state = tempDir("sw2-archive-budget-");
+  const state = tempDir("sw3-archive-budget-");
   const ledger = emptyLedger();
   ledger.seq.lane = 5;
   mkdirSync(join(state, "handbacks"));
@@ -315,7 +315,7 @@ test("records left by a crash between the ledger and the files are filed on the 
 });
 
 test("a gate log too big to hold is filed by its tail, where a failure is, and nothing larger is ever read in", () => {
-  const state = tempDir("sw2-archive-big-");
+  const state = tempDir("sw3-archive-big-");
   const ledger = emptyLedger();
   ledger.seq.lane = 1;
   mkdirSync(join(state, "gates"));

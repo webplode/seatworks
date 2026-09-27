@@ -9,8 +9,8 @@ import { tempDir } from "../tempdir.ts";
 const { ecosystem } = makeKit();
 
 test("a directory outside git is its own project, under a slug that reads as its name, stays the same and differs by path", () => {
-  const oms = join(tempDir("sw2-plain-"), "OMS");
-  const other = join(tempDir("sw2-plain-"), "OMS");
+  const oms = join(tempDir("sw3-plain-"), "OMS");
+  const other = join(tempDir("sw3-plain-"), "OMS");
   mkdirSync(oms);
   mkdirSync(other);
   const project = projectOf(oms, "/state");
@@ -26,7 +26,7 @@ test("a directory outside git is its own project, under a slug that reads as its
 });
 
 test("a project's gate is found from its files, and so is the runner that gate starts", () => {
-  const root = tempDir("sw2-detect-");
+  const root = tempDir("sw3-detect-");
   assert.equal(detectGate(root, ecosystem), undefined);
   assert.deepEqual(gateCommands(root, undefined, ecosystem), []);
   writeFileSync(

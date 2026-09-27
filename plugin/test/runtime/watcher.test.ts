@@ -37,7 +37,7 @@ async function until(check: () => boolean, what: string): Promise<void> {
 }
 
 const watchersOf = (h: Harness) =>
-  [...h.agents.values()].filter((agent) => agent.provider.startsWith("sw2-watcher-") && !agent.archivedAt);
+  [...h.agents.values()].filter((agent) => agent.provider.startsWith("sw3-watcher-") && !agent.archivedAt);
 
 /** The case id a letter or prompt asks about, the last one it names. */
 const caseIn = (text: string) => [...text.matchAll(/CASE (C\w+) about/g)].at(-1)![1]!;
@@ -54,7 +54,7 @@ async function watched() {
   const thinks = (thought: string, stream = timeline, ...calls: Record<string, unknown>[]) => {
     const id = `t${++turns}`;
     stream.beat("turn_started", id);
-    stream.add({ type: "user_message", text: "Go on.", clientMessageId: `sw2-message-${id}` }, id);
+    stream.add({ type: "user_message", text: "Go on.", clientMessageId: `sw3-message-${id}` }, id);
     stream.add({ type: "reasoning", text: thought }, id);
     for (const call of calls) stream.add(call, id);
     stream.beat("turn_completed", id);
@@ -101,7 +101,7 @@ test("the Watcher's life: seated for a case, answering by the rules, kept while 
   );
   assert.match((await said([{ ...all[0]!, why: " " }, ...all.slice(1)])).text, new RegExp(`give ${asked[0]} a why`));
   assert.match((await said([...all, { ...all[0]!, question: "toString" }])).text, /toString is no question of C\w+/);
-  const other = h.add("sw2-watcher-claude/claude-opus-5", h.root, "another Watcher");
+  const other = h.add("sw3-watcher-claude/claude-opus-5", h.root, "another Watcher");
   assert.match((await said(all, caseIn(first), other)).text, /was sent to another Watcher/);
   h.agents.get(other)!.archivedAt = new Date().toISOString();
   await settle();
@@ -219,7 +219,7 @@ test("cases at once seat one Watcher, and a case is given up only when nobody ca
   t.mock.method(workspaces, "ref", (id: string) => {
     const real = ref(id);
     const create: Create = async (options) => {
-      if (options.config.provider.startsWith("sw2-watcher-")) await seated;
+      if (options.config.provider.startsWith("sw3-watcher-")) await seated;
       return real.agents.create(options);
     };
     return { ...real, agents: { create } };

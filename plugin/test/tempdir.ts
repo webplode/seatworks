@@ -9,7 +9,7 @@ process.on("exit", () => {
 });
 
 /** Removed when the test process exits, whatever the tests did with it. */
-export function tempDir(prefix = "sw2-test-"): string {
+export function tempDir(prefix = "sw3-test-"): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   made.push(dir);
   return dir;

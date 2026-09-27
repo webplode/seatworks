@@ -31,7 +31,7 @@ async function acceptWork(h: Harness, lead: string, peer: string, id: string, fi
 
 const live = (h: Harness) =>
   [...h.agents.values()]
-    .filter((agent) => agent.provider.startsWith("sw2-peer-") && !agent.archivedAt)
+    .filter((agent) => agent.provider.startsWith("sw3-peer-") && !agent.archivedAt)
     .map((agent) => agent.id);
 
 const kept = (id: string, seat: string) =>

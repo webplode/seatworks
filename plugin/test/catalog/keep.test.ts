@@ -268,6 +268,13 @@ const KEEP: Keep[] = [
     ],
   },
   {
+    id: "keep-22",
+    title: "the Webplode harness deltas remain a tested rebase contract",
+    file: "harness/WEBPLODE-DELTAS.md",
+    check: "contains",
+    anchor: "every invariant below still passes its named test.",
+  },
+  {
     id: "refuted-1",
     title: "one writer at a time in a shared working copy",
     file: "server/desk/tasks/placement.ts",

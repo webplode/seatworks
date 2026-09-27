@@ -1,47 +1,85 @@
+import { join } from "node:path";
 import type { Kit } from "../../catalog/kit/kit.ts";
+import { isRecord } from "../../core/json.ts";
+import { keptFault, readKept, writeJson } from "../../core/store.ts";
+import type { Project } from "../project/project.ts";
 
 /** A seat's thinking or saying as the brains read it, or the desk call a decision was made in. */
 export type Item = { kind: "thought" | "said" | "call"; text: string };
 
 /** A desk call a pattern is judged at: which one, and what the seat wrote in it. */
 type Decision = { tool: string; text: string };
+type Pending = { calls: Decision[]; words: Item[] };
+type Stored = Record<string, Pending>;
+
+const isItem = (value: unknown): value is Item =>
+  isRecord(value) && ["thought", "said", "call"].includes(String(value.kind)) && typeof value.text === "string";
+const isDecision = (value: unknown): value is Decision =>
+  isRecord(value) && typeof value.tool === "string" && typeof value.text === "string";
+const isStored = (value: unknown): value is Stored =>
+  isRecord(value) &&
+  Object.values(value).every(
+    (entry) =>
+      isRecord(entry) &&
+      Array.isArray(entry.calls) &&
+      entry.calls.every(isDecision) &&
+      Array.isArray(entry.words) &&
+      entry.words.every(isItem),
+  );
 
 /**
  * The decisions a seat made through the desk since the watch last read it, and its words since its last decision was
- * judged: a decision is judged at the seat's next look, with the words that led to it, newest kept. Held in memory, so a
- * restart loses what was not yet judged.
+ * judged: a decision is judged at the seat's next look, with the words that led to it, newest kept. Kept per project so
+ * a restart between the call and that look loses neither.
  */
 export class Decisions {
   private readonly kit: Kit;
-  private readonly seats = new Map<string, { calls: Decision[]; words: Item[] }>();
 
   constructor(kit: Kit) {
     this.kit = kit;
   }
 
   /** A call made through the desk: kept when some pattern is judged at it, in the words the seat wrote. */
-  took(seat: string, tool: string, args: unknown): void {
+  took(project: Project, seat: string, tool: string, args: unknown): void {
     if (!Object.values(this.kit.patterns).some((pattern) => pattern.tools?.includes(tool))) return;
-    this.of(seat).calls.push({ tool, text: rendered(args) });
+    const stored = this.read(project);
+    this.of(stored, seat).calls.push({ tool, text: rendered(args) });
+    writeJson(this.file(project), stored);
   }
 
   /** A look's words join the seat's since its last decision; with a decision made meanwhile, it and those words, now taken. */
-  take(seat: string, words: Item[], limit: number): { calls: Decision[]; words: Item[] } | undefined {
-    const entry = this.of(seat);
+  take(project: Project, seat: string, words: Item[], limit: number): Pending | undefined {
+    const stored = this.read(project);
+    const entry = this.of(stored, seat);
     entry.words = newest([...entry.words, ...words], limit);
-    if (entry.calls.length === 0) return undefined;
-    this.seats.delete(seat);
+    if (entry.calls.length === 0) {
+      writeJson(this.file(project), stored);
+      return undefined;
+    }
+    delete stored[seat];
+    writeJson(this.file(project), stored);
     return entry;
   }
 
-  forget(seat: string): void {
-    this.seats.delete(seat);
+  forget(project: Project, seat: string): void {
+    const stored = this.read(project);
+    if (!stored[seat]) return;
+    delete stored[seat];
+    writeJson(this.file(project), stored);
   }
 
-  private of(seat: string): { calls: Decision[]; words: Item[] } {
-    let entry = this.seats.get(seat);
-    if (!entry) this.seats.set(seat, (entry = { calls: [], words: [] }));
-    return entry;
+  private file(project: Project): string {
+    return join(project.state, "watch-decisions.json");
+  }
+
+  private read(project: Project): Stored {
+    const read = readKept<Stored>(this.file(project), {}, isStored);
+    if ("fault" in read) throw keptFault(read.fault);
+    return read.value;
+  }
+
+  private of(stored: Stored, seat: string): Pending {
+    return (stored[seat] ??= { calls: [], words: [] });
   }
 }
 

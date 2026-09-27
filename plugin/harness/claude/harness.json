@@ -41,13 +41,7 @@
   "settings": {
     "file": "settings.json",
     "source": "settings.json",
-    "roleSource": "settings/ROLE.settings.json",
-    "inherits": {
-      "from": "HOME/.claude/settings.json",
-      "keys": [
-        "language"
-      ]
-    }
+    "roleSource": "settings/ROLE.settings.json"
   },
   "login": {
     "run": ["auth", "status"],

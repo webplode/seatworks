@@ -148,6 +148,13 @@ test("a Lead reads its lane and its Peers' records and keeps its own pages, and 
     "a harness that sends a number as text is read as the number",
   );
   assert.match(await say(lead, "lead", "record", { of: "L1-T1", limit: "two" }), /limit must be a whole number/);
+  assert.match(
+    await say(lead, "lead", "add_tasks", {
+      tasks: JSON.stringify([{ key: "x", title: "Hidden", goal: "g", acceptance: ["a"], outOfScope: ["rest"] }]),
+    }),
+    /tasks must be a list/,
+    "structured arguments sent as text are refused instead of silently changing shape",
+  );
 
   h.commit(lane.worktree!, "a.txt", "changed\n");
   await h.call(peer, "peer", "done", { outcome: "complete", summary: "a.txt now says changed." });

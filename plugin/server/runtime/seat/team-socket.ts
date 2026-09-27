@@ -4,7 +4,8 @@ import { type Server, type Socket, createServer } from "node:net";
 import { z } from "zod";
 import type { ToolReply, ToolRequest } from "../../desk/context.ts";
 import { daemonLog } from "../../core/logger.ts";
-import { clip } from "../../core/text.ts";
+
+const FRAME_BYTES = 1024 * 1024;
 
 const Heard = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hello"), key: z.string(), role: z.string(), cwd: z.string() }),
@@ -84,9 +85,14 @@ export class TeamSocket {
     let rest = "";
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
-      const said = (rest + chunk).split("\n");
-      rest = said.pop()!;
-      for (const text of said) this.heard(line, text);
+      rest += chunk;
+      for (let at = rest.indexOf("\n"); at >= 0; at = rest.indexOf("\n")) {
+        const text = rest.slice(0, at);
+        rest = rest.slice(at + 1);
+        if (Buffer.byteLength(text) > FRAME_BYTES) return this.oversized(line, socket);
+        this.heard(line, text);
+      }
+      if (Buffer.byteLength(rest) > FRAME_BYTES) this.oversized(line, socket);
     });
     socket.on("error", () => {});
     socket.on("close", () => this.dropped(line));
@@ -99,7 +105,7 @@ export class TeamSocket {
       said = Heard.parse(JSON.parse(text));
     } catch {
       daemonLog.error(
-        `the desk's socket heard an unreadable line from ${line.agent ?? "an unknown seat"}: ${clip(text, 200)}`,
+        `the desk's socket heard an unreadable line from ${line.agent ?? "an unknown seat"} (${Buffer.byteLength(text)} bytes)`,
       );
       return;
     }
@@ -108,6 +114,13 @@ export class TeamSocket {
     const call = line.calls.get(said.id);
     line.calls.delete(said.id);
     if (call && said.type === "cancel") this.lose(call);
+  }
+
+  private oversized(line: Line, socket: Socket): void {
+    daemonLog.error(
+      `the desk's socket heard an unreadable line from ${line.agent ?? "an unknown seat"} (more than ${FRAME_BYTES} bytes)`,
+    );
+    socket.destroy();
   }
 
   private hello(line: Line, said: { key: string; role: string; cwd: string }): void {

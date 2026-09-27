@@ -125,7 +125,12 @@ export function makeKit(): Kit {
     profileRoot: "HOME/.omp/seats",
     contextFile: "AGENTS.md",
     skillsDir: "skills",
-    settings: { file: "config.yml", source: "settings.json", roleSource: "settings/ROLE.settings.json" },
+    settings: {
+      file: "config.yml",
+      source: "settings.json",
+      roleSource: "settings/ROLE.settings.json",
+      inherits: { from: "HOME/.omp/agent/settings.json", keys: ["packages"] },
+    },
     links: [{ link: "git", target: "HOME/.config/git", optional: true }],
     models: [{ id: "glm", label: "GLM" }],
     mcp: { file: "mcp.json", delivery: "file", key: "mcpServers", transports: ["stdio", "http"] },

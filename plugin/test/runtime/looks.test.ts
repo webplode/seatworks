@@ -288,8 +288,8 @@ test("a decision about how the system is built is judged at the Lead's report, t
   ]);
 });
 
-test("after a restart the eye reads only what is new: neither a seat's past words nor a decision its Lead made before", async (t) => {
-  const sensed = brain({});
+test("after a restart the eye reads only new words, and still judges a decision that was waiting for its next look", async (t) => {
+  const sensed = brain({ "big-decision": 0.9 }, {}, /Survive restart/);
   const { h, lane, timeline } = await laneWithPeer(undefined, { sensor: () => sensed.judge });
   brains("sensor");
   const lead = h.timelineOf(lane.lead!);
@@ -304,6 +304,8 @@ test("after a restart the eye reads only what is new: neither a seat's past word
   await looksOf(h, t)();
   const read = () => sensed.asked.map((entry) => String(entry.state.text));
   assert.ok(read().includes("First I read the cart module."));
+  const reported = await h.call(lane.lead!, "lead", "report", { summary: "Survive restart.", ready: false });
+  assert.equal(reported.ok, true, reported.text);
 
   h.restart();
   await h.tick();
@@ -313,10 +315,21 @@ test("after a restart the eye reads only what is new: neither a seat's past word
   turn(lead, "l2", { type: "assistant_message", text: "Waiting on the hand-back.", messageId: "l-m2" });
   await looked();
   assert.deepEqual(
-    read().slice(before).sort(),
+    [
+      ...new Set(
+        read()
+          .slice(before)
+          .filter((text) => text !== "summary: Survive restart.\nready: false"),
+      ),
+    ].sort(),
     ["Now the totals.", "Waiting on the hand-back."],
-    "what the history replays was read before the restart, and the brief was laid out before it",
+    "what the history replays was read before the restart; a new word may belong to both its look and its decision",
   );
+  const decision = sensed.asked.find(
+    (entry) => entry.state.text === "summary: Survive restart.\nready: false" && "withholds-gap" in entry.questions,
+  );
+  assert.ok(decision, "the pending report is judged after the restart");
+  assert.match(String(decision.state.text), /summary: Survive restart/);
 });
 
 test("what a look reads and an incident quotes is cut where the owner says, and a pattern the catalog calls a note is kept, never booked", async (t) => {

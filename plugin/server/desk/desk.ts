@@ -1,6 +1,7 @@
 import type { Kit, SensorSpec } from "../catalog/kit/kit.ts";
 import type { Team } from "../catalog/team/team.ts";
 import { KeyedQueue } from "../core/keyed-queue.ts";
+import { errorText } from "../core/errors.ts";
 import { recordSpend, tellPastAppetite } from "./seats/spend.ts";
 import { MachineHold } from "./machine/hold.ts";
 import { dueAsks } from "./messaging/due-asks.ts";
@@ -166,7 +167,11 @@ export class Desk {
 
   archived(project: Project, seat: string, watched: boolean): void {
     markGone(this.services, project, seat);
-    this.services.decisions.forget(seat);
+    try {
+      this.services.decisions.forget(project, seat);
+    } catch (error) {
+      this.services.log(project, `pending watch decisions for ${seat} could not be forgotten: ${errorText(error)}`);
+    }
     if (watched) closeIncidentsOf(this.services, project, seat);
   }
 

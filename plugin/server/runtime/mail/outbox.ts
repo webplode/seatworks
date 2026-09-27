@@ -8,7 +8,7 @@ export type Letter = { id: string; to: string; key: string; text: string; at: nu
 
 const isLetter = (value: unknown): value is Letter =>
   isRecord(value) && typeof value.to === "string" && typeof value.at === "number";
-type Compose = (seat: SeatLook, letters: Letter[]) => string;
+type Compose = (seat: SeatLook, letters: Letter[], remaining: number) => string;
 /** `delivered`: letters reached their seat, at `at`; `dropped`: a letter given up on, and why; `holding`: its lane is held. */
 export type Rules = {
   dropped?: (letter: Letter, now: number, why: string) => void;
@@ -19,6 +19,8 @@ export type Rules = {
 const KEEP_MS = 7 * 24 * 3_600_000;
 const DUPLICATE_MS = 30 * 60_000;
 const GRACE_MS = 10 * 60_000;
+const BATCH_COUNT = 8;
+const BATCH_CHARS = 12_000;
 /** How long an archived seat may yet be started again for the mail that asks something of it. */
 const GONE_MS = 24 * 3_600_000;
 /** Rounds a seat must be missing from Paseo, each listing the rest, before its mail is given up. */
@@ -184,10 +186,11 @@ export class Outbox {
       // As a pump holds it: a permission waiting, or its lane on hold.
       if (!seat || (seat.pendingPermissions?.length ?? 0) > 0 || this.rules.holding?.(seat)) return undefined;
       if (!wanted()) return undefined;
-      const ids = new Set(mine.map((letter) => letter.id));
+      const batch = batchOf(mine);
+      const ids = new Set(batch.map((letter) => letter.id));
       this.save(this.letters().filter((letter) => !ids.has(letter.id)));
-      this.sent(mine, Date.now());
-      return this.compose(seat, mine);
+      this.sent(batch, Date.now());
+      return this.compose(seat, batch, mine.length - batch.length);
     });
   }
 
@@ -212,8 +215,9 @@ export class Outbox {
       if (midTurn(seat.status) || waiting) return new Set<string>();
       // Word that asks nothing of an idle seat waits for a letter that does, or for a turn it is already in.
       if (mine.every((letter) => letter.wakes === false)) return new Set<string>();
-      const text = this.compose(seat, mine);
-      const kinds = [...new Set(mine.map((letter) => letter.key.split(":")[0]!))];
+      const batch = batchOf(mine);
+      const text = this.compose(seat, batch, mine.length - batch.length);
+      const kinds = [...new Set(batch.map((letter) => letter.key.split(":")[0]!))];
       try {
         await this.seats.send(to, text, kinds);
       } catch (error) {
@@ -223,10 +227,22 @@ export class Outbox {
       }
       const now = Date.now();
       this.awaiting.set(to, now);
-      const ids = new Set(mine.map((letter) => letter.id));
+      const ids = new Set(batch.map((letter) => letter.id));
       this.save(this.letters().filter((letter) => !ids.has(letter.id)));
-      this.sent(mine, now);
+      this.sent(batch, now);
       return ids;
     });
   }
+}
+
+/** The oldest letters that fit one intake boundary; the first always goes, so an oversized letter cannot block its queue. */
+function batchOf(letters: Letter[]): Letter[] {
+  const batch: Letter[] = [];
+  let chars = 0;
+  for (const letter of letters) {
+    if (batch.length >= BATCH_COUNT || (batch.length > 0 && chars + letter.text.length > BATCH_CHARS)) break;
+    batch.push(letter);
+    chars += letter.text.length;
+  }
+  return batch;
 }

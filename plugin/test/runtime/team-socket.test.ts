@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { statSync, writeFileSync } from "node:fs";
-import { type Socket, createServer } from "node:net";
+import { type Socket, connect, createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
@@ -88,7 +88,7 @@ test("the line's ends: no desk, a socket file left behind, a pipe closed under a
   );
 
   // The desk's own welcome echoes back on this fake pipe, and is logged as a line it cannot read.
-  reported(t);
+  const said = reported(t);
   const failing = Object.assign(new PassThrough(), { destroyed: false, destroy() {} }) as unknown as Socket;
   (socket as unknown as { serve(line: Socket): void }).serve(failing);
   failing.write(`${JSON.stringify({ type: "hello", key: "k1", role: "lead", cwd: "/work" })}\n`);
@@ -100,4 +100,12 @@ test("the line's ends: no desk, a socket file left behind, a pipe closed under a
   }, "a line that fails is dropped, and the desk goes on");
   assert.equal(cancelled[0]!.aborted, true, "and its call goes to the mail");
   assert.equal(socket.calling("agent-1"), false);
+
+  const tooLarge = connect(path);
+  await new Promise((resolve) => tooLarge.on("connect", resolve));
+  const closed = new Promise<void>((resolve) => tooLarge.on("close", () => resolve()));
+  tooLarge.write(`secret-marker-${"x".repeat(1024 * 1024)}`);
+  await closed;
+  assert.match(said(), /unreadable line from an unknown seat \(more than \d+ bytes\)/);
+  assert.doesNotMatch(said(), /secret-marker/, "an oversized frame is never copied into the daemon log");
 });

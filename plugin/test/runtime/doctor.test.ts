@@ -89,6 +89,11 @@ if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || { [ "\${CLAUDE_SECURESTORAGE_CONFIG_DIR+
     "the desk's own git: what a skill runs, its own compatibility line names",
   );
   assert.deepEqual([short["harness:claude"]!.ok, short["harness:omp"]!.ok], [true, false], "an agent a role runs on");
+  assert.match(
+    short["harness:omp:inherits"]!.detail,
+    /Peer, Scribe inherit packages from .*\.omp\/agent\/settings\.json; changes to that Human-owned file change their capabilities/,
+    "an inherited capability names its source and owners",
+  );
   assert.equal(short["mcp:ide"]!.ok, false);
   assert.match(short["mcp:ide"]!.detail, /ide_refactor_rename/, "the IDE tool a role uses and the IDE does not offer");
   assert.equal(short["mcp:docs"]!.ok, false, "a server that does not answer");

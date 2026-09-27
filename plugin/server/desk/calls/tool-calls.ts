@@ -90,7 +90,11 @@ export class ToolCalls {
       this.heardFrom(caller, speaks);
       // A decision made through the desk is judged at the seat's next look, on what the call itself says; what the
       // record shows of it, now.
-      this.desk.decisions.took(caller.id, request.tool, request.args ?? {});
+      try {
+        this.desk.decisions.took(caller.project, caller.id, request.tool, request.args ?? {});
+      } catch (error) {
+        this.desk.log(caller.project, `a decision made at ${request.tool} could not be kept: ${errorText(error)}`);
+      }
       void this.deciding.run(`${caller.project.slug}\n${++this.decided}`, () =>
         decisionFacts(this.desk, caller, request.tool, request.args ?? {}).catch((error) =>
           this.desk.log(

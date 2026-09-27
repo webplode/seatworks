@@ -164,6 +164,34 @@ test("a letter Paseo will not take is kept for the next try, and the post that w
   assert.deepEqual(outbox.pending("lead"), []);
 });
 
+test("a large queue drains in bounded batches, leaving a visible durable remainder for later boundaries", async () => {
+  const agents = { lead: agent("running"), large: agent("running") };
+  const outbox = new Outbox(
+    join(tempDir(), "outbox.json"),
+    (_seat, list, remaining) =>
+      `${list.map((letter) => letter.text).join("|")}${remaining > 0 ? `|${remaining} more queued` : ""}`,
+    fakeSeats(agents),
+  );
+  for (let at = 1; at <= 10; at++)
+    assert.equal(await outbox.post({ to: "lead", key: `done:L1-T${at}`, text: `T${at}` }), "held");
+  agents.lead.status = "idle";
+  outbox.turnEnded("lead");
+  assert.equal((await outbox.pump("lead")).size, 8);
+  assert.equal(agents.lead.sent[0], "T1|T2|T3|T4|T5|T6|T7|T8|2 more queued");
+  assert.equal(outbox.pending("lead").length, 2, "overflow stays on disk");
+  outbox.turnEnded("lead");
+  assert.equal((await outbox.pump("lead")).size, 2);
+  assert.equal(agents.lead.sent[1], "T9|T10");
+
+  for (const [key, text] of [
+    ["done:L2-T1", "a".repeat(7000)],
+    ["done:L2-T2", "b".repeat(7000)],
+  ] as const)
+    await outbox.post({ to: "large", key, text });
+  assert.match((await outbox.take("large"))!, /a{7000}\|1 more queued$/);
+  assert.equal(outbox.pending("large").length, 1, "the character budget also leaves overflow durable");
+});
+
 test("whoever waits on a letter hears when it reached its seat, not when it was posted", async () => {
   const agents = { watcher: agent("running") };
   const heard: { keys: string[]; at: number }[] = [];

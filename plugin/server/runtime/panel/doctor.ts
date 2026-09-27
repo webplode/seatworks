@@ -123,6 +123,15 @@ function harnessChecks(kit: Kit, team: Team): Found[] {
           : `${harness.label} needs ${path} for ${roles.join(", ")}. ${check.help}`,
       });
     }
+    const inherited = harness.settings.inherits;
+    if (inherited) {
+      const path = expandHome(inherited.from);
+      checks.push({
+        id: `harness:${id}:inherits`,
+        ok: true,
+        detail: `${harness.label} seats for ${roles.join(", ")} inherit ${inherited.keys.join(", ")} from ${path}; changes to that Human-owned file change their capabilities.`,
+      });
+    }
   }
   return checks;
 }

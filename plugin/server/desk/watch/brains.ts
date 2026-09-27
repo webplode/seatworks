@@ -50,7 +50,7 @@ export async function readLook(services: Services, project: Project, seat: Notic
   const { kit, teamFor } = services;
   const { brains, attention } = teamFor(project);
   const words = look.items.map((item) => ({ ...item, text: clip(item.text, attention.lookItemChars) }));
-  const decided = services.decisions.take(seat.id, words, attention.decisionChars);
+  const decided = services.decisions.take(project, seat.id, words, attention.decisionChars);
   const role = seatOf(kit, seat.provider)?.role;
   if (brains.mode === "off" || !role || (words.length === 0 && !decided)) return;
   const place = placeIn(kit, ledgerOf(project), seat);

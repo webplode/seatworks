@@ -156,7 +156,8 @@ test("a call the desk never answers is given up on in time, told to the desk, an
     createInterface({ input: socket }).on("line", (text) => {
       const said = JSON.parse(text) as { type: string; id?: string };
       heard.push(said);
-      if (said.type === "hello") socket.write(`not json\n${JSON.stringify({ type: "welcome", choices: {} })}\n`);
+      if (said.type === "hello")
+        socket.write(`not json secret-marker\n${JSON.stringify({ type: "welcome", choices: {} })}\n`);
     });
   });
   await new Promise<void>((resolve) => desk.listen(path, resolve));
@@ -184,7 +185,8 @@ test("a call the desk never answers is given up on in time, told to the desk, an
     () => heard.some((message) => message.type === "cancel" && message.id === call.id),
     "the desk is told the call was given up",
   );
-  assert.match(said, /team: an unreadable line from the desk: not json/);
+  assert.match(said, /team: an unreadable line from the desk \(\d+ bytes\)/);
+  assert.doesNotMatch(said, /not json|secret-marker/, "an unreadable desk payload is never copied into logs");
 });
 
 test("a call its harness stops, or whose line drops, is answered by mail, and the next call finds the desk again", async (t) => {

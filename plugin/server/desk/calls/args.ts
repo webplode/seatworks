@@ -72,12 +72,10 @@ function asTyped(schema: ArgSchema, value: unknown): unknown {
   if (typeof value !== "string" || !schema.type || schema.type === "string") return value;
   const text = value.trim();
   if (schema.type === "boolean") return text === "true" ? true : text === "false" ? false : value;
-  if (schema.type === "number" || schema.type === "integer")
-    return text !== "" && Number.isFinite(Number(text)) ? Number(text) : value;
-  if (schema.type !== "array" && schema.type !== "object") return value;
+  if (schema.type !== "number" && schema.type !== "integer") return value;
   try {
     const parsed: unknown = JSON.parse(text);
-    return typeOf(parsed) === schema.type ? parsed : value;
+    return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : value;
   } catch {
     return value;
   }

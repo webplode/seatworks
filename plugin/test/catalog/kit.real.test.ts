@@ -168,7 +168,7 @@ test("a Pi seat loads the owner's own Pi packages beside the adapter, and nothin
   assert.equal(seat.defaultProjectTrust, "never", "and the kit's own settings still hold");
 });
 
-test("a Claude Code seat replies in the owner's own language, and takes nothing else of the owner's settings", () => {
+test("a Claude Code seat takes none of the owner's settings, so the team's language has one owner", () => {
   const kit = loadKit(PLUGIN);
   const pair = seatPairs(kit).find((entry) => entry.harness.id === "claude" && entry.role.role === "lead")!;
   const team = withHarness(resolveTeam(kit), "lead", pair.harness);
@@ -186,10 +186,10 @@ test("a Claude Code seat replies in the owner's own language, and takes nothing 
     JSON.stringify({ language: "japanese", model: "haiku", autoMemoryEnabled: true }),
   );
   const seat = settingsOf(home);
-  assert.equal(seat.language, "japanese");
+  assert.equal(seat.language, undefined, "the role rule, not Claude's global setting, owns its language");
   assert.equal(seat.model, undefined, "the model is the role's, set at launch");
   assert.equal(seat.autoMemoryEnabled, false, "and the kit's own settings still hold");
-  assert.equal(settingsOf(tempDir("sw3-claude-home-")).language, undefined, "an owner who set none gets the default");
+  assert.equal(settingsOf(tempDir("sw3-claude-home-")).language, undefined);
 });
 
 test("a Codex seat has every desk and proxy tool it is given approved ahead, and other agents get no such list", () => {

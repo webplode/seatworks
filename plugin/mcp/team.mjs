@@ -18,6 +18,7 @@ const RETRY_MS = 2_000;
 // heard, or that hangs inside it, is given up on here, since a seat waiting on it is neither working nor silent.
 const ANSWER_MS = Number(process.env.SEATWORKS_ANSWER_MS ?? 300_000);
 const WELCOME_MS = 300;
+const FRAME_BYTES = 1024 * 1024;
 
 /** A copy of `schema` where each field the desk named a fixed set for takes it as its enum, however deep the field sits. */
 function offered(schema, fields) {
@@ -59,9 +60,14 @@ class Desk {
       let rest = "";
       line.setEncoding("utf8");
       line.on("data", (chunk) => {
-        const said = (rest + chunk).split("\n");
-        rest = said.pop();
-        for (const text of said) this.#heard(text, done);
+        rest += chunk;
+        for (let at = rest.indexOf("\n"); at >= 0; at = rest.indexOf("\n")) {
+          const text = rest.slice(0, at);
+          rest = rest.slice(at + 1);
+          if (Buffer.byteLength(text) > FRAME_BYTES) return this.#oversized(line);
+          this.#heard(text, done);
+        }
+        if (Buffer.byteLength(rest) > FRAME_BYTES) this.#oversized(line);
       });
       line.on("error", () => {});
       line.on("close", () => {
@@ -116,7 +122,7 @@ class Desk {
     try {
       said = JSON.parse(text);
     } catch {
-      process.stderr.write(`team: an unreadable line from the desk: ${text.slice(0, 200)}\n`);
+      process.stderr.write(`team: an unreadable line from the desk (${Buffer.byteLength(text)} bytes)\n`);
       return;
     }
     if (said.type === "welcome" || said.type === "choices") {
@@ -133,6 +139,11 @@ class Desk {
       this.#waiting.delete(said.id);
       answer?.(said);
     }
+  }
+
+  #oversized(line) {
+    process.stderr.write(`team: an unreadable line from the desk (more than ${FRAME_BYTES} bytes)\n`);
+    line.destroy();
   }
 
   #write(message) {

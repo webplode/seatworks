@@ -85,7 +85,7 @@ export const fyi = (letter: Letter): Letter => ({ ...letter, wakes: false });
  * What a seat is sent at once. Several letters come under an index of their heads, each numbered, so a reader takes in
  * the whole queue before any one of it and never reads one letter as part of the next.
  */
-export function mailbox(items: string[], open: Ask[]): string {
+export function mailbox(items: string[], open: Ask[], remaining = 0): string {
   const count = items.length;
   const index = items.map((item, at) => `${at + 1} ${clip(firstLine(item), 100)}`).join(" · ");
   const body =
@@ -94,7 +94,11 @@ export function mailbox(items: string[], open: Ask[]): string {
       : [`${count} messages: ${index}`, ...items.map((item, at) => `--- ${at + 1} of ${count} ---\n\n${item}`)].join(
           "\n\n",
         );
-  if (open.length === 0) return body;
+  const overflow =
+    remaining > 0
+      ? `\n\n---\n\n${remaining} more ${remaining === 1 ? "message remains" : "messages remain"} queued for your next intake boundary.`
+      : "";
+  if (open.length === 0) return `${body}${overflow}`;
   const asks = open.map((ask) => `- ${ask.id} (${ask.kind}): ${clip(firstLine(ask.text), 160)}`).join("\n");
-  return `${body}\n\n---\n\nOpen asks waiting on you:\n${asks}`;
+  return `${body}${overflow}\n\n---\n\nOpen asks waiting on you:\n${asks}`;
 }
